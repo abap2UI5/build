@@ -299,6 +299,13 @@ function renameFrontend(N, feCheckout, abap2ui5Checkout, work) {
   if (!existsSync(renameBsp)) throw new Error(`${renameBsp} not found`);
   run("node", [renameBsp, N.frontendName, "--yes", "--dir", "src"], { cwd: stage, quiet: true });
 
+  // the page names of the BSP are paths inside it (thirdparty/z2ui5/embed/
+  // Container.js) that the files, the manifest and UI5RepositoryPathMapping
+  // keep; rename-bsp rewrites them with the BSP name (thirdparty//kro/ui5/
+  // embed/...), abapGit then finds no file for the page and stops creating
+  // pages there - view/Main.view.xml is missing on the system. Put back
+  pageNames(join(feCheckout, "src"), join(stage, "src"));
+
   // the handler's call of the backend: kept by rename-bsp (a contract with
   // an unrenamed backend), rewritten here because the backend is renamed too
   let handlers = 0;
@@ -330,6 +337,35 @@ function renameFrontend(N, feCheckout, abap2ui5Checkout, work) {
   return join(stage, "src");
 }
 
+
+// the PAGEKEY/PAGENAME of the renamed .wapa.xml put back to the original's
+// (same pages, same order), then every page checked against its file
+// (<bsp>.wapa.<pagename lower case, / as _->)
+function pageNames(originalSrc, renamedSrc) {
+  const xml = (dir) => [...walk(dir)].filter((p) => p.endsWith(".wapa.xml"));
+  const [orig] = xml(originalSrc);
+  const renamed = xml(renamedSrc);
+  if (!orig || renamed.length !== 1) throw new Error(`expected one BSP, found ${renamed.length}`);
+  const fixed = restorePageNames(readFileSync(renamed[0], "utf8"), readFileSync(orig, "utf8"));
+  writeFileSync(renamed[0], fixed);
+  const stem = basename(renamed[0]).slice(0, -".xml".length);
+  const files = new Set(readdirSync(dirname(renamed[0])));
+  const pages = [...fixed.matchAll(/<PAGENAME>([^<]+)<\/PAGENAME>/g)].map((m) => m[1]);
+  for (const page of pages) {
+    const file = `${stem}.${page.toLowerCase().replace(/\//g, "_-")}`;
+    if (!files.has(file)) throw new Error(`BSP page ${page}: no file ${file} - abapGit would not create it`);
+  }
+  console.log(`   ${pages.length} pages, each with its file`);
+}
+
+export function restorePageNames(renamed, original) {
+  const tags = /<(PAGEKEY|PAGENAME)>[^<]*<\/\1>/g;
+  const keep = original.match(tags) ?? [];
+  let i = 0;
+  const out = renamed.replace(tags, () => keep[i++]);
+  if (i !== keep.length) throw new Error(`the BSP has ${i / 2} pages after the rename, ${keep.length / 2} before`);
+  return out;
+}
 // ---------------------------------------------------------------------------
 // 4. the result
 // ---------------------------------------------------------------------------
