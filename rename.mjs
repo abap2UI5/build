@@ -214,7 +214,75 @@ function renameBackend(N, checkout, abaplint) {
 
   const files = [...walk(src)];
   console.log(`   ${files.length} files renamed`);
+
+  // abaplint --rename rewrites references, not string literals; the gate
+  // above leaves the test classes alone, whose literals name objects on
+  // purpose (rtti checks, expected texts) and would fail on the renamed system
+  const objects = objectNames(join(checkout, "src"));
+  let changed = 0;
+  for (const f of files.filter((f) => f.endsWith(".testclasses.abap"))) {
+    const before = readFileSync(f, "utf8");
+    const after = renameLiterals(before, objects, N.prefix);
+    if (after !== before) writeFileSync(f, after), changed++;
+  }
+  console.log(`   test literals: ${changed} test class(es) rewritten (${objects.size} object names)`);
+
+  // the start app finds classes that are no object of abap2UI5 by name: the
+  // user's config class (z2ui5_cl_config_app) and the sample apps
+  // (z2ui5_cl_smp_app_000, ...). Installed next to this one, they carry the
+  // prefix as well, so every class name in its literals is renamed
+  const start = files.find((f) => basename(f).endsWith("cl_ui5_app_start.clas.abap"));
+  if (!start) throw new Error("cl_ui5_app_start.clas.abap not found - abap2UI5 changed its start app");
+  writeFileSync(start, renameLiterals(readFileSync(start, "utf8"), null, N.prefix));
+  console.log("   start app: config class and sample apps renamed");
   return { src, output };
+}
+
+// the z2ui5_* objects of a src folder, lower case, from the file names
+// (z2ui5_cl_xyz.clas.abap -> z2ui5_cl_xyz)
+export function objectNames(src) {
+  const names = new Set();
+  for (const f of walk(src)) {
+    const name = basename(f).split(".")[0].toLowerCase();
+    if (name.startsWith(`${OLD}_`)) names.add(name);
+  }
+  return names;
+}
+
+// every old object name inside a string literal (`...`, '...', |...|) becomes
+// the renamed one, in the case it was written in; comments, code and names
+// that are no object (z2ui5_cl_does_not_exist, z2ui5_cl_x_event) stay.
+// objects null: every name is renamed. A name inside a path or url
+// (.../src/z2ui5_cl_x.clas.abap) stays either way
+export function renameLiterals(text, objects, prefix) {
+  const word = new RegExp(`(?<![A-Za-z0-9_/])${OLD}_[A-Za-z0-9_]+`, "gi");
+  const swap = (lit) => lit.replace(word, (m) => {
+    if (objects && !objects.has(m.toLowerCase())) return m;
+    const renamed = prefix + m.slice(OLD.length + 1);
+    return m === m.toUpperCase() ? renamed.toUpperCase() : renamed.toLowerCase();
+  });
+  return text.split("\n").map((line) => {
+    if (line.startsWith("*")) return line;
+    let out = "";
+    let i = 0;
+    while (i < line.length) {
+      const c = line[i];
+      if (c === '"') return out + line.slice(i);
+      if (c !== "`" && c !== "'" && c !== "|") { out += c; i++; continue; }
+      // a literal up to its closing delimiter: doubled for ` and ', \| in a template
+      let j = i + 1;
+      for (; j < line.length; j++) {
+        if (c === "|" && line[j] === "\\") { j++; continue; }
+        if (line[j] === c) {
+          if (c !== "|" && line[j + 1] === c) { j++; continue; }
+          break;
+        }
+      }
+      out += swap(line.slice(i, j + 1));
+      i = j + 1;
+    }
+    return out;
+  }).join("\n");
 }
 
 // ---------------------------------------------------------------------------

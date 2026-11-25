@@ -36,6 +36,11 @@ node rename.mjs zabap2ui5z --abap2ui5 ../abap2UI5 --frontend ../frontend   # exi
    `abaplint --rename` turns every `z2ui5_*` class, interface and table into
    `<prefix>*` and rewrites every reference. abap2UI5's `rename-literal-gate`
    then proves no string literal still names an object by its old name.
+   Two kinds of literal it leaves alone are rewritten here: in the test
+   classes every literal naming an abap2UI5 object (rtti checks, expected
+   texts), and in the start app every class name - the user's config class
+   (`<prefix>cl_config_app`) and the sample apps (`<prefix>cl_smp_app_000`,
+   ...), which are expected under the same prefix.
 3. Renames the frontend BSP with abap2UI5's `tools/bsp_rename` (BSP, ICF
    nodes, SMIM folder, handler class, file names; for a `/NS/` the nodes move
    to `/sap/bc/<ns>/ui5` and the namespace-level nodes are generated). The
