@@ -119,8 +119,8 @@ CLASS /kro/cl_ui5_app_start DEFINITION PUBLIC FINAL.
     " used to exist in two spellings here, which is how a rename gets one of
     " them wrong. The addon renamed the class in 2026-11; an install from
     " before that still has the old name, which is tried second
-    CONSTANTS c_class_icf_config     TYPE string VALUE `Z2UI5_CL_CONFIG_APP`.
-    CONSTANTS c_class_icf_config_old TYPE string VALUE `Z2UI5_CL_APP_ICF_CONFIG`.
+    CONSTANTS c_class_icf_config     TYPE string VALUE `/KRO/CL_CONFIG_APP`.
+    CONSTANTS c_class_icf_config_old TYPE string VALUE `/KRO/CL_APP_ICF_CONFIG`.
 
     " the class name input of step 4 - the only control on the page that is
     " addressed from the outside, because the cursor is put into it on start
@@ -555,7 +555,7 @@ CLASS /kro/cl_ui5_app_start IMPLEMENTATION.
         )->tag( `Label`
             )->a( n = `text`  v = `Step 2`
         )->tag( `Text`
-            )->a( n = `text`   v = `Add the interface Z2UI5_IF_APP - that is all it takes`
+            )->a( n = `text`   v = `Add the interface /KRO/IF_APP - that is all it takes`
         )->tag( `Label`
             )->a( n = `text`  v = `Step 3`
         )->tag( `Text`
@@ -648,8 +648,8 @@ CLASS /kro/cl_ui5_app_start IMPLEMENTATION.
         name      = `samples`
         descr     = `Learn the abap2UI5 basics - 340+ ready-to-run apps, from a two-line Hello World to complete applications`
         href      = `https://github.com/abap2UI5/samples`
-        class     = `z2ui5_cl_smp_app_000`
-        class_old = `z2ui5_cl_demo_app_g00` ).
+        class     = `/kro/cl_smp_app_000`
+        class_old = `/kro/cl_demo_app_g00` ).
 
     render_samples(
         form      = form
@@ -658,8 +658,8 @@ CLASS /kro/cl_ui5_app_start IMPLEMENTATION.
         name      = `samples-controls`
         descr     = `Learn how to use every UI5 control in ABAP - the UI5 Demo Kit rebuilt with abap2UI5`
         href      = `https://github.com/abap2UI5/samples-controls`
-        class     = `z2ui5_cl_smpc_app_000`
-        class_old = `z2ui5_cl_smpc_app_overview` ).
+        class     = `/kro/cl_smpc_app_000`
+        class_old = `/kro/cl_smpc_app_overview` ).
 
     render_samples(
         form      = form
@@ -668,8 +668,8 @@ CLASS /kro/cl_ui5_app_start IMPLEMENTATION.
         name      = `samples-stack`
         descr     = `Learn how abap2UI5 plays with your stack - OData, RAP, WebSockets, the Fiori Launchpad and more`
         href      = `https://github.com/abap2UI5/samples-stack`
-        class     = `z2ui5_cl_smps_app_000`
-        class_old = `z2ui5_cl_smps_app_00` ).
+        class     = `/kro/cl_smps_app_000`
+        class_old = `/kro/cl_smps_app_00` ).
 
   ENDMETHOD.
 

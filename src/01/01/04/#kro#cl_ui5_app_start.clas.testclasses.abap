@@ -51,7 +51,7 @@ CLASS ltcl_app_startup_test IMPLEMENTATION.
 
     cl_abap_unit_assert=>assert_equals(
         act = to_upper( lo_app->ms_home-classname )
-        exp = `Z2UI5_CL_UI5_APP_HI_WORLD`
+        exp = `/KRO/CL_UI5_APP_HI_WORLD`
         msg = `on_init proposes the hello-world app as the class to check` ).
     cl_abap_unit_assert=>assert_equals(
         act = lo_app->ms_home-btn_event_id
@@ -95,7 +95,7 @@ CLASS ltcl_app_startup_test IMPLEMENTATION.
     DATA(lo_app) = /kro/cl_ui5_app_start=>factory( ).
     lo_app->client = NEW /kro/cl_ui5_client( lo_handler->mo_action ).
 
-    lo_app->ms_home-classname              = `z2ui5_cl_ui5_app_hi_world`.
+    lo_app->ms_home-classname              = `/kro/cl_ui5_app_hi_world`.
     lo_app->ms_home-class_value_state      = `Warning`.
     lo_app->ms_home-class_value_state_text = `Class ZZZ does not exist`.
 

@@ -985,7 +985,7 @@ CLASS ltcl_01_request IMPLEMENTATION.
     " to load. No test drove two roundtrips of the start app, so nothing saw
     " it. This one does: a first start, then an event on the draft it wrote.
     DATA(lo_first) = NEW /kro/cl_ui5_handler(
-        val = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=Z2UI5_CL_UI5_APP_START"}}}` ).
+        val = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=/KRO/CL_UI5_APP_START"}}}` ).
     lo_first->main( ).
     DATA(lv_id) = lo_first->mo_action->mo_app->ms_draft-id.
     cl_abap_unit_assert=>assert_not_initial( lv_id ).
@@ -1011,13 +1011,13 @@ CLASS ltcl_01_request IMPLEMENTATION.
     DATA lv_payload TYPE string.
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
     DATA ls_request TYPE /kro/if_ui5_types=>ty_s_request.
-    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=Z2UI5_CL_UI5_APP_HI_WORLD"}}}`.
+    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=/KRO/CL_UI5_APP_HI_WORLD"}}}`.
 
     lo_handler = NEW #( val = lv_payload ).
 
     ls_request = lo_handler->request_json_to_abap( lv_payload ).
 
-    cl_abap_unit_assert=>assert_equals( exp = `Z2UI5_CL_UI5_APP_HI_WORLD`
+    cl_abap_unit_assert=>assert_equals( exp = `/KRO/CL_UI5_APP_HI_WORLD`
                                         act = ls_request-s_control-app_start ).
 
   ENDMETHOD.
@@ -1455,7 +1455,7 @@ CLASS ltcl_02_response IMPLEMENTATION.
     lo_handler = NEW #( val = `` ).
 
     ls_response = VALUE #( s_front-id  = `ID123`
-                           s_front-app = `Z2UI5_CL_UI5_APP_HI_WORLD`
+                           s_front-app = `/KRO/CL_UI5_APP_HI_WORLD`
                            model       = `{"name":"test"}` ).
 
 
@@ -2862,14 +2862,14 @@ CLASS ltcl_05_monitor IMPLEMENTATION.
   METHOD start_and_event_reported.
 
     " roundtrip 1: an app start - no draft id in, the new one out
-    DATA(lv_payload) = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=Z2UI5_CL_UI5_APP_HI_WORLD"}}}`.
+    DATA(lv_payload) = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=/KRO/CL_UI5_APP_HI_WORLD"}}}`.
     DATA(lo_first) = NEW /kro/cl_ui5_handler( lv_payload ).
     DATA(ls_res) = lo_first->main( ).
 
     cl_abap_unit_assert=>assert_equals( exp = 1
                                         act = lines( mo_monitor->mt_calls ) ).
     DATA(ls_call) = mo_monitor->mt_calls[ 1 ].
-    cl_abap_unit_assert=>assert_equals( exp = `Z2UI5_CL_UI5_APP_HI_WORLD`
+    cl_abap_unit_assert=>assert_equals( exp = `/KRO/CL_UI5_APP_HI_WORLD`
                                         act = ls_call-app ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true
                                         act = ls_call-check_start ).
@@ -2915,7 +2915,7 @@ CLASS ltcl_05_monitor IMPLEMENTATION.
                                         act = ls_call-draft_id_prev ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false
                                         act = ls_call-check_start ).
-    cl_abap_unit_assert=>assert_equals( exp = `Z2UI5_CL_UI5_APP_HI_WORLD`
+    cl_abap_unit_assert=>assert_equals( exp = `/KRO/CL_UI5_APP_HI_WORLD`
                                         act = ls_call-app ).
     " the browser's duration of roundtrip 1, carried by roundtrip 2
     cl_abap_unit_assert=>assert_equals( exp = 312
@@ -2993,7 +2993,7 @@ CLASS ltcl_05_monitor IMPLEMENTATION.
     mo_monitor->check_raise = abap_true.
 
     DATA(lo_handler) = NEW /kro/cl_ui5_handler(
-        `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=Z2UI5_CL_UI5_APP_HI_WORLD"}}}` ).
+        `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=/KRO/CL_UI5_APP_HI_WORLD"}}}` ).
     DATA(ls_res) = lo_handler->main( ).
 
     cl_abap_unit_assert=>assert_equals( exp = 200

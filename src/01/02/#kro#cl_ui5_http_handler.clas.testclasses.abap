@@ -552,7 +552,7 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA(ls_result) = /kro/cl_ui5_http_handler=>_main( VALUE #(
         method   = `GET`
         t_params = VALUE #( ( n = `app_start`
-                              v = `z2ui5_cl_ui5_app_hi_world` ) ) ) ).
+                              v = `/kro/cl_ui5_app_hi_world` ) ) ) ).
 
     cl_abap_unit_assert=>assert_equals( exp = 200
                                         act = ls_result-status_code ).

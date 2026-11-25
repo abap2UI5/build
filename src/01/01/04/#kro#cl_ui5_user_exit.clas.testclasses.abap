@@ -320,7 +320,7 @@ CLASS ltcl_test_user_exit IMPLEMENTATION.
     " (or cannot be instantiated at all) fails closed: a chained exception
     " instead of a silent run on the shipped defaults
     TRY.
-        /kro/cl_ui5_user_exit=>exit_instantiate( `Z2UI5_CL_UI5_SRV_DRAFT` ).
+        /kro/cl_ui5_user_exit=>exit_instantiate( `/KRO/CL_UI5_SRV_DRAFT` ).
         cl_abap_unit_assert=>fail( `a class that is no exit was accepted as one` ).
       CATCH /kro/cx_ui5_util_error ##NO_HANDLER.
     ENDTRY.

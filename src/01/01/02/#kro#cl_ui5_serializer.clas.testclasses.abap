@@ -578,7 +578,7 @@ CLASS ltcl_test IMPLEMENTATION.
     DATA li_none TYPE REF TO /kro/if_ui5_serializer.
     /kro/cl_ui5_app_cont=>set_serializer( li_none ).
     cl_abap_unit_assert=>assert_equals(
-        exp = `Z2UI5_CL_UI5_SERIALIZER`
+        exp = `/KRO/CL_UI5_SERIALIZER`
         act = /kro/cl_ui5_util_context=>rtti_get_classname_by_ref( /kro/cl_ui5_app_cont=>get_serializer( ) ) ).
     cl_abap_unit_assert=>assert_true( xsdbool( mo_cont->all_xml_stringify( ) CS `<asx:abap` ) ).
 

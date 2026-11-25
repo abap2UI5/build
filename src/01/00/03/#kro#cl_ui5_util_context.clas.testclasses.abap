@@ -37,8 +37,8 @@ CLASS ltcl_test IMPLEMENTATION.
   METHOD test_impl_intf_app.
 
     cl_abap_unit_assert=>assert_true(
-        /kro/cl_ui5_util_context=>rtti_check_class_impl_intf( class = `Z2UI5_CL_UI5_APP_HI_WORLD`
-                                                               intf  = `Z2UI5_IF_APP` ) ).
+        /kro/cl_ui5_util_context=>rtti_check_class_impl_intf( class = `/KRO/CL_UI5_APP_HI_WORLD`
+                                                               intf  = `/KRO/IF_APP` ) ).
 
   ENDMETHOD.
 
@@ -46,8 +46,8 @@ CLASS ltcl_test IMPLEMENTATION.
 
     " the interface name is normalised the way a class name is
     cl_abap_unit_assert=>assert_true(
-        /kro/cl_ui5_util_context=>rtti_check_class_impl_intf( class = `Z2UI5_CL_UI5_APP_HI_WORLD`
-                                                               intf  = `z2ui5_if_app` ) ).
+        /kro/cl_ui5_util_context=>rtti_check_class_impl_intf( class = `/KRO/CL_UI5_APP_HI_WORLD`
+                                                               intf  = `/kro/if_app` ) ).
 
   ENDMETHOD.
 
@@ -55,8 +55,8 @@ CLASS ltcl_test IMPLEMENTATION.
 
     " exists, is a class, implements something else entirely
     cl_abap_unit_assert=>assert_false(
-        /kro/cl_ui5_util_context=>rtti_check_class_impl_intf( class = `Z2UI5_CL_UI5_UTIL_CONTEXT`
-                                                               intf  = `Z2UI5_IF_APP` ) ).
+        /kro/cl_ui5_util_context=>rtti_check_class_impl_intf( class = `/KRO/CL_UI5_UTIL_CONTEXT`
+                                                               intf  = `/KRO/IF_APP` ) ).
 
   ENDMETHOD.
 
@@ -64,7 +64,7 @@ CLASS ltcl_test IMPLEMENTATION.
 
     cl_abap_unit_assert=>assert_false(
         /kro/cl_ui5_util_context=>rtti_check_class_impl_intf( class = `ZCL_THIS_CLASS_DOES_NOT_EXIST`
-                                                               intf  = `Z2UI5_IF_APP` ) ).
+                                                               intf  = `/KRO/IF_APP` ) ).
 
   ENDMETHOD.
 
@@ -72,8 +72,8 @@ CLASS ltcl_test IMPLEMENTATION.
 
     " an interface is not a class - it cannot be created, so it is no app
     cl_abap_unit_assert=>assert_false(
-        /kro/cl_ui5_util_context=>rtti_check_class_impl_intf( class = `Z2UI5_IF_APP`
-                                                               intf  = `Z2UI5_IF_APP` ) ).
+        /kro/cl_ui5_util_context=>rtti_check_class_impl_intf( class = `/KRO/IF_APP`
+                                                               intf  = `/KRO/IF_APP` ) ).
 
   ENDMETHOD.
 
@@ -84,7 +84,7 @@ CLASS ltcl_test IMPLEMENTATION.
     DATA li_app TYPE REF TO /kro/if_app.
 
     cl_abap_unit_assert=>assert_equals(
-        exp = `Z2UI5_IF_APP`
+        exp = `/KRO/IF_APP`
         act = /kro/cl_ui5_util_context=>rtti_get_ref_type_name( li_app ) ).
 
   ENDMETHOD.
@@ -94,7 +94,7 @@ CLASS ltcl_test IMPLEMENTATION.
     DATA lo_exit TYPE REF TO /kro/cl_ui5_user_exit.
 
     cl_abap_unit_assert=>assert_equals(
-        exp = `Z2UI5_CL_UI5_USER_EXIT`
+        exp = `/KRO/CL_UI5_USER_EXIT`
         act = /kro/cl_ui5_util_context=>rtti_get_ref_type_name( lo_exit ) ).
 
   ENDMETHOD.
@@ -3223,7 +3223,7 @@ CLASS ltcl_coverage IMPLEMENTATION.
     " interface, and every row names a class
     DATA lt_classes TYPE /kro/cl_ui5_util_context=>ty_t_classes.
     TRY.
-        lt_classes = /kro/cl_ui5_util_context=>rtti_get_classes_impl_intf( `Z2UI5_IF_UI5_EXIT` ).
+        lt_classes = /kro/cl_ui5_util_context=>rtti_get_classes_impl_intf( `/KRO/IF_UI5_EXIT` ).
       CATCH cx_root.
         RETURN.
     ENDTRY.
@@ -3231,7 +3231,7 @@ CLASS ltcl_coverage IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    READ TABLE lt_classes WITH KEY classname = `Z2UI5_CL_UI5_USER_EXIT` TRANSPORTING NO FIELDS. "#EC CI_SORTSEQ
+    READ TABLE lt_classes WITH KEY classname = `/KRO/CL_UI5_USER_EXIT` TRANSPORTING NO FIELDS. "#EC CI_SORTSEQ
     cl_abap_unit_assert=>assert_subrc( exp = 0 ).
     READ TABLE lt_classes WITH KEY classname = `` TRANSPORTING NO FIELDS. "#EC CI_SORTSEQ
     cl_abap_unit_assert=>assert_subrc( exp = 4 ).

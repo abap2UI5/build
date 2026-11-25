@@ -119,7 +119,7 @@ CLASS ltcl_test IMPLEMENTATION.
     DATA lo_action TYPE REF TO /kro/cl_ui5_action.
     DATA lo_result TYPE REF TO /kro/cl_ui5_action.
 
-    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=Z2UI5_CL_UI5_APP_HI_WORLD"}}}`.
+    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=/KRO/CL_UI5_APP_HI_WORLD"}}}`.
 
     lo_http = NEW #( val = lv_payload ).
     lo_http->ms_request = lo_http->request_json_to_abap( lv_payload ).
@@ -141,8 +141,8 @@ CLASS ltcl_test IMPLEMENTATION.
     " class-name-safe characters survive, everything else - markup, quotes,
     " blanks - is stripped, so the value can be quoted in an error body
     cl_abap_unit_assert=>assert_equals(
-      exp = `Z2UI5_CL_UI5_APP_HI_WORLD`
-      act = /kro/cl_ui5_action=>app_start_safe( `Z2UI5_CL_UI5_APP_HI_WORLD` ) ).
+      exp = `/KRO/CL_UI5_APP_HI_WORLD`
+      act = /kro/cl_ui5_action=>app_start_safe( `/KRO/CL_UI5_APP_HI_WORLD` ) ).
     cl_abap_unit_assert=>assert_equals(
       exp = `/ns/zcl_appscriptalert1/script`
       act = /kro/cl_ui5_action=>app_start_safe( `/ns/zcl_app<script>alert(1)</script>` ) ).
@@ -157,7 +157,7 @@ CLASS ltcl_test IMPLEMENTATION.
     DATA lo_action TYPE REF TO /kro/cl_ui5_action.
     DATA lo_result TYPE REF TO /kro/cl_ui5_action.
 
-    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=Z2UI5_CL_UI5_APP_HI_WORLD"}}}`.
+    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=/KRO/CL_UI5_APP_HI_WORLD"}}}`.
 
     lo_http = NEW #( val = lv_payload ).
     lo_http->ms_request = lo_http->request_json_to_abap( lv_payload ).
@@ -193,7 +193,7 @@ CLASS ltcl_test IMPLEMENTATION.
     /kro/cl_ui5_srv_draft=>get_instance( )->create( draft     = VALUE #( id = lv_id )
                                                      model_xml = `<draft/>` ).
 
-    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=Z2UI5_CL_UI5_APP_HI_WORLD"}}}`.
+    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=/KRO/CL_UI5_APP_HI_WORLD"}}}`.
     lo_http = NEW #( val = lv_payload ).
     lo_http->ms_request = lo_http->request_json_to_abap( lv_payload ).
     lo_http->ms_request-s_control-app_start_draft = lv_id.
@@ -275,7 +275,7 @@ CLASS ltcl_test IMPLEMENTATION.
     DATA lo_http TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_action TYPE REF TO /kro/cl_ui5_action.
     DATA lx TYPE REF TO /kro/cx_ui5_util_error.
-    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=Z2UI5_CL_UI5_UTIL_CONTEXT"}}}`.
+    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"?app_start=/KRO/CL_UI5_UTIL_CONTEXT"}}}`.
 
     lo_http = NEW #( val = lv_payload ).
     lo_http->ms_request = lo_http->request_json_to_abap( lv_payload ).
@@ -286,8 +286,8 @@ CLASS ltcl_test IMPLEMENTATION.
         cl_abap_unit_assert=>fail( `Expected exception for a class that is not an app` ).
 
       CATCH /kro/cx_ui5_util_error INTO lx.
-        cl_abap_unit_assert=>assert_true( xsdbool( lx->get_text( ) CS `Z2UI5_CL_UI5_UTIL_CONTEXT` ) ).
-        cl_abap_unit_assert=>assert_true( xsdbool( lx->get_text( ) CS `does not implement z2ui5_if_app` ) ).
+        cl_abap_unit_assert=>assert_true( xsdbool( lx->get_text( ) CS `/KRO/CL_UI5_UTIL_CONTEXT` ) ).
+        cl_abap_unit_assert=>assert_true( xsdbool( lx->get_text( ) CS `does not implement /kro/if_app` ) ).
     ENDTRY.
 
   ENDMETHOD.

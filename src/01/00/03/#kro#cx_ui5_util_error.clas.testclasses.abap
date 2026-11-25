@@ -192,8 +192,8 @@ CLASS ltcl_unit_test IMPLEMENTATION.
     cl_abap_unit_assert=>assert_true( xsdbool( lv_text CS `outer problem` ) ).
     cl_abap_unit_assert=>assert_true( xsdbool( lv_text CS `root cause` ) ).
     cl_abap_unit_assert=>assert_true( xsdbool( lv_text CS `exception chain` ) ).
-    cl_abap_unit_assert=>assert_true( xsdbool( lv_text CS `[1] Z2UI5_CX_UI5_UTIL_ERROR` ) ).
-    cl_abap_unit_assert=>assert_true( xsdbool( lv_text CS `[2] Z2UI5_CX_UI5_UTIL_ERROR` ) ).
+    cl_abap_unit_assert=>assert_true( xsdbool( lv_text CS `[1] /KRO/CX_UI5_UTIL_ERROR` ) ).
+    cl_abap_unit_assert=>assert_true( xsdbool( lv_text CS `[2] /KRO/CX_UI5_UTIL_ERROR` ) ).
     cl_abap_unit_assert=>assert_true( xsdbool( lv_text CS `context` ) ).
 
   ENDMETHOD.
