@@ -214,7 +214,75 @@ function renameBackend(N, checkout, abaplint) {
 
   const files = [...walk(src)];
   console.log(`   ${files.length} files renamed`);
+
+  // abaplint --rename rewrites references, not string literals; the gate
+  // above leaves the test classes alone, whose literals name objects on
+  // purpose (rtti checks, expected texts) and would fail on the renamed system
+  const objects = objectNames(join(checkout, "src"));
+  let changed = 0;
+  for (const f of files.filter((f) => f.endsWith(".testclasses.abap"))) {
+    const before = readFileSync(f, "utf8");
+    const after = renameLiterals(before, objects, N.prefix);
+    if (after !== before) writeFileSync(f, after), changed++;
+  }
+  console.log(`   test literals: ${changed} test class(es) rewritten (${objects.size} object names)`);
+
+  // the start app finds classes that are no object of abap2UI5 by name: the
+  // user's config class (z2ui5_cl_config_app) and the sample apps
+  // (z2ui5_cl_smp_app_000, ...). Installed next to this one, they carry the
+  // prefix as well, so every class name in its literals is renamed
+  const start = files.find((f) => basename(f).endsWith("cl_ui5_app_start.clas.abap"));
+  if (!start) throw new Error("cl_ui5_app_start.clas.abap not found - abap2UI5 changed its start app");
+  writeFileSync(start, renameLiterals(readFileSync(start, "utf8"), null, N.prefix));
+  console.log("   start app: config class and sample apps renamed");
   return { src, output };
+}
+
+// the z2ui5_* objects of a src folder, lower case, from the file names
+// (z2ui5_cl_xyz.clas.abap -> z2ui5_cl_xyz)
+export function objectNames(src) {
+  const names = new Set();
+  for (const f of walk(src)) {
+    const name = basename(f).split(".")[0].toLowerCase();
+    if (name.startsWith(`${OLD}_`)) names.add(name);
+  }
+  return names;
+}
+
+// every old object name inside a string literal (`...`, '...', |...|) becomes
+// the renamed one, in the case it was written in; comments, code and names
+// that are no object (z2ui5_cl_does_not_exist, z2ui5_cl_x_event) stay.
+// objects null: every name is renamed. A name inside a path or url
+// (.../src/z2ui5_cl_x.clas.abap) stays either way
+export function renameLiterals(text, objects, prefix) {
+  const word = new RegExp(`(?<![A-Za-z0-9_/])${OLD}_[A-Za-z0-9_]+`, "gi");
+  const swap = (lit) => lit.replace(word, (m) => {
+    if (objects && !objects.has(m.toLowerCase())) return m;
+    const renamed = prefix + m.slice(OLD.length + 1);
+    return m === m.toUpperCase() ? renamed.toUpperCase() : renamed.toLowerCase();
+  });
+  return text.split("\n").map((line) => {
+    if (line.startsWith("*")) return line;
+    let out = "";
+    let i = 0;
+    while (i < line.length) {
+      const c = line[i];
+      if (c === '"') return out + line.slice(i);
+      if (c !== "`" && c !== "'" && c !== "|") { out += c; i++; continue; }
+      // a literal up to its closing delimiter: doubled for ` and ', \| in a template
+      let j = i + 1;
+      for (; j < line.length; j++) {
+        if (c === "|" && line[j] === "\\") { j++; continue; }
+        if (line[j] === c) {
+          if (c !== "|" && line[j + 1] === c) { j++; continue; }
+          break;
+        }
+      }
+      out += swap(line.slice(i, j + 1));
+      i = j + 1;
+    }
+    return out;
+  }).join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -230,6 +298,13 @@ function renameFrontend(N, feCheckout, abap2ui5Checkout, work) {
   const renameBsp = join(abap2ui5Checkout, "tools/bsp_rename/rename-bsp.mjs");
   if (!existsSync(renameBsp)) throw new Error(`${renameBsp} not found`);
   run("node", [renameBsp, N.frontendName, "--yes", "--dir", "src"], { cwd: stage, quiet: true });
+
+  // the page names of the BSP are paths inside it (thirdparty/z2ui5/embed/
+  // Container.js) that the files, the manifest and UI5RepositoryPathMapping
+  // keep; rename-bsp rewrites them with the BSP name (thirdparty//kro/ui5/
+  // embed/...), abapGit then finds no file for the page and stops creating
+  // pages there - view/Main.view.xml is missing on the system. Put back
+  pageNames(join(feCheckout, "src"), join(stage, "src"));
 
   // the handler's call of the backend: kept by rename-bsp (a contract with
   // an unrenamed backend), rewritten here because the backend is renamed too
@@ -262,6 +337,35 @@ function renameFrontend(N, feCheckout, abap2ui5Checkout, work) {
   return join(stage, "src");
 }
 
+
+// the PAGEKEY/PAGENAME of the renamed .wapa.xml put back to the original's
+// (same pages, same order), then every page checked against its file
+// (<bsp>.wapa.<pagename lower case, / as _->)
+function pageNames(originalSrc, renamedSrc) {
+  const xml = (dir) => [...walk(dir)].filter((p) => p.endsWith(".wapa.xml"));
+  const [orig] = xml(originalSrc);
+  const renamed = xml(renamedSrc);
+  if (!orig || renamed.length !== 1) throw new Error(`expected one BSP, found ${renamed.length}`);
+  const fixed = restorePageNames(readFileSync(renamed[0], "utf8"), readFileSync(orig, "utf8"));
+  writeFileSync(renamed[0], fixed);
+  const stem = basename(renamed[0]).slice(0, -".xml".length);
+  const files = new Set(readdirSync(dirname(renamed[0])));
+  const pages = [...fixed.matchAll(/<PAGENAME>([^<]+)<\/PAGENAME>/g)].map((m) => m[1]);
+  for (const page of pages) {
+    const file = `${stem}.${page.toLowerCase().replace(/\//g, "_-")}`;
+    if (!files.has(file)) throw new Error(`BSP page ${page}: no file ${file} - abapGit would not create it`);
+  }
+  console.log(`   ${pages.length} pages, each with its file`);
+}
+
+export function restorePageNames(renamed, original) {
+  const tags = /<(PAGEKEY|PAGENAME)>[^<]*<\/\1>/g;
+  const keep = original.match(tags) ?? [];
+  let i = 0;
+  const out = renamed.replace(tags, () => keep[i++]);
+  if (i !== keep.length) throw new Error(`the BSP has ${i / 2} pages after the rename, ${keep.length / 2} before`);
+  return out;
+}
 // ---------------------------------------------------------------------------
 // 4. the result
 // ---------------------------------------------------------------------------
