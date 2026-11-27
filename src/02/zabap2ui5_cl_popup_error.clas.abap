@@ -1,0 +1,102 @@
+CLASS zabap2ui5_cl_popup_error DEFINITION PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES zabap2ui5_if_app.
+    " check_confirmed( ) - always abap_true, the popup only shows the error;
+    " value( ) - unbound; value_string( ) - empty
+    INTERFACES zabap2ui5_if_popup_result.
+
+    CLASS-METHODS factory
+      IMPORTING
+        x_root          TYPE REF TO cx_root
+        i_title         TYPE string DEFAULT `Error`
+      RETURNING
+        VALUE(r_result) TYPE REF TO zabap2ui5_cl_popup_error.
+
+  PROTECTED SECTION.
+    DATA client TYPE REF TO zabap2ui5_if_client.
+    DATA error  TYPE REF TO cx_root.
+    DATA title  TYPE string.
+
+    METHODS view_display.
+
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+CLASS zabap2ui5_cl_popup_error IMPLEMENTATION.
+
+  METHOD factory.
+
+    r_result = NEW #( ).
+    r_result->error = x_root.
+    r_result->title = i_title.
+
+  ENDMETHOD.
+
+  METHOD view_display.
+
+    DATA(popup) = zabap2ui5_cl_ui5_view_builder=>factory(
+                      )->ele( n = `FragmentDefinition` ns = `core`
+                      )->a( n = `xmlns` v = `sap.m`
+                      )->a( n = `xmlns:core` v = `sap.ui.core`
+                      )->ele( `Dialog`
+                      )->a( n = `title` t = title
+                      )->a( n = `afterClose` v = client->_event( `BUTTON_CONFIRM` )
+                      )->ele( `content`
+                      )->ele( `VBox`
+                      )->a( n = `class` v = `sapUiMediumMargin`
+                      )->tag( `Text`
+                      )->a( n = `text` t = error->get_text( )
+                      )->end(
+                      )->end(
+                      )->ele( `buttons`
+                      )->tag( `Button`
+                      )->a( n = `text` v = `OK`
+                      )->a( n = `press` v = client->_event( `BUTTON_CONFIRM` )
+                      )->a( n = `type` v = `Emphasized` ).
+
+    client->popup_display( popup->stringify( ) ).
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_app~main.
+
+    me->client = client.
+
+    IF client->check_on_init( ).
+      view_display( ).
+      RETURN.
+    ELSEIF client->check_on_navigated( ).
+      view_display( ).
+    ENDIF.
+
+    IF client->check_on_event( `BUTTON_CONFIRM` ).
+      client->popup_destroy( ).
+      client->nav_app_leave( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_popup_result~check_confirmed.
+
+    " shows something only - nothing to decline
+    result = abap_true.
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_popup_result~value.
+
+    " no value - the reference stays unbound
+    CLEAR result.
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_popup_result~value_string.
+
+    " no single value - empty
+    CLEAR result.
+
+  ENDMETHOD.
+
+ENDCLASS.

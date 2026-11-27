@@ -1,0 +1,186 @@
+CLASS zabap2ui5_cl_popup_file_dl DEFINITION PUBLIC.
+
+  PUBLIC SECTION.
+    " abap2ui5lint-disable unbound-public-attribute -- a popup's attributes are its interface to the app that called it, which reads them once the popup returns
+    INTERFACES zabap2ui5_if_app.
+    " check_confirmed( ) - the file was downloaded (as result( ));
+    " value( ) - unbound; value_string( ) - empty
+    INTERFACES zabap2ui5_if_popup_result.
+
+    CLASS-METHODS factory
+      IMPORTING
+        i_text                TYPE string DEFAULT `Choose the file to download:`
+        i_title               TYPE string DEFAULT `File Download`
+        i_button_text_confirm TYPE string DEFAULT `Download`
+        i_button_text_cancel  TYPE string DEFAULT `Cancel`
+        i_file                TYPE string
+        i_type                TYPE string DEFAULT `data:text/csv;base64,`
+        i_name                TYPE string OPTIONAL
+      RETURNING
+        VALUE(r_result)       TYPE REF TO zabap2ui5_cl_popup_file_dl.
+
+    DATA mv_name           TYPE string.
+    DATA mv_type           TYPE string.
+    DATA mv_size           TYPE string.
+    DATA mv_value          TYPE string.
+    DATA mv_check_download TYPE abap_bool.
+
+    METHODS result
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+    " abap2ui5lint-enable unbound-public-attribute
+
+  PROTECTED SECTION.
+    DATA check_confirmed     TYPE abap_bool.
+    DATA client              TYPE REF TO zabap2ui5_if_client.
+    DATA title               TYPE string.
+    DATA question_text       TYPE string.
+    DATA button_text_confirm TYPE string.
+    DATA button_text_cancel  TYPE string.
+
+    METHODS view_display.
+    METHODS download.
+
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+CLASS zabap2ui5_cl_popup_file_dl IMPLEMENTATION.
+
+  METHOD factory.
+
+    DATA lv_size_kb TYPE p LENGTH 8 DECIMALS 2.
+
+    r_result = NEW #( ).
+    r_result->title               = i_title.
+
+    r_result->question_text       = i_text.
+    r_result->button_text_confirm = i_button_text_confirm.
+    r_result->button_text_cancel  = i_button_text_cancel.
+    r_result->mv_type             = i_type.
+    r_result->mv_name             = i_name.
+    r_result->mv_value            = i_file.
+    " packed target avoids the integer division that displayed 0 for small
+    " files, condense drops the trailing sign blank of the conversion
+    lv_size_kb                    = strlen( i_file ) / 1000.
+    r_result->mv_size             = condense( CONV string( lv_size_kb ) ).
+
+  ENDMETHOD.
+
+  METHOD result.
+
+    result = check_confirmed.
+
+  ENDMETHOD.
+
+  METHOD view_display.
+
+    DATA(popup) = zabap2ui5_cl_ui5_view_builder=>factory(
+                      )->ele( n = `FragmentDefinition` ns = `core`
+                      )->a( n = `xmlns` v = `sap.m`
+                      )->a( n = `xmlns:core` v = `sap.ui.core`
+                      )->ele( `Dialog`
+                      )->a( n = `title` t = title
+                      )->a( n = `afterClose` v = client->_event( `BUTTON_CANCEL` )
+                      )->ele( `content` ).
+
+    popup->ele( `VBox`
+        )->a( n = `class` v = `sapUiMediumMargin`
+        )->tag( `Label`
+        )->a( n = `text` v = `Name`
+        )->tag( `Input`
+        )->a( n = `value` t = mv_name
+        )->a( n = `enabled` b = abap_false
+        )->tag( `Label`
+        )->a( n = `text` v = `Type`
+        )->tag( `Input`
+        )->a( n = `value` t = mv_type
+        )->a( n = `enabled` b = abap_false
+        )->tag( `Label`
+        )->a( n = `text` v = `Size`
+        )->tag( `Input`
+        )->a( n = `value` t = mv_size
+        )->a( n = `enabled` b = abap_false
+        )->end(
+        )->end(
+        )->ele( `buttons`
+        )->tag( `Button`
+        )->a( n = `text` t = button_text_cancel
+        )->a( n = `press` v = client->_event( `BUTTON_CANCEL` )
+        )->tag( `Button`
+        )->a( n = `text` t = button_text_confirm
+        )->a( n = `press` v = client->_event( `BUTTON_CONFIRM` )
+        )->a( n = `type` v = `Emphasized` ).
+
+    client->popup_display( popup->stringify( ) ).
+
+  ENDMETHOD.
+
+  METHOD download.
+
+    " The browser saves the file through the DOWNLOAD_B64_FILE frontend action
+    " (a data: URL on a temporary anchor, named after mv_name). The popup
+    " stays open for this response and closes on CALLBACK_DOWNLOAD, which the
+    " client timer fires right after the download has been handed over: the
+    " actions an app queues do not survive its own nav_app_leave( ), so the
+    " download and the leave cannot share one roundtrip.
+    DATA(lv_csv_x) = zabap2ui5_cl_popup_context=>conv_get_xstring_by_string( mv_value ).
+    DATA(lv_base64) = zabap2ui5_cl_popup_context=>conv_encode_x_base64( lv_csv_x ).
+
+    client->follow_up_action( val   = zabap2ui5_if_client=>cs_event-download_b64_file
+                              t_arg = VALUE #( ( mv_type && lv_base64 )
+                                               ( mv_name ) ) ).
+    client->follow_up_action( val   = zabap2ui5_if_client=>cs_event-start_timer
+                              t_arg = VALUE #( ( `CALLBACK_DOWNLOAD` )
+                                               ( `0` ) ) ).
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_app~main.
+
+    me->client = client.
+
+    IF client->check_on_init( ).
+      view_display( ).
+      RETURN.
+    ENDIF.
+
+    CASE client->get( )-event.
+
+      WHEN `CALLBACK_DOWNLOAD`.
+        check_confirmed = abap_true.
+        client->popup_destroy( ).
+        client->nav_app_leave( ).
+
+      WHEN `BUTTON_CONFIRM`.
+        mv_check_download = abap_true.
+        download( ).
+
+      WHEN `BUTTON_CANCEL`.
+        client->popup_destroy( ).
+        client->nav_app_leave( ).
+    ENDCASE.
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_popup_result~check_confirmed.
+
+    result = check_confirmed.
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_popup_result~value.
+
+    " no value - the reference stays unbound
+    CLEAR result.
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_popup_result~value_string.
+
+    " no single value - empty
+    CLEAR result.
+
+  ENDMETHOD.
+
+ENDCLASS.
