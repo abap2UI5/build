@@ -1,0 +1,177 @@
+
+CLASS ltcl_test DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+
+    METHODS test_factory            FOR TESTING RAISING cx_static_check.
+    METHODS test_factory_util_error FOR TESTING RAISING cx_static_check.
+    METHODS test_factory_custom     FOR TESTING RAISING cx_static_check.
+
+ENDCLASS.
+
+
+CLASS ltcl_test IMPLEMENTATION.
+
+  METHOD test_factory.
+
+    TRY.
+        DATA(lv_val) = 1 / 0 ##NEEDED.
+      CATCH cx_root INTO DATA(lx) ##NO_HANDLER.
+    ENDTRY.
+
+    DATA(lo_pop) = /ca2ui5/cl_popup_error=>factory( lx ).
+    cl_abap_unit_assert=>assert_bound( lo_pop ).
+
+  ENDMETHOD.
+
+  METHOD test_factory_util_error.
+
+    DATA(lx) = NEW /ca2ui5/cx_popup_error( val = `test error` ).
+    DATA(lo_pop) = /ca2ui5/cl_popup_error=>factory( lx ).
+    cl_abap_unit_assert=>assert_bound( lo_pop ).
+
+  ENDMETHOD.
+
+  METHOD test_factory_custom.
+
+    DATA(lx) = NEW /ca2ui5/cx_popup_error( val = `custom error` ).
+    DATA(lo_pop) = /ca2ui5/cl_popup_error=>factory(
+      x_root  = lx
+      i_title = `My Error Title` ).
+    cl_abap_unit_assert=>assert_bound( lo_pop ).
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS ltcl_test_roundtrip DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    DATA mo_action TYPE REF TO /ca2ui5/cl_ui5_action.
+    DATA mi_client TYPE REF TO /ca2ui5/if_client.
+
+    " what the roundtrip queued for the frontend, read off the response
+    METHODS popup_xml
+      RETURNING
+        VALUE(result) TYPE string.
+    METHODS popup_destroyed
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+
+    METHODS client_create
+      IMPORTING
+        io_app TYPE REF TO /ca2ui5/if_app.
+
+    METHODS roundtrip_event
+      IMPORTING
+        io_app   TYPE REF TO /ca2ui5/if_app
+        iv_event TYPE string.
+
+    METHODS test_init_displays_error FOR TESTING RAISING cx_static_check.
+    METHODS test_confirm_closes      FOR TESTING RAISING cx_static_check.
+    METHODS test_text_is_literal     FOR TESTING RAISING cx_static_check.
+
+ENDCLASS.
+
+
+CLASS ltcl_test_roundtrip IMPLEMENTATION.
+
+  METHOD client_create.
+
+    mo_action = NEW #( NEW /ca2ui5/cl_ui5_handler( `` ) ).
+    mo_action->mo_app->mo_app = io_app.
+    mi_client = NEW /ca2ui5/cl_ui5_client( mo_action ).
+
+  ENDMETHOD.
+
+  METHOD roundtrip_event.
+
+    client_create( io_app ).
+    mo_action->mo_app->mv_check_initialized = abap_true.
+    mo_action->ms_actual-event = iv_event.
+    io_app->main( mi_client ).
+
+  ENDMETHOD.
+
+  METHOD test_init_displays_error.
+
+    DATA(lo_pop) = /ca2ui5/cl_popup_error=>factory( NEW /ca2ui5/cx_popup_error( `MY_ERROR_TEXT` ) ).
+    client_create( lo_pop ).
+
+    lo_pop->/ca2ui5/if_app~main( mi_client ).
+
+    DATA(lv_xml) = popup_xml( ).
+    cl_abap_unit_assert=>assert_true( xsdbool( lv_xml CS `MY_ERROR_TEXT` ) ).
+    cl_abap_unit_assert=>assert_true( xsdbool( lv_xml CS `Error` ) ).
+
+  ENDMETHOD.
+
+  METHOD test_confirm_closes.
+
+    DATA(lo_pop) = /ca2ui5/cl_popup_error=>factory( NEW /ca2ui5/cx_popup_error( `MY_ERROR_TEXT` ) ).
+    roundtrip_event( io_app   = lo_pop
+                     iv_event = `BUTTON_CONFIRM` ).
+
+    cl_abap_unit_assert=>assert_true( popup_destroyed( ) ).
+    cl_abap_unit_assert=>assert_bound( mo_action->ms_next-o_app_leave ).
+
+  ENDMETHOD.
+
+  METHOD test_text_is_literal.
+
+    " an exception text is data: a brace in it must be shown, not parsed as
+    " the start of a binding
+    DATA(lo_pop) = /ca2ui5/cl_popup_error=>factory( NEW /ca2ui5/cx_popup_error( `field {NAME} is unknown` ) ).
+    client_create( lo_pop ).
+
+    lo_pop->/ca2ui5/if_app~main( mi_client ).
+
+    cl_abap_unit_assert=>assert_true( xsdbool( popup_xml( ) CS `field \{NAME\} is unknown` ) ).
+
+  ENDMETHOD.
+
+  METHOD popup_xml.
+
+    LOOP AT mo_action->ms_next-t_action_front INTO DATA(ls_action)
+         WHERE slot = /ca2ui5/if_client=>cs_view-popup AND method = `display`.
+      result = ls_action-xml.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD popup_destroyed.
+
+    result = xsdbool( line_exists( mo_action->ms_next-t_action_front[ slot   = /ca2ui5/if_client=>cs_view-popup
+                                                                      method = `destroy` ] ) ).
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS ltcl_popup_result DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    METHODS test_closed_is_confirmed FOR TESTING RAISING cx_static_check.
+
+ENDCLASS.
+
+
+CLASS ltcl_popup_result IMPLEMENTATION.
+
+  METHOD test_closed_is_confirmed.
+
+    DATA(lo_pop) = /ca2ui5/cl_popup_error=>factory( NEW cx_sy_zerodivide( ) ).
+    DATA(li_result) = CAST /ca2ui5/if_popup_result( lo_pop ).
+
+    cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
+    cl_abap_unit_assert=>assert_not_bound( li_result->value( ) ).
+    cl_abap_unit_assert=>assert_initial( li_result->value_string( ) ).
+
+  ENDMETHOD.
+
+ENDCLASS.
