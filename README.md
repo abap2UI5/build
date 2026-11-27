@@ -110,4 +110,6 @@ Install one or the other in a system.
 [`build`](.github/workflows/build.yaml) runs daily, on a push to `main` and by
 hand: it syncs `main` from the four repositories, lints the two folders and pushes every
 delivery branch that changed. On a pull request it lints and builds, and pushes
-nothing. To add a delivery, add its name to `deliveries.json`.
+nothing. The jobs that run npm hold a read-only token; what they built goes as
+an artifact to the two jobs that push (`push-sources`, `publish`), which run
+git only. To add a delivery, add its name to `deliveries.json`.
