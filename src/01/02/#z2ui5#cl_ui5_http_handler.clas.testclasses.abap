@@ -9,6 +9,9 @@ CLASS ltcl_test_http_handler DEFINITION FINAL
     METHODS test_http_post_ok      FOR TESTING RAISING cx_static_check.
     METHODS test_http_post_error   FOR TESTING RAISING cx_static_check.
     METHODS test_main_post_no_app  FOR TESTING RAISING cx_static_check.
+    " a draft that is gone (expired, cleaned up, another user's) answers a
+    " 410 with a fixed text, not the 500 dump
+    METHODS test_main_post_no_draft FOR TESTING RAISING cx_static_check.
     METHODS test_main_get_routing  FOR TESTING RAISING cx_static_check.
     METHODS test_main_post_routing FOR TESTING RAISING cx_static_check.
     METHODS test_main_unsupported  FOR TESTING RAISING cx_static_check.
@@ -150,6 +153,25 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
                                         act = ls_result-status_code ).
     cl_abap_unit_assert=>assert_char_cp( act = ls_result-body
                                          exp = `*Z2UI5_CL_APP_DOES_NOT_EXIST*does not exist*` ).
+
+  ENDMETHOD.
+
+  METHOD test_main_post_no_draft.
+
+    DATA ls_req TYPE /z2ui5/cl_ui5_http_handler=>ty_s_http_req.
+    DATA ls_result TYPE /z2ui5/cl_ui5_http_handler=>ty_s_http_res.
+
+    ls_req-method = `POST`.
+    ls_req-body = `{"value":{"S_FRONT":{"ID":"0123456789ABCDEF0123456789ABCDEF","EVENT":"SAVE"}}}`.
+
+    ls_result = /z2ui5/cl_ui5_http_handler=>_main( ls_req ).
+
+    cl_abap_unit_assert=>assert_equals( exp = 410
+                                        act = ls_result-status_code ).
+    cl_abap_unit_assert=>assert_char_cp( act = ls_result-body
+                                         exp = `NO_DRAFT_ENTRY_OF_PREVIOUS_REQUEST_FOUND - the session expired*` ).
+    " the fixed text only - no dump, no source position
+    cl_abap_unit_assert=>assert_false( xsdbool( ls_result-body CS `unhandled exception` ) ).
 
   ENDMETHOD.
 
@@ -1738,6 +1760,10 @@ CLASS ltcl_test_http_response IMPLEMENTATION.
     cl_abap_unit_assert=>assert_not_initial( mo_mock->mv_cdata ).
     cl_abap_unit_assert=>assert_equals( exp = `text/plain; charset=UTF-8`
                                         act = header_value( `content-type` ) ).
+    " the exit's headers are lost with it - nosniff, which the text/plain
+    " body relies on, is the handler's own and stays
+    cl_abap_unit_assert=>assert_equals( exp = `nosniff`
+                                        act = header_value( `x-content-type-options` ) ).
 
   ENDMETHOD.
 
