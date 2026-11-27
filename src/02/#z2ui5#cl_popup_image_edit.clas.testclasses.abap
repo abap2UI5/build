@@ -1,0 +1,269 @@
+CLASS ltcl_test DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    METHODS test_factory          FOR TESTING RAISING cx_static_check.
+    METHODS test_factory_defaults FOR TESTING RAISING cx_static_check.
+    METHODS test_result_initial   FOR TESTING RAISING cx_static_check.
+ENDCLASS.
+
+CLASS ltcl_test IMPLEMENTATION.
+
+  METHOD test_factory.
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_image_edit.
+    lo_pop = /z2ui5/cl_popup_image_edit=>factory(
+      iv_image       = `data:image/png;base64,AAAA`
+      iv_title       = `Edit`
+      iv_save_text   = `Done`
+      iv_cancel_text = `Abort` ).
+
+    cl_abap_unit_assert=>assert_bound( lo_pop ).
+  ENDMETHOD.
+
+  METHOD test_factory_defaults.
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_image_edit.
+    lo_pop = /z2ui5/cl_popup_image_edit=>factory( `test_img` ).
+
+    cl_abap_unit_assert=>assert_bound( lo_pop ).
+  ENDMETHOD.
+
+  METHOD test_result_initial.
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_image_edit.
+    DATA ls_result TYPE /z2ui5/cl_popup_image_edit=>t_result.
+    lo_pop = /z2ui5/cl_popup_image_edit=>factory( `test_img` ).
+
+    ls_result = lo_pop->result( ).
+
+    cl_abap_unit_assert=>assert_equals( exp = abap_false
+                                        act = ls_result-check_confirmed ).
+    cl_abap_unit_assert=>assert_equals( exp = `test_img`
+                                        act = ls_result-image ).
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS ltcl_test_roundtrip DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    DATA mo_action TYPE REF TO /z2ui5/cl_ui5_action.
+    DATA mi_client TYPE REF TO /z2ui5/if_client.
+
+    " what the roundtrip queued for the frontend, read off the response
+    METHODS popup_xml
+      RETURNING
+        VALUE(result) TYPE string.
+    METHODS popup_destroyed
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+
+    METHODS client_create
+      IMPORTING
+        io_app TYPE REF TO /z2ui5/if_app.
+
+    METHODS test_init_displays_popup FOR TESTING RAISING cx_static_check.
+    METHODS test_save                FOR TESTING RAISING cx_static_check.
+    METHODS test_cancel              FOR TESTING RAISING cx_static_check.
+
+ENDCLASS.
+
+
+CLASS ltcl_test_roundtrip IMPLEMENTATION.
+
+  METHOD client_create.
+
+    DATA temp1 TYPE REF TO /z2ui5/cl_ui5_handler.
+    CREATE OBJECT temp1 TYPE /z2ui5/cl_ui5_handler EXPORTING VAL = ``.
+    CREATE OBJECT mo_action EXPORTING VAL = temp1.
+    mo_action->mo_app->mo_app = io_app.
+    CREATE OBJECT mi_client TYPE /z2ui5/cl_ui5_client EXPORTING ACTION = mo_action.
+
+  ENDMETHOD.
+
+  METHOD test_init_displays_popup.
+
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_image_edit.
+    DATA lv_xml TYPE string.
+    DATA temp1 TYPE xsdboolean.
+    lo_pop = /z2ui5/cl_popup_image_edit=>factory( iv_image = `data:image/png;base64,OLD`
+                                                       iv_title = `Image Title` ).
+    client_create( lo_pop ).
+
+    lo_pop->/z2ui5/if_app~main( mi_client ).
+
+
+    lv_xml = popup_xml( ).
+
+    temp1 = boolc( lv_xml CS `Image Title` ).
+    cl_abap_unit_assert=>assert_true( temp1 ).
+
+  ENDMETHOD.
+
+  METHOD test_save.
+
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_image_edit.
+    DATA temp1 TYPE string_table.
+    lo_pop = /z2ui5/cl_popup_image_edit=>factory( `data:image/png;base64,OLD` ).
+    client_create( lo_pop ).
+    mo_action->mo_app->mv_check_initialized = abap_true.
+    mo_action->ms_actual-event = `SAVE`.
+
+    CLEAR temp1.
+    INSERT `data:image/png;base64,NEW` INTO TABLE temp1.
+    mo_action->ms_actual-t_event_arg = temp1.
+
+    lo_pop->/z2ui5/if_app~main( mi_client ).
+
+    cl_abap_unit_assert=>assert_true( lo_pop->result( )-check_confirmed ).
+    cl_abap_unit_assert=>assert_equals( exp = `data:image/png;base64,NEW`
+                                        act = lo_pop->result( )-image ).
+    cl_abap_unit_assert=>assert_true( popup_destroyed( ) ).
+
+  ENDMETHOD.
+
+  METHOD test_cancel.
+
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_image_edit.
+    lo_pop = /z2ui5/cl_popup_image_edit=>factory( `data:image/png;base64,OLD` ).
+    client_create( lo_pop ).
+    mo_action->mo_app->mv_check_initialized = abap_true.
+    mo_action->ms_actual-event = `CANCEL`.
+
+    lo_pop->/z2ui5/if_app~main( mi_client ).
+
+    cl_abap_unit_assert=>assert_false( lo_pop->result( )-check_confirmed ).
+    cl_abap_unit_assert=>assert_true( popup_destroyed( ) ).
+    cl_abap_unit_assert=>assert_bound( mo_action->ms_next-o_app_leave ).
+
+  ENDMETHOD.
+
+  METHOD popup_xml.
+
+    DATA ls_action LIKE LINE OF mo_action->ms_next-t_action_front.
+    LOOP AT mo_action->ms_next-t_action_front INTO ls_action
+         WHERE slot = /z2ui5/if_client=>cs_view-popup AND method = `display`.
+      result = ls_action-xml.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD popup_destroyed.
+
+    DATA temp3 LIKE sy-subrc.
+    DATA temp2 TYPE xsdboolean.
+    READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = /z2ui5/if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
+    temp3 = sy-subrc.
+
+    temp2 = boolc( temp3 = 0 ).
+    result = temp2.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS ltcl_popup_result DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    DATA mo_action TYPE REF TO /z2ui5/cl_ui5_action.
+
+    METHODS roundtrip
+      IMPORTING
+        io_app   TYPE REF TO /z2ui5/if_app
+        iv_event TYPE string
+        it_arg   TYPE string_table OPTIONAL.
+
+    METHODS test_initial_not_confirmed FOR TESTING RAISING cx_static_check.
+    METHODS test_confirmed             FOR TESTING RAISING cx_static_check.
+    METHODS test_cancelled             FOR TESTING RAISING cx_static_check.
+
+ENDCLASS.
+
+
+CLASS ltcl_popup_result IMPLEMENTATION.
+
+  METHOD roundtrip.
+
+    " a roundtrip with an event, after the first one - as the button press
+    " of the user
+    DATA temp2 TYPE REF TO /z2ui5/cl_ui5_handler.
+    DATA temp4 TYPE REF TO /z2ui5/cl_ui5_client.
+    CREATE OBJECT temp2 TYPE /z2ui5/cl_ui5_handler EXPORTING VAL = ``.
+    CREATE OBJECT mo_action EXPORTING VAL = temp2.
+    mo_action->mo_app->mo_app = io_app.
+    mo_action->mo_app->mv_check_initialized = abap_true.
+    mo_action->ms_actual-event = iv_event.
+    mo_action->ms_actual-t_event_arg = it_arg.
+
+    CREATE OBJECT temp4 TYPE /z2ui5/cl_ui5_client EXPORTING ACTION = mo_action.
+    io_app->main( temp4 ).
+
+  ENDMETHOD.
+
+  METHOD test_initial_not_confirmed.
+
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_image_edit.
+    DATA temp5 TYPE REF TO /z2ui5/if_popup_result.
+    DATA li_result LIKE temp5.
+    lo_pop = /z2ui5/cl_popup_image_edit=>factory( `data:image/png;base64,OLD` ).
+
+    temp5 ?= lo_pop.
+
+    li_result = temp5.
+
+    cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
+
+  ENDMETHOD.
+
+  METHOD test_confirmed.
+
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_image_edit.
+    DATA temp6 TYPE string_table.
+    DATA temp8 TYPE REF TO /z2ui5/if_popup_result.
+    DATA li_result LIKE temp8.
+    DATA temp9 TYPE REF TO string.
+    DATA lr_value LIKE temp9.
+    lo_pop = /z2ui5/cl_popup_image_edit=>factory( `data:image/png;base64,OLD` ).
+
+    CLEAR temp6.
+    INSERT `data:image/png;base64,NEW` INTO TABLE temp6.
+    roundtrip( io_app   = lo_pop
+               iv_event = `SAVE`
+               it_arg   = temp6 ).
+
+    temp8 ?= lo_pop.
+
+    li_result = temp8.
+
+    cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
+    cl_abap_unit_assert=>assert_equals( exp = `data:image/png;base64,NEW`
+                                        act = li_result->value_string( ) ).
+
+    temp9 ?= li_result->value( ).
+
+    lr_value = temp9.
+    cl_abap_unit_assert=>assert_equals( exp = `data:image/png;base64,NEW`
+                                        act = lr_value->* ).
+
+  ENDMETHOD.
+
+  METHOD test_cancelled.
+
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_image_edit.
+    DATA temp10 TYPE REF TO /z2ui5/if_popup_result.
+    DATA li_result LIKE temp10.
+    lo_pop = /z2ui5/cl_popup_image_edit=>factory( `data:image/png;base64,OLD` ).
+    roundtrip( io_app   = lo_pop
+               iv_event = `CANCEL` ).
+
+    temp10 ?= lo_pop.
+
+    li_result = temp10.
+
+    cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
+
+  ENDMETHOD.
+
+ENDCLASS.
