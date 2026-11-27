@@ -51,7 +51,6 @@
 // Needs: node >= 22, git, and `npm ci` here.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -409,32 +408,11 @@ export function renameLiterals(text, objects, prefix) {
 // kept it is an object that kept it, and collides with the installation the
 // rename exists to sit next to. (#z2ui5#ui5... is the namespace /Z2UI5/, a
 // different object.)
-function noOriginalFileNames(dir) {
-  const kept = [...walk(dir)].filter((p) => /^z2ui5[ ._]/i.test(basename(p)));
+function noOriginalFileNames(dir, N) {
+  // the namespace nodes of /Z2UI5/ are ICF nodes named z2ui5 - its own, checked by their urls
+  const own = (file) => N.kind === "namespace" && file.endsWith(".sicf.xml") && file.startsWith(N.bare.padEnd(15, " "));
+  const kept = [...walk(dir)].filter((p) => /^z2ui5[ ._]/i.test(basename(p)) && !own(basename(p)));
   if (kept.length) throw new Error(`still named after the original:\n  ${kept.join("\n  ")}`);
-}
-
-// a namespace no object and no url of abap2UI5 holds
-const NEUTRAL = "q7x7q";
-
-// every <from> in the contents and file names below dir becomes <to>, in
-// the case it stands in; an ICF node's file is named after its name and the
-// hash of its url (abapGit: 15 characters of name, 25 of sha1), so that is
-// derived again
-function spellOut(dir, from, to) {
-  const swap = (t) => t.split(from.toUpperCase()).join(to.toUpperCase()).split(from).join(to);
-  for (const p of [...walk(dir)]) {
-    const text = swap(readFileSync(p, "utf8"));
-    let name = swap(basename(p));
-    if (name.endsWith(".sicf.xml")) {
-      const url = /<URL>([^<]+)<\/URL>/.exec(text)?.[1];
-      const node = /<ORIG_NAME>([^<]+)<\/ORIG_NAME>/.exec(text)?.[1];
-      if (!url || !node) throw new Error(`${basename(p)}: no URL or ORIG_NAME`);
-      name = `${node.padEnd(15, " ")}${createHash("sha1").update(url).digest("hex").slice(0, 25)}.sicf.xml`;
-    }
-    rmSync(p);
-    writeFileSync(join(dirname(p), name), text);
-  }
 }
 
 // standard and 702: the ICF node, its handler and - standard only - the BSP
@@ -443,18 +421,8 @@ function renameStandardService(N, checkout, target) {
   console.log(`\n== src/03: node ${N.endpoint}, BSP ${N.bsp} (abap2UI5's tools/bsp_rename)`);
   rmSync(target, { recursive: true, force: true });
   cpSync(join(checkout, "src/03"), target, { recursive: true });
-  const bspRename = (name, prefix) => run("node", [join(checkout, "tools/bsp_rename/rename-bsp.mjs"), name, "--dir", target, "--backend", prefix, "--yes"], { cwd: checkout, quiet: true });
-  if (N.kind === "namespace" && N.bare.includes(OLD)) {
-    // bsp_rename writes the namespace into the node urls and then renames
-    // the old name in what it wrote: /Z2UI5/ ends up as /sap/bc/ui5/ui5 and
-    // without its namespace nodes. Renamed to a neutral namespace first,
-    // which is then spelled out - no old name is left for a second look
-    bspRename(`/${NEUTRAL}/`, `/${NEUTRAL}/`);
-    spellOut(target, NEUTRAL, N.bare);
-  } else {
-    bspRename(N.input, N.prefix);
-    noOriginalFileNames(target);
-  }
+  run("node", [join(checkout, "tools/bsp_rename/rename-bsp.mjs"), N.input, "--dir", target, "--backend", N.prefix, "--yes"], { cwd: checkout, quiet: true });
+  noOriginalFileNames(target, N);
   // the nodes are the ones this name stands for - all of them on standard,
   // the handler's alone on 702
   const urls = [...walk(target)].filter((p) => p.endsWith(".sicf.xml"))
@@ -566,7 +534,7 @@ export function renameCloudService(N, source, target) {
   for (const file of Object.keys(plan)) {
     if (!existsSync(join(source, "01", file))) throw new Error(`src/cloud/01/03/01/${file} is gone - abap2UI5 changed its cloud service`);
   }
-  noOriginalFileNames(target);
+  noOriginalFileNames(target, N);
   console.log(`   handler ${handler.toLowerCase()} calls ${N.prefix}cl_ui5_http_handler`);
   console.log(`   not carried: ${dropped.join(", ") || "(no SUSH)"}, the launchpad integration (03/02)`);
 }
