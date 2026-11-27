@@ -80,7 +80,11 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
 
     DATA lo_root TYPE REF TO cx_root.
     DATA lv_text TYPE string.
-    DATA temp1 TYPE REF TO cx_root.
+              DATA lt_msg TYPE /z2ui5/cl_popup_context=>ty_t_msg.
+              DATA lt_text TYPE string_table.
+              DATA temp1 LIKE LINE OF lt_msg.
+              DATA lr_msg LIKE REF TO temp1.
+    DATA temp2 TYPE REF TO cx_root.
 
     TRY.
         lo_root ?= val.
@@ -92,6 +96,23 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
         " crash itself. Such a val degrades to an empty text instead
         IF /z2ui5/cl_popup_context=>rtti_check_printable( val ) = abap_true.
           lv_text = val.
+        ELSEIF val IS NOT INITIAL.
+          " a message structure or table - a BAPIRET2 row or table, sy - is
+          " the obvious val in BAPI-wrapping code, and its text was lost to
+          " UNKNOWN_ERROR. Its own TRY, for the reason above
+          TRY.
+
+              lt_msg = /z2ui5/cl_popup_context=>msg_get_t( val ).
+
+
+
+              LOOP AT lt_msg REFERENCE INTO lr_msg WHERE text IS NOT INITIAL.
+                INSERT lr_msg->text INTO TABLE lt_text.
+              ENDLOOP.
+              lv_text = concat_lines_of( table = lt_text
+                                         sep   = `; ` ).
+            CATCH cx_root ##NO_HANDLER.
+          ENDTRY.
         ENDIF.
     ENDTRY.
 
@@ -103,11 +124,11 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
     " reaches the caller.
 
     IF previous IS BOUND.
-      temp1 = previous.
+      temp2 = previous.
     ELSE.
-      temp1 = lo_root.
+      temp2 = lo_root.
     ENDIF.
-    super->constructor( previous = temp1 ).
+    super->constructor( previous = temp2 ).
     CLEAR textid.
 
     ms_error-x_root = lo_root.
@@ -137,7 +158,7 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD get_text_own_by_x.
-        DATA temp2 TYPE REF TO /z2ui5/cx_popup_error.
+        DATA temp3 TYPE REF TO /z2ui5/cx_popup_error.
 
     IF val IS NOT BOUND.
       RETURN.
@@ -145,8 +166,8 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
 
     TRY.
 
-        temp2 ?= val.
-        result = temp2->get_text_own( ).
+        temp3 ?= val.
+        result = temp3->get_text_own( ).
       CATCH cx_sy_move_cast_error.
         result = val->get_text( ).
     ENDTRY.
@@ -159,8 +180,8 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
     DATA lv_text  TYPE string.
     DATA lv_last LIKE result.
     DATA lo_x LIKE previous.
-        DATA temp3 TYPE string.
-    DATA temp4 TYPE string.
+        DATA temp4 TYPE string.
+    DATA temp5 TYPE string.
 
     result = get_text_own( ).
 
@@ -176,11 +197,11 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
       IF lv_text IS NOT INITIAL AND lv_text <> lv_last.
 
         IF result IS INITIAL.
-          temp3 = lv_text.
+          temp4 = lv_text.
         ELSE.
-          temp3 = result && /z2ui5/cl_popup_context=>cv_char_util_newline && lv_text.
+          temp4 = result && /z2ui5/cl_popup_context=>cv_char_util_newline && lv_text.
         ENDIF.
-        result = temp3.
+        result = temp4.
         lv_last = lv_text.
       ENDIF.
       lo_x = lo_x->previous.
@@ -190,11 +211,11 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
     " otherwise produce a blank error message downstream
 
     IF result IS INITIAL.
-      temp4 = `UNKNOWN_ERROR`.
+      temp5 = `UNKNOWN_ERROR`.
     ELSE.
-      temp4 = result.
+      temp5 = result.
     ENDIF.
-    result = temp4.
+    result = temp5.
 
   ENDMETHOD.
 
@@ -203,7 +224,7 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
     DATA lv_count TYPE i.
     DATA lv_nl LIKE /z2ui5/cl_popup_context=>cv_char_util_newline.
     DATA lv_message TYPE string.
-    DATA temp5 TYPE string.
+    DATA temp6 TYPE string.
     DATA lo_x LIKE val.
 
     IF val IS NOT BOUND.
@@ -225,11 +246,11 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
     lv_message = val->get_text( ).
 
     IF lv_message IS INITIAL.
-      temp5 = `UNKNOWN_ERROR`.
+      temp6 = `UNKNOWN_ERROR`.
     ELSE.
-      temp5 = lv_message.
+      temp6 = lv_message.
     ENDIF.
-    lv_message = temp5.
+    lv_message = temp6.
 
     result = `--- error ---` && lv_nl && lv_message &&
              lv_nl && lv_nl && `--- exception chain ---`.
@@ -256,11 +277,11 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
     DATA lv_nl LIKE /z2ui5/cl_popup_context=>cv_char_util_newline.
     DATA lv_text TYPE string.
     DATA lv_position TYPE string.
-        DATA temp6 TYPE REF TO /z2ui5/cx_popup_error.
-        DATA lx_own LIKE temp6.
+        DATA temp7 TYPE REF TO /z2ui5/cx_popup_error.
+        DATA lx_own LIKE temp7.
     DATA lt_attri TYPE /z2ui5/cl_popup_context=>ty_t_name_value.
-    DATA temp7 LIKE LINE OF lt_attri.
-    DATA lr_attri LIKE REF TO temp7.
+    DATA temp8 LIKE LINE OF lt_attri.
+    DATA lr_attri LIKE REF TO temp8.
     lv_nl = /z2ui5/cl_popup_context=>cv_char_util_newline.
 
     result = |[{ index }] { /z2ui5/cl_popup_context=>rtti_get_classname_by_ref( val ) }|.
@@ -286,9 +307,9 @@ CLASS /z2ui5/cx_popup_error IMPLEMENTATION.
 
     TRY.
 
-        temp6 ?= val.
+        temp7 ?= val.
 
-        lx_own = temp6.
+        lx_own = temp7.
         " computed on first render, not in the constructor - see there.
         " cx_root, not just the cast error: a failing uuid lookup must not
         " abort the rendering of the very error report it decorates, and an
