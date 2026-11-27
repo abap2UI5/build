@@ -784,10 +784,10 @@ DATA key_set     TYPE temp11.
 
         " past the table buffer, as the check before the save reads it
         SELECT *
-          FROM (mv_table)
+          FROM (mv_table) BYPASSING BUFFER INTO CORRESPONDING FIELDS OF TABLE <table>
           ORDER BY PRIMARY KEY
-          INTO CORRESPONDING FIELDS OF TABLE <table>
-          BYPASSING BUFFER.
+
+          .
 
         SORT <table>.
 
@@ -888,10 +888,10 @@ DATA key_set     TYPE temp11.
     " database
     TRY.
         SELECT *
-          FROM (mv_table)
+          FROM (mv_table) BYPASSING BUFFER INTO CORRESPONDING FIELDS OF TABLE <db>
           ORDER BY PRIMARY KEY
-          INTO CORRESPONDING FIELDS OF TABLE <db>
-          BYPASSING BUFFER.
+
+          .
       CATCH cx_root.
         CLEAR result.
     ENDTRY.
