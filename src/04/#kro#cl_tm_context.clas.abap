@@ -1322,7 +1322,7 @@ DATA lt_param TYPE temp1.
             tabname = lv_tabname
           EXCEPTIONS
             error_message = 1
-            OTHERS        = 1.
+            OTHERS        = 2.
       CATCH cx_root ##NO_HANDLER.
     ENDTRY.
 

@@ -88,6 +88,12 @@ CLASS /kro/cl_tm_001 DEFINITION
         key    TYPE string,
       END OF ty_s_keys.
     TYPES ty_t_keys TYPE STANDARD TABLE OF ty_s_keys WITH DEFAULT KEY.
+    TYPES:
+      BEGIN OF ty_s_row_index,
+        row_id TYPE string,
+        tabix  TYPE i,
+      END OF ty_s_row_index.
+    TYPES ty_t_row_index TYPE HASHED TABLE OF ty_s_row_index WITH UNIQUE KEY row_id.
 
     DATA mv_table          TYPE string.
     DATA mt_dfies          TYPE /kro/cl_tm_context=>ty_t_dfies.
@@ -156,6 +162,22 @@ CLASS /kro/cl_tm_001 DEFINITION
         !table        TYPE STANDARD TABLE
       RETURNING
         VALUE(result) TYPE ty_t_keys.
+
+    "! The ROW_ID of every row of table with the index of the first row
+    "! that carries it - a lookup by hash instead of a loop over the rows
+    METHODS get_row_index
+      IMPORTING
+        !table        TYPE STANDARD TABLE
+      RETURNING
+        VALUE(result) TYPE ty_t_row_index.
+
+    "! Whether mt_table has a row for every ROW_ID of the working copy
+    "! mt_table_tmp - it has to in multi-edit: the save of multi-edit and its
+    "! way back to normal mode take mt_table for the whole table, and the
+    "! save deletes the rows missing from it
+    METHODS check_rows_complete
+      RETURNING
+        VALUE(result) TYPE abap_bool.
 
     METHODS get_comp
       RETURNING
@@ -438,6 +460,14 @@ DATA key_set     TYPE temp11.
       CLEAR mv_ucomm_tmp.
 
       IF mv_multi_edit = abap_true.
+        " the cell edits of multi-edit are in mt_table only - so it is the
+        " table saved, and every row of the working copy has to be in it:
+        " a row missing would be deleted below
+        IF check_rows_complete( ) = abap_false.
+          client->message_box_display( text = |The rows shown are not all rows of { mv_table } - nothing was saved. Refresh the table and enter the changes again.|
+                                       type = `error` ).
+          RETURN.
+        ENDIF.
         ASSIGN mt_table->* TO <tab>.
       ELSE.
         " Filter issue
@@ -706,12 +736,78 @@ DATA key_set     TYPE temp11.
 
   ENDMETHOD.
 
+  METHOD get_row_index.
+
+    FIELD-SYMBOLS <line> TYPE any.
+    FIELD-SYMBOLS <id>   TYPE any.
+      DATA index LIKE sy-tabix.
+      DATA temp9 TYPE /kro/cl_tm_001=>ty_s_row_index.
+
+    LOOP AT table ASSIGNING <line>.
+
+      index = sy-tabix.
+
+      UNASSIGN <id>.
+      ASSIGN COMPONENT mc_row_id OF STRUCTURE <line> TO <id>.
+      IF <id> IS NOT ASSIGNED.
+        CONTINUE.
+      ENDIF.
+
+      " the first row of an id wins - a later one is not inserted
+
+      CLEAR temp9.
+      temp9-row_id = <id>.
+      temp9-tabix = index.
+      INSERT temp9 INTO TABLE result.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD check_rows_complete.
+
+    FIELD-SYMBOLS <tab>     TYPE STANDARD TABLE.
+    FIELD-SYMBOLS <tab_tmp> TYPE STANDARD TABLE.
+    FIELD-SYMBOLS <line>    TYPE any.
+    FIELD-SYMBOLS <id>      TYPE any.
+    DATA ids TYPE /kro/cl_tm_001=>ty_t_row_index.
+      DATA temp10 LIKE sy-subrc.
+
+    ASSIGN mt_table->* TO <tab>.
+    ASSIGN mt_table_tmp->* TO <tab_tmp>.
+    IF <tab> IS NOT ASSIGNED OR <tab_tmp> IS NOT ASSIGNED.
+      RETURN.
+    ENDIF.
+
+
+    ids = get_row_index( <tab> ).
+
+    LOOP AT <tab_tmp> ASSIGNING <line>.
+      UNASSIGN <id>.
+      ASSIGN COMPONENT mc_row_id OF STRUCTURE <line> TO <id>.
+      " a check of its own: the 702 downport reads ids before the condition
+      " it is in, with <id> as the key
+      IF <id> IS NOT ASSIGNED.
+        CONTINUE.
+      ENDIF.
+
+      READ TABLE ids WITH KEY row_id = <id> TRANSPORTING NO FIELDS.
+      temp10 = sy-subrc.
+      IF NOT temp10 = 0.
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+
+    result = abap_true.
+
+  ENDMETHOD.
+
   METHOD get_client_change_option.
 
     DATA lv_contflag TYPE c LENGTH 1.
     DATA lv_option   TYPE c LENGTH 1.
-    DATA temp9 LIKE sy-subrc.
-    DATA temp10 LIKE sy-subrc.
+    DATA temp11 LIKE sy-subrc.
+    DATA temp12 LIKE sy-subrc.
     DATA lv_dd02l TYPE string.
     DATA lv_t000 TYPE string.
         DATA lv_where TYPE string.
@@ -723,11 +819,11 @@ DATA key_set     TYPE temp11.
     " the client-specific setting covers client-dependent tables only
 
 
-    temp10 = sy-subrc.
+    temp12 = sy-subrc.
     READ TABLE mt_dfies WITH KEY keyflag = abap_true datatype = 'CLNT' TRANSPORTING NO FIELDS.
-    temp9 = sy-subrc.
-    sy-subrc = temp10.
-    IF NOT temp9 = 0.
+    temp11 = sy-subrc.
+    sy-subrc = temp12.
+    IF NOT temp11 = 0.
       RETURN.
     ENDIF.
 
@@ -862,16 +958,16 @@ DATA key_set     TYPE temp11.
     DATA id    TYPE c LENGTH 32.
     DATA selkz TYPE abap_bool.
         DATA comp TYPE abap_component_tab.
-        DATA temp11 LIKE sy-subrc.
+        DATA temp13 LIKE sy-subrc.
         DATA temp1 TYPE xsdboolean.
-          DATA temp12 TYPE cl_abap_structdescr=>component_table.
-          DATA temp13 LIKE LINE OF temp12.
-          DATA temp17 TYPE REF TO cl_abap_datadescr.
-        DATA temp14 LIKE sy-subrc.
+          DATA temp14 TYPE cl_abap_structdescr=>component_table.
+          DATA temp15 LIKE LINE OF temp14.
+          DATA temp11 TYPE REF TO cl_abap_datadescr.
+        DATA temp16 LIKE sy-subrc.
         DATA temp2 TYPE xsdboolean.
-          DATA temp15 TYPE cl_abap_structdescr=>component_table.
-          DATA temp16 LIKE LINE OF temp15.
-          DATA temp18 TYPE REF TO cl_abap_datadescr.
+          DATA temp17 TYPE cl_abap_structdescr=>component_table.
+          DATA temp18 LIKE LINE OF temp17.
+          DATA temp12 TYPE REF TO cl_abap_datadescr.
 
     TRY.
 
@@ -880,35 +976,35 @@ DATA key_set     TYPE temp11.
 
 
         READ TABLE comp WITH KEY name = mc_row_id TRANSPORTING NO FIELDS.
-        temp11 = sy-subrc.
+        temp13 = sy-subrc.
 
-        temp1 = boolc( temp11 = 0 ).
+        temp1 = boolc( temp13 = 0 ).
         IF temp1 = abap_false.
 
-          CLEAR temp12.
+          CLEAR temp14.
 
-          temp13-name = mc_row_id.
+          temp15-name = mc_row_id.
 
-          temp17 ?= cl_abap_datadescr=>describe_by_data( id ).
-          temp13-type = temp17.
-          INSERT temp13 INTO TABLE temp12.
-          INSERT LINES OF temp12 INTO TABLE result.
+          temp11 ?= cl_abap_datadescr=>describe_by_data( id ).
+          temp15-type = temp11.
+          INSERT temp15 INTO TABLE temp14.
+          INSERT LINES OF temp14 INTO TABLE result.
         ENDIF.
 
         READ TABLE comp WITH KEY name = 'SELKZ' TRANSPORTING NO FIELDS.
-        temp14 = sy-subrc.
+        temp16 = sy-subrc.
 
-        temp2 = boolc( temp14 = 0 ).
+        temp2 = boolc( temp16 = 0 ).
         IF temp2 = abap_false.
 
-          CLEAR temp15.
+          CLEAR temp17.
 
-          temp16-name = 'SELKZ'.
+          temp18-name = 'SELKZ'.
 
-          temp18 ?= cl_abap_datadescr=>describe_by_data( selkz ).
-          temp16-type = temp18.
-          INSERT temp16 INTO TABLE temp15.
-          INSERT LINES OF temp15 INTO TABLE result.
+          temp12 ?= cl_abap_datadescr=>describe_by_data( selkz ).
+          temp18-type = temp12.
+          INSERT temp18 INTO TABLE temp17.
+          INSERT LINES OF temp17 INTO TABLE result.
 
         ENDIF.
 
@@ -985,25 +1081,25 @@ DATA key_set     TYPE temp11.
     DATA hash TYPE string.
 
     DATA comp LIKE LINE OF t_comp.
-      DATA temp17 LIKE sy-subrc.
-    DATA temp18 TYPE abap_componentdescr.
-    DATA temp19 TYPE REF TO cl_abap_datadescr.
+      DATA temp19 LIKE sy-subrc.
+    DATA temp20 TYPE abap_componentdescr.
+    DATA temp13 TYPE REF TO cl_abap_datadescr.
     LOOP AT t_comp INTO comp.
 
       READ TABLE mt_dfies WITH KEY fieldname = comp-name keyflag = abap_true TRANSPORTING NO FIELDS.
-      temp17 = sy-subrc.
-      IF temp17 = 0.
+      temp19 = sy-subrc.
+      IF temp19 = 0.
         INSERT comp INTO TABLE result.
       ENDIF.
     ENDLOOP.
 
 
-    CLEAR temp18.
-    temp18-name = mc_row_hash.
+    CLEAR temp20.
+    temp20-name = mc_row_hash.
 
-    temp19 ?= cl_abap_datadescr=>describe_by_data( hash ).
-    temp18-type = temp19.
-    INSERT temp18 INTO TABLE result.
+    temp13 ?= cl_abap_datadescr=>describe_by_data( hash ).
+    temp20-type = temp13.
+    INSERT temp20 INTO TABLE result.
 
   ENDMETHOD.
 
@@ -1109,15 +1205,15 @@ DATA state_snapshot TYPE temp13.
     DATA db TYPE REF TO data.
     DATA keys TYPE /kro/cl_tm_001=>ty_t_keys.
     FIELD-SYMBOLS <line> TYPE ANY.
-      DATA temp19 TYPE /kro/cl_tm_001=>ty_s_keys.
-      DATA temp20 TYPE /kro/cl_tm_001=>ty_s_keys.
-      DATA key LIKE temp19.
-      DATA temp21 LIKE LINE OF state_db.
-    FIELD-SYMBOLS <line_org> TYPE ANY.
+      DATA temp21 TYPE /kro/cl_tm_001=>ty_s_keys.
       DATA temp22 TYPE /kro/cl_tm_001=>ty_s_keys.
-      DATA temp23 TYPE /kro/cl_tm_001=>ty_s_keys.
+      DATA key LIKE temp21.
+      DATA temp23 LIKE LINE OF state_db.
+    FIELD-SYMBOLS <line_org> TYPE ANY.
+      DATA temp24 TYPE /kro/cl_tm_001=>ty_s_keys.
+      DATA temp25 TYPE /kro/cl_tm_001=>ty_s_keys.
       FIELD-SYMBOLS <hash> TYPE any.
-        DATA temp24 LIKE LINE OF state_snapshot.
+        DATA temp26 LIKE LINE OF state_snapshot.
     DATA temp3 TYPE xsdboolean.
     db = get_db_rows( ).
     ASSIGN mt_table_org->* TO <org>.
@@ -1134,36 +1230,36 @@ DATA state_snapshot TYPE temp13.
     LOOP AT <db> ASSIGNING <line>.
       " get_keys( ) returns one key per row, in the order of the rows
 
-      CLEAR temp19.
+      CLEAR temp21.
 
-      READ TABLE keys INTO temp20 INDEX sy-tabix.
+      READ TABLE keys INTO temp22 INDEX sy-tabix.
       IF sy-subrc = 0.
-        temp19 = temp20.
+        temp21 = temp22.
       ENDIF.
 
-      key = temp19.
+      key = temp21.
 
-      temp21 = |{ key-key }#{ get_row_hash( <line> ) }|.
-      INSERT temp21 INTO TABLE state_db.
+      temp23 = |{ key-key }#{ get_row_hash( <line> ) }|.
+      INSERT temp23 INTO TABLE state_db.
     ENDLOOP.
 
     keys = get_keys( <org> ).
 
     LOOP AT <org> ASSIGNING <line_org>.
 
-      CLEAR temp22.
+      CLEAR temp24.
 
-      READ TABLE keys INTO temp23 INDEX sy-tabix.
+      READ TABLE keys INTO temp25 INDEX sy-tabix.
       IF sy-subrc = 0.
-        temp22 = temp23.
+        temp24 = temp25.
       ENDIF.
-      key = temp22.
+      key = temp24.
 
       ASSIGN COMPONENT mc_row_hash OF STRUCTURE <line_org> TO <hash>.
       IF sy-subrc = 0.
 
-        temp24 = |{ key-key }#{ <hash> }|.
-        INSERT temp24 INTO TABLE state_snapshot.
+        temp26 = |{ key-key }#{ <hash> }|.
+        INSERT temp26 INTO TABLE state_snapshot.
       ENDIF.
     ENDLOOP.
 
@@ -1182,10 +1278,10 @@ DATA state_snapshot TYPE temp13.
     DATA lr_varkey  TYPE REF TO data.
     FIELD-SYMBOLS <varkey> TYPE any.
         DATA subrc LIKE sy-subrc.
-        DATA temp25 TYPE string.
-        DATA user LIKE temp25.
+        DATA temp27 TYPE string.
+        DATA user LIKE temp27.
         DATA lx TYPE REF TO cx_root.
-        DATA temp26 TYPE string.
+        DATA temp28 TYPE string.
 
     result = abap_true.
     IF /kro/cl_tm_context=>check_abap_cloud( ) = abap_true.
@@ -1227,9 +1323,9 @@ DATA state_snapshot TYPE temp13.
 
         subrc = sy-subrc.
 
-        temp25 = sy-msgv1.
+        temp27 = sy-msgv1.
 
-        user = temp25.
+        user = temp27.
 
       CATCH cx_root INTO lx.
         client->message_box_display( text = |Table { mv_table } could not be locked: { lx->get_text( ) }|
@@ -1242,8 +1338,8 @@ DATA state_snapshot TYPE temp13.
       WHEN 0.
       WHEN 1.
 
-        temp26 = sy-uname.
-        IF condense( user ) = condense( temp26 ).
+        temp28 = sy-uname.
+        IF condense( user ) = condense( temp28 ).
           " the own lock of another session: a second browser tab, or the
           " session before a reload, which still runs until it times out
           client->message_box_display( text = |Table { mv_table } is being edited in another session of yours (another browser tab or window). | &&
@@ -1313,10 +1409,10 @@ DATA state_snapshot TYPE temp13.
     FIELD-SYMBOLS <varkey> TYPE any.
 
     " a client-dependent table is locked in the logon client only
-    DATA temp27 LIKE sy-subrc.
+    DATA temp29 LIKE sy-subrc.
     READ TABLE mt_dfies WITH KEY keyflag = abap_true datatype = 'CLNT' TRANSPORTING NO FIELDS.
-    temp27 = sy-subrc.
-    IF NOT temp27 = 0.
+    temp29 = sy-subrc.
+    IF NOT temp29 = 0.
       RETURN.
     ENDIF.
 
@@ -1383,10 +1479,10 @@ DATA state_snapshot TYPE temp13.
   ENDMETHOD.
 
   METHOD get_dfies.
-    DATA temp28 LIKE sy-subrc.
-    DATA temp29 LIKE sy-subrc.
-    DATA temp30 LIKE LINE OF mt_dfies.
-    DATA dfies LIKE REF TO temp30.
+    DATA temp30 LIKE sy-subrc.
+    DATA temp31 LIKE sy-subrc.
+    DATA temp32 LIKE LINE OF mt_dfies.
+    DATA dfies LIKE REF TO temp32.
 
     mt_dfies = /kro/cl_tm_context=>rtti_get_t_dfies_by_table_name( mv_table ).
 
@@ -1394,11 +1490,11 @@ DATA state_snapshot TYPE temp13.
     " data type CLNT - ABAP Cloud answers the fields without one
 
 
-    temp29 = sy-subrc.
+    temp31 = sy-subrc.
     READ TABLE mt_dfies WITH KEY datatype = 'CLNT' TRANSPORTING NO FIELDS.
-    temp28 = sy-subrc.
-    sy-subrc = temp29.
-    IF NOT temp28 = 0.
+    temp30 = sy-subrc.
+    sy-subrc = temp31.
+    IF NOT temp30 = 0.
       set_client_field( ).
     ENDIF.
 
@@ -1490,13 +1586,13 @@ DATA state_snapshot TYPE temp13.
 
   METHOD get_table_name.
       DATA startup_params TYPE /kro/if_client=>ty_t_name_value.
-      DATA temp31 TYPE string.
-      DATA temp32 TYPE /kro/if_client=>ty_s_name_value.
-      DATA tab LIKE temp31.
+      DATA temp33 TYPE string.
+      DATA temp34 TYPE /kro/if_client=>ty_s_name_value.
+      DATA tab LIKE temp33.
     DATA descr TYPE REF TO cl_abap_typedescr.
         DATA lt_comp TYPE abap_component_tab.
-    DATA temp33 LIKE sy-subrc.
-    DATA temp20 LIKE sy-subrc.
+    DATA temp35 LIKE sy-subrc.
+    DATA temp14 LIKE sy-subrc.
 
     " a table set by factory( ) or set_app_data( ) is checked as well
     IF mv_table IS INITIAL.
@@ -1507,14 +1603,14 @@ DATA state_snapshot TYPE temp13.
 
       startup_params = client->get( )-t_comp_params.
 
-      CLEAR temp31.
+      CLEAR temp33.
 
-      READ TABLE startup_params INTO temp32 WITH KEY n = 'table'.
+      READ TABLE startup_params INTO temp34 WITH KEY n = 'table'.
       IF sy-subrc = 0.
-        temp31 = temp32-v.
+        temp33 = temp34-v.
       ENDIF.
 
-      tab = temp31.
+      tab = temp33.
       IF tab IS INITIAL.
         tab = /kro/cl_tm_context=>url_param_get( val = 'table'
                                                 url = client->get( )-s_config-search ).
@@ -1555,11 +1651,11 @@ DATA state_snapshot TYPE temp13.
     ENDTRY.
 
     READ TABLE lt_comp WITH KEY name = mc_row_id TRANSPORTING NO FIELDS.
-    temp33 = sy-subrc.
+    temp35 = sy-subrc.
 
     READ TABLE lt_comp WITH KEY name = `SELKZ` TRANSPORTING NO FIELDS.
-    temp20 = sy-subrc.
-    IF temp33 = 0 OR temp20 = 0.
+    temp14 = sy-subrc.
+    IF temp35 = 0 OR temp14 = 0.
       client->message_box_display( text = |Table { mv_table } has a column { mc_row_id } or SELKZ of its own, | &&
                                           |which this app uses for itself - it cannot be maintained here.|
                                    type = `error` ).
@@ -1594,17 +1690,17 @@ DATA state_snapshot TYPE temp13.
     DATA table TYPE REF TO /kro/cl_ui5_view_builder.
     DATA headder TYPE REF TO /kro/cl_ui5_view_builder.
     DATA columns TYPE REF TO /kro/cl_ui5_view_builder.
-    DATA temp34 LIKE LINE OF mo_layout->ms_layout-t_layout.
-    DATA layout LIKE REF TO temp34.
+    DATA temp36 LIKE LINE OF mo_layout->ms_layout-t_layout.
+    DATA layout LIKE REF TO temp36.
       DATA lv_index LIKE sy-tabix.
     DATA cells TYPE REF TO /kro/cl_ui5_view_builder.
         DATA sub_col TYPE string.
         DATA index TYPE i.
         DATA line LIKE LINE OF mo_layout->ms_layout-t_layout.
         DATA subcol LIKE LINE OF layout->t_sub_col.
-          DATA temp35 LIKE sy-subrc.
-            FIELD-SYMBOLS <temp36> LIKE LINE OF mo_layout->ms_layout-t_layout.
-            DATA temp37 LIKE sy-tabix.
+          DATA temp37 LIKE sy-subrc.
+            FIELD-SYMBOLS <temp38> LIKE LINE OF mo_layout->ms_layout-t_layout.
+            DATA temp39 LIKE sy-tabix.
           DATA column TYPE string.
       DATA cell TYPE string.
     ASSIGN mt_table->* TO <tab>.
@@ -1688,17 +1784,17 @@ DATA state_snapshot TYPE temp13.
           " a subcolumn that names no position keeps the previous one
 
           READ TABLE mo_layout->ms_layout-t_layout WITH KEY fname = subcol-fname TRANSPORTING NO FIELDS.
-          temp35 = sy-subrc.
-          IF temp35 = 0.
+          temp37 = sy-subrc.
+          IF temp37 = 0.
 
 
-            temp37 = sy-tabix.
-            READ TABLE mo_layout->ms_layout-t_layout WITH KEY fname = subcol-fname ASSIGNING <temp36>.
-            sy-tabix = temp37.
+            temp39 = sy-tabix.
+            READ TABLE mo_layout->ms_layout-t_layout WITH KEY fname = subcol-fname ASSIGNING <temp38>.
+            sy-tabix = temp39.
             IF sy-subrc <> 0.
               ASSERT 1 = 0.
             ENDIF.
-            line = <temp36>.
+            line = <temp38>.
           ENDIF.
 
           " relative to the row: a namespaced column (/CWM/XCWMAT) is a
@@ -1737,7 +1833,7 @@ DATA state_snapshot TYPE temp13.
 
   METHOD render_main_head.
       DATA view TYPE REF TO /kro/cl_ui5_view_builder.
-        DATA temp38 TYPE string_table.
+        DATA temp40 TYPE string_table.
     IF mo_parent_view IS INITIAL.
 
 
@@ -1757,11 +1853,11 @@ DATA state_snapshot TYPE temp13.
         " inside the launchpad the shell header carries the title, set once
         " the response has been rendered
 
-        CLEAR temp38.
-        INSERT mv_table INTO TABLE temp38.
+        CLEAR temp40.
+        INSERT mv_table INTO TABLE temp40.
         client->follow_up_action(
             val   = /kro/if_client=>cs_event-set_title_launchpad
-            t_arg = temp38 ).
+            t_arg = temp40 ).
 
       ELSE.
         result = view->ele( `Page`
@@ -1875,28 +1971,28 @@ DATA state_snapshot TYPE temp13.
   METHOD row_select.
 
     DATA lt_arg TYPE string_table.
-    DATA temp40 LIKE sy-subrc.
+    DATA temp42 LIKE sy-subrc.
     DATA ls_arg LIKE LINE OF lt_arg.
-    FIELD-SYMBOLS <temp21> LIKE LINE OF lt_arg.
-    DATA temp22 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp15> LIKE LINE OF lt_arg.
+    DATA temp16 LIKE sy-tabix.
     DATA read_only LIKE ms_config-read_only.
     lt_arg = client->get( )-t_event_arg.
 
     READ TABLE lt_arg INDEX 1 TRANSPORTING NO FIELDS.
-    temp40 = sy-subrc.
-    IF NOT temp40 = 0.
+    temp42 = sy-subrc.
+    IF NOT temp42 = 0.
       RETURN.
     ENDIF.
 
 
 
-    temp22 = sy-tabix.
-    READ TABLE lt_arg INDEX 1 ASSIGNING <temp21>.
-    sy-tabix = temp22.
+    temp16 = sy-tabix.
+    READ TABLE lt_arg INDEX 1 ASSIGNING <temp15>.
+    sy-tabix = temp16.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    ls_arg = <temp21>.
+    ls_arg = <temp15>.
 
     " the row is shown in any case - read-only while another user edits
     " the table (edit_lock has said who)
@@ -1919,11 +2015,11 @@ DATA state_snapshot TYPE temp13.
   METHOD search.
     FIELD-SYMBOLS <tab>     TYPE STANDARD TABLE.
     FIELD-SYMBOLS <tab_tmp> TYPE STANDARD TABLE.
-    DATA temp41 TYPE string_table.
-    DATA fields LIKE temp41.
+    DATA temp43 TYPE string_table.
+    DATA fields LIKE temp43.
     DATA dfies LIKE LINE OF mt_dfies.
         FIELD-SYMBOLS <layout> LIKE LINE OF mo_layout->ms_layout-t_layout.
-      DATA temp42 LIKE LINE OF fields.
+      DATA temp44 LIKE LINE OF fields.
     FIELD-SYMBOLS <f_row> TYPE ANY.
       DATA lv_row TYPE string.
       DATA field LIKE LINE OF fields.
@@ -1944,9 +2040,9 @@ DATA state_snapshot TYPE temp13.
     " ROW_ID (a UUID) and SELKZ, not the client, not a hidden column - each
     " on a line of its own, so a hit never spans two fields
 
-    CLEAR temp41.
+    CLEAR temp43.
 
-    fields = temp41.
+    fields = temp43.
 
     LOOP AT mt_dfies INTO dfies WHERE datatype <> 'CLNT' AND fieldname <> 'MANDT'.
       IF mo_layout IS BOUND.
@@ -1958,8 +2054,8 @@ DATA state_snapshot TYPE temp13.
         ENDIF.
       ENDIF.
 
-      temp42 = dfies-fieldname.
-      INSERT temp42 INTO TABLE fields.
+      temp44 = dfies-fieldname.
+      INSERT temp44 INTO TABLE fields.
     ENDLOOP.
 
 
@@ -2063,7 +2159,16 @@ DATA state_snapshot TYPE temp13.
 
       WHEN 'BUTTON_SEARCH'.
 
-        search( ).
+        " normal mode only - multi-edit shows no search field, and its
+        " mt_table has to stay the whole table: the cell edits of
+        " multi-edit live in mt_table alone (search( ) would overwrite them
+        " with mt_table_tmp), and its save and its way back to normal mode
+        " take mt_table as the whole table (a filtered one would delete
+        " every row the filter hid). A search event in multi-edit - a
+        " stale or forged request - is ignored
+        IF mv_multi_edit = abap_false.
+          search( ).
+        ENDIF.
 
       WHEN 'BUTTON_SAVE'.
 
@@ -2098,6 +2203,14 @@ DATA state_snapshot TYPE temp13.
         IF mv_multi_edit = abap_false AND edit_lock( ) = abap_false.
           RETURN.
         ENDIF.
+        " back to normal mode, mt_table becomes the working copy below -
+        " only when it is the whole table, or normal mode's save would
+        " delete the rows missing from it
+        IF mv_multi_edit = abap_true AND check_rows_complete( ) = abap_false.
+          client->message_box_display( text = |The rows shown are not all rows of { mv_table } - refresh the table and enter the changes again.|
+                                       type = `error` ).
+          RETURN.
+        ENDIF.
 
 
         temp4 = boolc( mv_multi_edit = abap_false ).
@@ -2116,7 +2229,10 @@ DATA state_snapshot TYPE temp13.
           search( ).
         ELSE.
           " multi-edit changes mt_table only; normal mode saves and searches
-          " from mt_table_tmp, which would drop those changes
+          " from mt_table_tmp, which would drop those changes. mt_table is
+          " the whole table here: entering multi-edit cleared the search,
+          " no search runs in multi-edit (BUTTON_SEARCH) and
+          " check_rows_complete( ) has said so above
 
           ASSIGN mt_table->* TO <tab_edit>.
 
@@ -2164,26 +2280,26 @@ DATA state_snapshot TYPE temp13.
     " read-only mode a caller or a launchpad tile configured - a URL value
     " that is not X used to hide the tile's startup parameter
     DATA startup_params TYPE /kro/if_client=>ty_t_name_value.
-    DATA temp43 TYPE string_table.
-    DATA temp23 TYPE string.
-    DATA temp24 TYPE /kro/if_client=>ty_s_name_value.
-    DATA lt_value LIKE temp43.
+    DATA temp45 TYPE string_table.
+    DATA temp17 TYPE string.
+    DATA temp18 TYPE /kro/if_client=>ty_s_name_value.
+    DATA lt_value LIKE temp45.
     DATA value LIKE LINE OF lt_value.
     startup_params = client->get( )-t_comp_params.
 
-    CLEAR temp43.
+    CLEAR temp45.
     INSERT /kro/cl_tm_context=>url_param_get( val = 'readonly'
-url = client->get( )-s_config-search ) INTO TABLE temp43.
+url = client->get( )-s_config-search ) INTO TABLE temp45.
 
-    CLEAR temp23.
+    CLEAR temp17.
 
-    READ TABLE startup_params INTO temp24 WITH KEY n = 'readonly'.
+    READ TABLE startup_params INTO temp18 WITH KEY n = 'readonly'.
     IF sy-subrc = 0.
-      temp23 = temp24-v.
+      temp17 = temp18-v.
     ENDIF.
-    INSERT temp23 INTO TABLE temp43.
+    INSERT temp17 INTO TABLE temp45.
 
-    lt_value = temp43.
+    lt_value = temp45.
 
 
     LOOP AT lt_value INTO value.
@@ -2216,8 +2332,8 @@ url = client->get( )-s_config-search ) INTO TABLE temp43.
   ENDMETHOD.
 
   METHOD on_after_layout.
-        DATA temp45 TYPE REF TO /kro/cl_layo_pop.
-        DATA app LIKE temp45.
+        DATA temp47 TYPE REF TO /kro/cl_layo_pop.
+        DATA app LIKE temp47.
 
     " Kommen wir aus einer anderen APP
     IF client->get( )-check_on_navigated = abap_false.
@@ -2227,9 +2343,9 @@ url = client->get( )-s_config-search ) INTO TABLE temp43.
     TRY.
 
 
-        temp45 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+        temp47 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
 
-        app = temp45.
+        app = temp47.
 
         mo_layout = app->mo_layout.
 
@@ -2265,8 +2381,8 @@ url = client->get( )-s_config-search ) INTO TABLE temp43.
   ENDMETHOD.
 
   METHOD on_after_transport.
-        DATA temp46 TYPE REF TO /kro/cl_popup_show_tr.
-        DATA app LIKE temp46.
+        DATA temp48 TYPE REF TO /kro/cl_popup_show_tr.
+        DATA app LIKE temp48.
     " Kommen wir aus einer anderen APP
     IF client->get( )-check_on_navigated = abap_false.
       RETURN.
@@ -2275,9 +2391,9 @@ url = client->get( )-s_config-search ) INTO TABLE temp43.
     TRY.
         " War es das Layout?
 
-        temp46 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+        temp48 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
 
-        app = temp46.
+        app = temp48.
 
         " a cancelled popup returns no request - the one chosen before stays
         IF app->ms_transport IS NOT INITIAL.
@@ -2334,11 +2450,11 @@ url = client->get( )-s_config-search ) INTO TABLE temp43.
     DATA table TYPE REF TO /kro/cl_ui5_view_builder.
     DATA toolbar TYPE REF TO /kro/cl_ui5_view_builder.
     DATA columns TYPE REF TO /kro/cl_ui5_view_builder.
-    DATA temp47 LIKE LINE OF mo_layout->ms_layout-t_layout.
-    DATA layout LIKE REF TO temp47.
+    DATA temp49 LIKE LINE OF mo_layout->ms_layout-t_layout.
+    DATA layout LIKE REF TO temp49.
       DATA lv_index LIKE sy-tabix.
       DATA path TYPE string.
-      DATA temp48 TYPE string.
+      DATA temp50 TYPE string.
       DATA col TYPE REF TO /kro/cl_ui5_view_builder.
     READ TABLE mo_layout->ms_layout-t_layout WITH KEY fname = 'SELKZ' ASSIGNING <selkz_column>.
     IF <selkz_column> IS ASSIGNED.
@@ -2383,16 +2499,16 @@ url = client->get( )-s_config-search ) INTO TABLE temp43.
 
 
       IF layout->width IS NOT INITIAL.
-        temp48 = client->_bind( val = layout->width tab = mo_layout->ms_layout-t_layout tab_index = lv_index ).
+        temp50 = client->_bind( val = layout->width tab = mo_layout->ms_layout-t_layout tab_index = lv_index ).
       ELSE.
-        CLEAR temp48.
+        CLEAR temp50.
       ENDIF.
 
       col = columns->ele( n = `Column` ns = `table`
                       )->a( n = `visible` v = client->_bind( val       = layout->visible
                                                       tab       = mo_layout->ms_layout-t_layout
                                                       tab_index = lv_index )
-                      )->a( n = `width` v = temp48
+                      )->a( n = `width` v = temp50
                       )->a( n = `sortProperty` v = path
                       )->a( n = `filterProperty` v = path
                       )->tag( `Text`
@@ -2551,16 +2667,19 @@ url = client->get( )-s_config-search ) INTO TABLE temp43.
     FIELD-SYMBOLS <tab>         TYPE STANDARD TABLE.
     FIELD-SYMBOLS <tab_tmp>     TYPE STANDARD TABLE.
     FIELD-SYMBOLS <tab_changed> TYPE STANDARD TABLE.
-        DATA temp49 TYPE REF TO /kro/cl_tm_pop.
-        DATA app LIKE temp49.
-        FIELD-SYMBOLS <app_tab> TYPE data.
-          FIELD-SYMBOLS <line> TYPE ANY.
-            FIELD-SYMBOLS <row> TYPE any.
-            DATA found LIKE abap_false.
-            FIELD-SYMBOLS <line_changed> TYPE ANY.
-              FIELD-SYMBOLS <row_changed> TYPE any.
-              FIELD-SYMBOLS <line_tmp> TYPE ANY.
-                FIELD-SYMBOLS <row_tmp> TYPE any.
+    FIELD-SYMBOLS <line>        TYPE any.
+    FIELD-SYMBOLS <line_tmp>    TYPE any.
+    FIELD-SYMBOLS <row>         TYPE any.
+    FIELD-SYMBOLS <index_tmp>   TYPE ty_s_row_index.
+        DATA temp51 TYPE REF TO /kro/cl_tm_pop.
+        DATA app LIKE temp51.
+          DATA ids_shown TYPE /kro/cl_tm_001=>ty_t_row_index.
+          DATA ids_changed TYPE /kro/cl_tm_001=>ty_t_row_index.
+            DATA temp52 LIKE sy-subrc.
+            DATA temp19 LIKE sy-subrc.
+            DATA temp20 LIKE sy-subrc.
+            DATA temp53 LIKE sy-subrc.
+          DATA ids_tmp TYPE /kro/cl_tm_001=>ty_t_row_index.
 
     " Kommen wir aus einer anderen APP
     IF client->get( )-check_on_navigated = abap_false.
@@ -2569,138 +2688,92 @@ url = client->get( )-s_config-search ) INTO TABLE temp43.
 
     TRY.
 
-        temp49 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+        temp51 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
 
-        app = temp49.
+        app = temp51.
 
         ASSIGN mt_table->* TO <tab>.
+        ASSIGN app->mt_data->* TO <tab_changed>.
 
-        ASSIGN app->mt_data->* TO <app_tab>.
-
-        IF <app_tab> <> <tab>.
+        IF <tab> IS ASSIGNED AND <tab_changed> IS ASSIGNED AND <tab_changed> <> <tab>.
           mv_change_active = abap_true.
 
           ASSIGN mt_table_tmp->* TO <tab_tmp>.
-          ASSIGN app->mt_data->* TO <tab_changed>.
 
-          " Check for deleted lines
+          " the row ids of the rows shown before the popup and of those it
+          " returned, each looked up by hash - a loop over the rows for every
+          " row cost rows x rows dynamic ASSIGNs on every return of the popup.
+          " A row id is a UUID (set_row_id, button_copy, the popup's add), one
+          " row each
 
-          LOOP AT <tab> ASSIGNING <line>.
+          ids_shown = get_row_index( <tab> ).
+
+          ids_changed = get_row_index( <tab_changed> ).
+
+          " deleted lines: shown before, not returned - out of the working
+          " copy as well
+          LOOP AT <tab_tmp> ASSIGNING <line_tmp>.
+            UNASSIGN <row>.
+            ASSIGN COMPONENT mc_row_id OF STRUCTURE <line_tmp> TO <row>.
+            " a check of its own: the 702 downport reads the table before
+            " the condition it is in, with <row> as the key
+            IF <row> IS NOT ASSIGNED.
+              CONTINUE.
+            ENDIF.
+
+            READ TABLE ids_shown WITH KEY row_id = <row> TRANSPORTING NO FIELDS.
+            temp52 = sy-subrc.
 
 
+            temp20 = sy-subrc.
+            READ TABLE ids_changed WITH KEY row_id = <row> TRANSPORTING NO FIELDS.
+            temp19 = sy-subrc.
+            sy-subrc = temp20.
+            IF     temp52 = 0
+               AND NOT temp19 = 0.
+              DELETE <tab_tmp>.
+            ENDIF.
+          ENDLOOP.
+
+          " added lines: returned, not shown before - into the working copy
+          LOOP AT <tab_changed> ASSIGNING <line>.
             UNASSIGN <row>.
             ASSIGN COMPONENT mc_row_id OF STRUCTURE <line> TO <row>.
             IF <row> IS NOT ASSIGNED.
               CONTINUE.
             ENDIF.
 
-
-            found = abap_false.
-
-
-            LOOP AT <tab_changed> ASSIGNING <line_changed>.
-
-
-              UNASSIGN <row_changed>.
-              ASSIGN COMPONENT mc_row_id OF STRUCTURE <line_changed> TO <row_changed>.
-              IF <row_changed> IS NOT ASSIGNED.
-                CONTINUE.
-              ENDIF.
-
-              IF <row_changed> = <row>.
-                found = abap_true.
-                EXIT.
-              ENDIF.
-
-            ENDLOOP.
-
-            IF found = abap_false.
-              " append <row> to t_delete
-
-
-              LOOP AT <tab_tmp> ASSIGNING <line_tmp>.
-
-
-                UNASSIGN <row_tmp>.
-                ASSIGN COMPONENT mc_row_id OF STRUCTURE <line_tmp> TO <row_tmp>.
-                IF <row_tmp> IS NOT ASSIGNED.
-                  CONTINUE.
-                ENDIF.
-
-                IF <row> = <row_tmp>.
-                  DELETE <tab_tmp>.
-                  EXIT.
-                ENDIF.
-
-              ENDLOOP.
-
+            READ TABLE ids_shown WITH KEY row_id = <row> TRANSPORTING NO FIELDS.
+            temp53 = sy-subrc.
+            IF NOT temp53 = 0.
+              INSERT <line> INTO TABLE <tab_tmp>.
             ENDIF.
-
           ENDLOOP.
 
-          " Check for added lines
-          LOOP AT <tab_changed> ASSIGNING <line_changed>.
+          <tab> = <tab_changed>.
 
-            UNASSIGN <row_changed>.
-            ASSIGN COMPONENT mc_row_id OF STRUCTURE <line_changed> TO <row_changed>.
-            IF <row_changed> IS NOT ASSIGNED.
-              CONTINUE.
-            ENDIF.
+          " transfer the changes of TAB to TMP_TAB - to the first row of the
+          " working copy with the same id
 
-            found = abap_false.
-
-            LOOP AT <tab> ASSIGNING <line>.
-
-              UNASSIGN <row>.
-              ASSIGN COMPONENT mc_row_id OF STRUCTURE <line> TO <row>.
-              IF <row> IS NOT ASSIGNED.
-                CONTINUE.
-              ENDIF.
-
-              IF <row_changed> = <row>.
-                found = abap_true.
-                EXIT.
-              ENDIF.
-
-            ENDLOOP.
-
-            IF found = abap_false.
-              INSERT <line_changed> INTO TABLE <tab_tmp>.
-            ENDIF.
-
-          ENDLOOP.
-
-
-          <tab> = <app_tab>.
-
-          " Transfer changes for TAB to TMP_TAB.
+          ids_tmp = get_row_index( <tab_tmp> ).
           LOOP AT <tab> ASSIGNING <line>.
-
             UNASSIGN <row>.
             ASSIGN COMPONENT mc_row_id OF STRUCTURE <line> TO <row>.
             IF <row> IS NOT ASSIGNED.
               CONTINUE.
             ENDIF.
 
-            LOOP AT <tab_tmp> ASSIGNING <line_tmp>.
+            UNASSIGN <index_tmp>.
+            READ TABLE ids_tmp WITH KEY row_id = <row> ASSIGNING <index_tmp>.
+            IF <index_tmp> IS NOT ASSIGNED.
+              CONTINUE.
+            ENDIF.
 
-              UNASSIGN <row_tmp>.
-              ASSIGN COMPONENT mc_row_id OF STRUCTURE <line_tmp> TO <row_tmp>.
-              IF <row_tmp> IS NOT ASSIGNED.
-                CONTINUE.
-              ENDIF.
-
-              IF <row_tmp> = <row>.
-                IF <line> <> <line_tmp>.
-                  <line_tmp> = <line>.
-                ENDIF.
-                EXIT.
-              ELSE.
-                CONTINUE.
-              ENDIF.
-
-            ENDLOOP.
-
+            UNASSIGN <line_tmp>.
+            READ TABLE <tab_tmp> INDEX <index_tmp>-tabix ASSIGNING <line_tmp>.
+            IF <line_tmp> IS ASSIGNED.
+              <line_tmp> = <line>.
+            ENDIF.
           ENDLOOP.
 
         ENDIF.
