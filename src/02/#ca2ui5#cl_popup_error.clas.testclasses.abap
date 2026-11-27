@@ -1,0 +1,225 @@
+
+CLASS ltcl_test DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+
+    METHODS test_factory            FOR TESTING RAISING cx_static_check.
+    METHODS test_factory_util_error FOR TESTING RAISING cx_static_check.
+    METHODS test_factory_custom     FOR TESTING RAISING cx_static_check.
+
+ENDCLASS.
+
+
+CLASS ltcl_test IMPLEMENTATION.
+
+  METHOD test_factory.
+        DATA lv_val TYPE i.
+        DATA lx TYPE REF TO cx_root.
+    DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_error.
+
+    TRY.
+
+        lv_val = 1 / 0 ##NEEDED.
+
+      CATCH cx_root INTO lx.
+    ENDTRY.
+
+
+    lo_pop = /ca2ui5/cl_popup_error=>factory( lx ).
+    cl_abap_unit_assert=>assert_bound( lo_pop ).
+
+  ENDMETHOD.
+
+  METHOD test_factory_util_error.
+
+    DATA lx TYPE REF TO /ca2ui5/cx_popup_error.
+    DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_error.
+    CREATE OBJECT lx TYPE /ca2ui5/cx_popup_error EXPORTING val = `test error`.
+
+    lo_pop = /ca2ui5/cl_popup_error=>factory( lx ).
+    cl_abap_unit_assert=>assert_bound( lo_pop ).
+
+  ENDMETHOD.
+
+  METHOD test_factory_custom.
+
+    DATA lx TYPE REF TO /ca2ui5/cx_popup_error.
+    DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_error.
+    CREATE OBJECT lx TYPE /ca2ui5/cx_popup_error EXPORTING val = `custom error`.
+
+    lo_pop = /ca2ui5/cl_popup_error=>factory(
+      x_root  = lx
+      i_title = `My Error Title` ).
+    cl_abap_unit_assert=>assert_bound( lo_pop ).
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS ltcl_test_roundtrip DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    DATA mo_action TYPE REF TO /ca2ui5/cl_ui5_action.
+    DATA mi_client TYPE REF TO /ca2ui5/if_client.
+
+    " what the roundtrip queued for the frontend, read off the response
+    METHODS popup_xml
+      RETURNING
+        VALUE(result) TYPE string.
+    METHODS popup_destroyed
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+
+    METHODS client_create
+      IMPORTING
+        io_app TYPE REF TO /ca2ui5/if_app.
+
+    METHODS roundtrip_event
+      IMPORTING
+        io_app   TYPE REF TO /ca2ui5/if_app
+        iv_event TYPE string.
+
+    METHODS test_init_displays_error FOR TESTING RAISING cx_static_check.
+    METHODS test_confirm_closes      FOR TESTING RAISING cx_static_check.
+    METHODS test_text_is_literal     FOR TESTING RAISING cx_static_check.
+
+ENDCLASS.
+
+
+CLASS ltcl_test_roundtrip IMPLEMENTATION.
+
+  METHOD client_create.
+
+    DATA temp1 TYPE REF TO /ca2ui5/cl_ui5_handler.
+    CREATE OBJECT temp1 TYPE /ca2ui5/cl_ui5_handler EXPORTING VAL = ``.
+    CREATE OBJECT mo_action EXPORTING VAL = temp1.
+    mo_action->mo_app->mo_app = io_app.
+    CREATE OBJECT mi_client TYPE /ca2ui5/cl_ui5_client EXPORTING ACTION = mo_action.
+
+  ENDMETHOD.
+
+  METHOD roundtrip_event.
+
+    client_create( io_app ).
+    mo_action->mo_app->mv_check_initialized = abap_true.
+    mo_action->ms_actual-event = iv_event.
+    io_app->main( mi_client ).
+
+  ENDMETHOD.
+
+  METHOD test_init_displays_error.
+
+    DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_error.
+    DATA temp2 TYPE REF TO /ca2ui5/cx_popup_error.
+    DATA lv_xml TYPE string.
+    DATA temp1 TYPE xsdboolean.
+    DATA temp3 TYPE xsdboolean.
+    CREATE OBJECT temp2 TYPE /ca2ui5/cx_popup_error EXPORTING VAL = `MY_ERROR_TEXT`.
+    lo_pop = /ca2ui5/cl_popup_error=>factory( temp2 ).
+    client_create( lo_pop ).
+
+    lo_pop->/ca2ui5/if_app~main( mi_client ).
+
+
+    lv_xml = popup_xml( ).
+
+    temp1 = boolc( lv_xml CS `MY_ERROR_TEXT` ).
+    cl_abap_unit_assert=>assert_true( temp1 ).
+
+    temp3 = boolc( lv_xml CS `Error` ).
+    cl_abap_unit_assert=>assert_true( temp3 ).
+
+  ENDMETHOD.
+
+  METHOD test_confirm_closes.
+
+    DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_error.
+    DATA temp3 TYPE REF TO /ca2ui5/cx_popup_error.
+    CREATE OBJECT temp3 TYPE /ca2ui5/cx_popup_error EXPORTING VAL = `MY_ERROR_TEXT`.
+    lo_pop = /ca2ui5/cl_popup_error=>factory( temp3 ).
+    roundtrip_event( io_app   = lo_pop
+                     iv_event = `BUTTON_CONFIRM` ).
+
+    cl_abap_unit_assert=>assert_true( popup_destroyed( ) ).
+    cl_abap_unit_assert=>assert_bound( mo_action->ms_next-o_app_leave ).
+
+  ENDMETHOD.
+
+  METHOD test_text_is_literal.
+
+    " an exception text is data: a brace in it must be shown, not parsed as
+    " the start of a binding
+    DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_error.
+    DATA temp4 TYPE REF TO /ca2ui5/cx_popup_error.
+    DATA temp5 TYPE xsdboolean.
+    CREATE OBJECT temp4 TYPE /ca2ui5/cx_popup_error EXPORTING VAL = `field {NAME} is unknown`.
+    lo_pop = /ca2ui5/cl_popup_error=>factory( temp4 ).
+    client_create( lo_pop ).
+
+    lo_pop->/ca2ui5/if_app~main( mi_client ).
+
+
+    temp5 = boolc( popup_xml( ) CS `field \{NAME\} is unknown` ).
+    cl_abap_unit_assert=>assert_true( temp5 ).
+
+  ENDMETHOD.
+
+  METHOD popup_xml.
+
+    DATA ls_action LIKE LINE OF mo_action->ms_next-t_action_front.
+    LOOP AT mo_action->ms_next-t_action_front INTO ls_action
+         WHERE slot = /ca2ui5/if_client=>cs_view-popup AND method = `display`.
+      result = ls_action-xml.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD popup_destroyed.
+
+    DATA temp1 LIKE sy-subrc.
+    DATA temp6 TYPE xsdboolean.
+    READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = /ca2ui5/if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
+    temp1 = sy-subrc.
+
+    temp6 = boolc( temp1 = 0 ).
+    result = temp6.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS ltcl_popup_result DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    METHODS test_closed_is_confirmed FOR TESTING RAISING cx_static_check.
+
+ENDCLASS.
+
+
+CLASS ltcl_popup_result IMPLEMENTATION.
+
+  METHOD test_closed_is_confirmed.
+
+    DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_error.
+    DATA temp5 TYPE REF TO cx_sy_zerodivide.
+    DATA temp2 TYPE REF TO /ca2ui5/if_popup_result.
+    DATA li_result LIKE temp2.
+    CREATE OBJECT temp5 TYPE cx_sy_zerodivide.
+    lo_pop = /ca2ui5/cl_popup_error=>factory( temp5 ).
+
+    temp2 ?= lo_pop.
+
+    li_result = temp2.
+
+    cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
+    cl_abap_unit_assert=>assert_not_bound( li_result->value( ) ).
+    cl_abap_unit_assert=>assert_initial( li_result->value_string( ) ).
+
+  ENDMETHOD.
+
+ENDCLASS.

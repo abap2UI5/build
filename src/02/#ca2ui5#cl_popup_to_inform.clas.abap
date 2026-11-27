@@ -1,0 +1,110 @@
+CLASS /ca2ui5/cl_popup_to_inform DEFINITION PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES /ca2ui5/if_app.
+    " check_confirmed( ) - always abap_true, the popup only informs;
+    " value( ) - unbound; value_string( ) - empty
+    INTERFACES /ca2ui5/if_popup_result.
+
+    CLASS-METHODS factory
+      IMPORTING
+        i_text          TYPE string
+        i_title         TYPE string DEFAULT `Information`
+        i_icon          TYPE string DEFAULT `sap-icon://message-information`
+        i_button_text   TYPE string DEFAULT `OK`
+      RETURNING
+        VALUE(r_result) TYPE REF TO /ca2ui5/cl_popup_to_inform.
+
+  PROTECTED SECTION.
+    DATA client              TYPE REF TO /ca2ui5/if_client.
+    DATA title               TYPE string.
+    DATA icon                TYPE string.
+    DATA question_text       TYPE string.
+    DATA button_text_confirm TYPE string.
+
+    METHODS view_display.
+
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+CLASS /ca2ui5/cl_popup_to_inform IMPLEMENTATION.
+
+  METHOD factory.
+
+    CREATE OBJECT r_result.
+    r_result->title               = i_title.
+    r_result->icon                = i_icon.
+    r_result->question_text       = i_text.
+    r_result->button_text_confirm = i_button_text.
+
+  ENDMETHOD.
+
+  METHOD view_display.
+
+    DATA popup TYPE REF TO /ca2ui5/cl_ui5_view_builder.
+    popup = /ca2ui5/cl_ui5_view_builder=>factory(
+                      )->ele( n = `FragmentDefinition` ns = `core`
+                      )->a( n = `xmlns` v = `sap.m`
+                      )->a( n = `xmlns:core` v = `sap.ui.core`
+                      )->ele( `Dialog`
+                      )->a( n = `title` t = title
+                      )->a( n = `icon` v = icon
+                      )->a( n = `afterClose` v = client->_event( `BUTTON_CONFIRM` )
+                      )->ele( `content`
+                      )->ele( `VBox`
+                      )->a( n = `class` v = `sapUiMediumMargin`
+                      )->tag( `Text`
+                      )->a( n = `text` t = question_text
+                      )->end(
+                      )->end(
+                      )->ele( `buttons`
+                      )->tag( `Button`
+                      )->a( n = `text` t = button_text_confirm
+                      )->a( n = `press` v = client->_event( `BUTTON_CONFIRM` )
+                      )->a( n = `type` v = `Emphasized` ).
+
+    client->popup_display( popup->stringify( ) ).
+
+  ENDMETHOD.
+
+  METHOD /ca2ui5/if_app~main.
+
+    me->client = client.
+
+    IF client->check_on_init( ) IS NOT INITIAL.
+      view_display( ).
+      RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      view_display( ).
+    ENDIF.
+
+    IF client->check_on_event( `BUTTON_CONFIRM` ) IS NOT INITIAL.
+      client->popup_destroy( ).
+      client->nav_app_leave( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD /ca2ui5/if_popup_result~check_confirmed.
+
+    " shows something only - nothing to decline
+    result = abap_true.
+
+  ENDMETHOD.
+
+  METHOD /ca2ui5/if_popup_result~value.
+
+    " no value - the reference stays unbound
+    CLEAR result.
+
+  ENDMETHOD.
+
+  METHOD /ca2ui5/if_popup_result~value_string.
+
+    " no single value - empty
+    CLEAR result.
+
+  ENDMETHOD.
+
+ENDCLASS.
