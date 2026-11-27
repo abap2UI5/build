@@ -12,6 +12,11 @@
       "url": "https://github.com/open-abap/open-abap-core",
       "folder": "/deps/open-abap-core",
       "files": "/src/**/{if_http_service_extension,if_web_http_request,if_web_http_response}.*"
+    },
+    {
+      "url": "https://github.com/abapedia/steampunk-2305-api",
+      "folder": "/deps/steampunk-2305-api",
+      "files": "/src/**/abap_boolean.*"
     }
   ],
   "syntax": {

@@ -1,0 +1,191 @@
+CLASS /kro/cl_layo_sample_05 DEFINITION
+  PUBLIC
+  CREATE PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES /kro/if_app.
+
+    TYPES BEGIN OF ty_s_data.
+    INCLUDE TYPE /kro/t_11.
+    TYPES selkz TYPE abap_bool.
+    TYPES END OF ty_s_data.
+    TYPES ty_t_data TYPE STANDARD TABLE OF ty_s_data WITH EMPTY KEY.
+
+    " abap2ui5lint-disable-next-line unbound-public-attribute -- z2ui5_cl_layo_xml_builder=>xml_build_table( ) binds it, handed over as REF #( mt_table )
+    DATA mt_table        TYPE ty_t_data.
+    " abap2ui5lint-disable-next-line unbound-public-attribute -- z2ui5_cl_layo_xml_builder=>xml_build_simple_form( ) binds it, handed over as REF #( ms_struc )
+    DATA ms_struc        TYPE ty_s_data.
+    DATA mo_layout       TYPE REF TO /kro/cl_layo_manager.
+    DATA mo_table_layout TYPE REF TO /kro/cl_layo_manager.
+
+  PROTECTED SECTION.
+    DATA client            TYPE REF TO /kro/if_client.
+
+    METHODS on_init.
+    METHODS on_event.
+    METHODS render_main.
+    METHODS get_data.
+    METHODS init_layout.
+    METHODS on_after_navigation.
+
+  PRIVATE SECTION.
+
+ENDCLASS.
+
+
+CLASS /kro/cl_layo_sample_05 IMPLEMENTATION.
+
+  METHOD on_event.
+
+    CASE client->get( )-event.
+
+      WHEN 'BACK'.
+        client->nav_app_leave( ).
+
+      WHEN mo_layout->ms_layout-s_head-guid.
+        /kro/cl_layo_pop=>on_event_layout( client = client
+                                            layout = mo_layout ).
+
+      WHEN mo_table_layout->ms_layout-s_head-guid.
+        /kro/cl_layo_pop=>on_event_layout( client = client
+                                            layout = mo_table_layout ).
+
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD on_init.
+
+    init_layout( ).
+
+    get_data( ).
+
+    render_main( ).
+  ENDMETHOD.
+
+  METHOD render_main.
+
+    DATA(view) = /kro/cl_ui5_view_builder=>factory(
+                     )->ele( n = `View` ns = `mvc`
+                     )->a( n = `xmlns` v = `sap.m`
+                     )->a( n = `xmlns:mvc` v = `sap.ui.core.mvc`
+                     " abap2ui5lint-disable unused-namespace-declaration -- z2ui5_cl_layo_xml_builder writes controls with these prefixes into this view
+                     )->a( n = `xmlns:core` v = `sap.ui.core`
+                     )->a( n = `xmlns:form` v = `sap.ui.layout.form`
+                     )->a( n = `xmlns:layout` v = `sap.ui.layout`
+                     )->a( n = `xmlns:mchart` v = `sap.suite.ui.microchart`
+                     )->a( n = `xmlns:si` v = `sap.suite.ui.commons.statusindicator`
+                     " abap2ui5lint-enable unused-namespace-declaration
+                     )->a( n = `displayBlock` b = abap_true
+                     )->a( n = `height` v = `100%`
+                     )->ele( `Shell` ).
+
+    DATA(page) = view->ele( `Page`
+                     )->a( n = `title` v = `Layout`
+                     )->a( n = `navButtonPress` v = client->_event( 'BACK' )
+                     )->a( n = `showNavButton` b = client->check_app_prev_stack( )
+                     )->a( n = `class` v = `sapUiContentPadding` ).
+
+    /kro/cl_layo_xml_builder=>xml_build_table( i_data   = REF #( mt_table )
+                                                i_xml    = page
+                                                i_client = client
+                                                i_layout = mo_table_layout ).
+
+    /kro/cl_layo_xml_builder=>xml_build_simple_form( i_data   = REF #( ms_struc )
+                                                      i_xml    = page
+                                                      i_client = client
+                                                      i_layout = mo_layout ).
+
+    client->view_display( view->stringify( ) ).
+
+  ENDMETHOD.
+
+  METHOD /kro/if_app~main.
+    me->client = client.
+
+    IF client->check_on_init( ).
+      on_init( ).
+    ELSEIF client->check_on_navigated( ).
+      on_after_navigation( ).
+    ELSEIF client->check_on_event( ).
+      on_event( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD get_data.
+
+    SELECT * FROM /kro/t_11 ORDER BY PRIMARY KEY INTO TABLE @mt_table UP TO 5 ROWS ##SUBRC_OK.
+
+    ms_struc = VALUE #( mt_table[ 1 ] OPTIONAL ).
+
+  ENDMETHOD.
+
+  METHOD init_layout.
+
+    IF mo_layout IS BOUND.
+      RETURN.
+    ENDIF.
+
+    DATA(class) = cl_abap_classdescr=>get_class_name( me ).
+    class = shift_left( val = class sub = `\CLASS=` ).
+
+    " the draft table's name behind this class's own prefix (Z2UI5_, or the
+    " one a namespace rename gave it) - the rename rewrites the class name,
+    " never a literal
+    DATA(table) = substring_before( val = class
+                                    sub = `CL_LAYO_` ) && `T_01`.
+
+    mo_table_layout = /kro/cl_layo_manager=>factory( control  = /kro/cl_layo_manager=>m_table
+                                                      data     = REF #( mt_table )
+                                                      handle01 = class
+                                                      handle02 = table
+                                                      handle03 = ''
+                                                      handle04 = '' ).
+
+    mo_layout = /kro/cl_layo_manager=>factory( control  = /kro/cl_layo_manager=>ui_simpleform
+                                                data     = REF #( ms_struc )
+                                                handle01 = class
+                                                handle02 = 'Z2UI5_S_01'
+                                                handle03 = ''
+                                                handle04 = '' ).
+
+  ENDMETHOD.
+
+  METHOD on_after_navigation.
+
+    TRY.
+
+        DATA(app) = CAST /kro/cl_layo_pop( client->get_app_prev( ) ).
+
+        IF     mo_layout->ms_layout-s_head-control  = app->mo_layout->ms_layout-s_head-control
+           AND mo_layout->ms_layout-s_head-handle01 = app->mo_layout->ms_layout-s_head-handle01
+           AND mo_layout->ms_layout-s_head-handle02 = app->mo_layout->ms_layout-s_head-handle02
+           AND mo_layout->ms_layout-s_head-handle03 = app->mo_layout->ms_layout-s_head-handle03
+           AND mo_layout->ms_layout-s_head-handle04 = app->mo_layout->ms_layout-s_head-handle04.
+
+          mo_layout->ms_layout = app->mo_layout->ms_layout.
+        ENDIF.
+
+        IF     mo_table_layout->ms_layout-s_head-control  = app->mo_layout->ms_layout-s_head-control
+           AND mo_table_layout->ms_layout-s_head-handle01 = app->mo_layout->ms_layout-s_head-handle01
+           AND mo_table_layout->ms_layout-s_head-handle02 = app->mo_layout->ms_layout-s_head-handle02
+           AND mo_table_layout->ms_layout-s_head-handle03 = app->mo_layout->ms_layout-s_head-handle03
+           AND mo_table_layout->ms_layout-s_head-handle04 = app->mo_layout->ms_layout-s_head-handle04.
+          mo_table_layout->ms_layout = app->mo_layout->ms_layout.
+        ENDIF.
+
+        IF app->mv_rerender = abap_true.
+          " e.g. subcolumns need rerendering to work ..
+          render_main( ).
+        ENDIF.
+        " for all other changes the changed model is enough - the framework
+        " sends it by itself
+      CATCH cx_root.
+        " not back from the layout popup (e.g. a restored draft) - the
+        " view still has to be displayed
+        render_main( ).
+    ENDTRY.
+
+  ENDMETHOD.
+
+ENDCLASS.

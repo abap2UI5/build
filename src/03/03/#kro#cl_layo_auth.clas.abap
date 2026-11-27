@@ -1,0 +1,172 @@
+"! The authorization decision of layout-management, and the default when the
+"! system has not made one of its own. check( ) is what the layout popup asks;
+"! it goes to the instance set with set_instance( ), else to the one class in
+"! the system that implements z2ui5_if_layo_auth (found by its interface, like
+"! abap2UI5's user exit), else to this class: everything the popup offers is
+"! allowed - saving own and shared layouts, deleting own and shared ones.
+CLASS /kro/cl_layo_auth DEFINITION
+  PUBLIC FINAL
+  CREATE PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES /kro/if_layo_auth.
+
+    "! the decision for the current user - see z2ui5_if_layo_auth=&gt;cs_action
+    CLASS-METHODS check
+      IMPORTING
+        !action       TYPE string
+        head          TYPE /kro/t_11
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+
+    "! the active implementation: the one set, else the one found, else this class
+    CLASS-METHODS get_instance
+      RETURNING
+        VALUE(result) TYPE REF TO /kro/if_layo_auth.
+
+    "! replaces the lookup - for a test, or for an installation that wants to
+    "! choose the class itself instead of being found. An unbound reference
+    "! restores the lookup
+    CLASS-METHODS set_instance
+      IMPORTING
+        val TYPE REF TO /kro/if_layo_auth OPTIONAL.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+    CLASS-DATA gi_instance TYPE REF TO /kro/if_layo_auth.
+    CLASS-DATA gv_looked_up TYPE abap_bool.
+
+    "! the name of the class implementing the interface, empty when there is
+    "! none but the shipped one; never raises
+    CLASS-METHODS lookup_class
+      RETURNING
+        VALUE(result) TYPE string.
+
+    CLASS-METHODS type_name_of
+      IMPORTING
+        val           TYPE any
+      RETURNING
+        VALUE(result) TYPE string.
+
+ENDCLASS.
+
+
+CLASS /kro/cl_layo_auth IMPLEMENTATION.
+
+  METHOD check.
+
+    DATA li_auth TYPE REF TO /kro/if_layo_auth.
+
+    li_auth = get_instance( ).
+    result = li_auth->check_authorized( action = action
+                                        head   = head ).
+
+  ENDMETHOD.
+
+  METHOD get_instance.
+
+    DATA li_auth TYPE REF TO /kro/if_layo_auth.
+    DATA lv_class TYPE string.
+
+    IF gi_instance IS BOUND.
+      result = gi_instance.
+      RETURN.
+    ENDIF.
+
+    " the lookup is a repository read - once per session is enough, and a
+    " system without an implementation answers the same every time
+    IF gv_looked_up = abap_false.
+      gv_looked_up = abap_true.
+      lv_class = lookup_class( ).
+      IF lv_class IS NOT INITIAL.
+        TRY.
+            CREATE OBJECT li_auth TYPE (lv_class).
+            gi_instance = li_auth.
+          CATCH cx_root ##NO_HANDLER.
+            " a class that cannot be created (abstract, no public constructor)
+            " leaves the default in place
+        ENDTRY.
+      ENDIF.
+    ENDIF.
+
+    IF gi_instance IS NOT BOUND.
+      gi_instance = NEW /kro/cl_layo_auth( ).
+    ENDIF.
+
+    result = gi_instance.
+
+  ENDMETHOD.
+
+  METHOD set_instance.
+
+    gi_instance = val.
+    " an unbound reference restores the lookup
+    gv_looked_up = abap_false.
+
+  ENDMETHOD.
+
+  METHOD lookup_class.
+
+    " the names come from typed, unbound references and not from literals:
+    " the compiler checks them, and the namespace rename (abaplint --rename)
+    " rewrites them - a literal survives the rename and then names an
+    " interface that no longer exists
+    DATA li_auth    TYPE REF TO /kro/if_layo_auth.
+    DATA lo_shipped TYPE REF TO /kro/cl_layo_auth.
+    DATA lv_intf    TYPE string.
+    DATA lv_shipped TYPE string.
+    DATA lt_class   TYPE /kro/cl_layo_context=>ty_t_classes.
+
+    TRY.
+        lv_intf    = type_name_of( li_auth ).
+        lv_shipped = type_name_of( lo_shipped ).
+
+        lt_class = /kro/cl_layo_context=>rtti_get_classes_impl_intf( lv_intf ).
+        DELETE lt_class WHERE classname = lv_shipped.
+
+        " reproducible when a system carries more than one: the first by name
+        SORT lt_class BY classname.
+        result = VALUE #( lt_class[ 1 ]-classname OPTIONAL ).
+
+      CATCH cx_root ##NO_HANDLER.
+        " no repository access, no implementation: the default applies
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD type_name_of.
+
+    DATA lo_descr TYPE REF TO cl_abap_typedescr.
+    DATA lo_ref   TYPE REF TO cl_abap_refdescr.
+
+    lo_descr = cl_abap_typedescr=>describe_by_data( val ).
+    lo_ref ?= lo_descr.
+    result = lo_ref->get_referenced_type( )->get_relative_name( ).
+
+  ENDMETHOD.
+
+  METHOD /kro/if_layo_auth~check_authorized.
+
+    " the default, as before the hook existed: every user may save his own
+    " and shared layouts and delete his own and shared ones - never another
+    " user's personal layout. A system that wants to restrict shared layouts
+    " implements z2ui5_if_layo_auth with its own authorization object
+    CASE action.
+      WHEN /kro/if_layo_auth=>cs_action-save_own.
+        result = xsdbool( head-uname = sy-uname ).
+      WHEN /kro/if_layo_auth=>cs_action-save_shared.
+        result = abap_true.
+      WHEN /kro/if_layo_auth=>cs_action-delete.
+        result = xsdbool( head-uname IS INITIAL OR head-uname = sy-uname ).
+      WHEN /kro/if_layo_auth=>cs_action-read_others.
+        " the layout popup never shows another user's personal layout - a
+        " tool that reads them all implements the hook or passes check_auth
+        result = xsdbool( head-uname IS INITIAL OR head-uname = sy-uname ).
+      WHEN OTHERS.
+        result = abap_false.
+    ENDCASE.
+
+  ENDMETHOD.
+
+ENDCLASS.
