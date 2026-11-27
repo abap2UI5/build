@@ -11,19 +11,13 @@
 [`deliveries.json`](deliveries.json) and send a pull request - or fork this
 repository and run it yourself.
 
-
-## Info
-
-Pull a branch with abapGit; its README has the install steps. `standard` is for
-every Standard ABAP system from 7.02, `cloud` for ABAP Cloud.
+## What is included
 
 [abap2UI5](https://github.com/abap2UI5/abap2UI5) and its addons in two delivery
 variants on `main`, and from them **renamed installations** on delivery branches - each
 one an abapGit repository to pull, for a parallel installation next to an
 existing abap2UI5 or for a system that installs everything under a registered
 namespace.
-
-## What is included
 
 Every delivery holds the framework and three addons, all under the one name:
 
