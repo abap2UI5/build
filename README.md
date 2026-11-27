@@ -9,10 +9,10 @@ Every `z2ui5_*` object is renamed to `/ca2ui5/*`, in all of it:
 
 | Folder | Content | Source |
 |---|---|---|
-| `src/01` | abap2UI5 - the framework and, in `src/01/03`, ICF node `/sap/bc/ca2ui5/ui5`, handler `/ca2ui5/cl_ui5_icf_handler` | [abap2UI5/abap2UI5](https://github.com/abap2UI5/abap2UI5)@b554a61 (branch `702`) |
-| `src/02` | popups | [abap2UI5-addons/popups](https://github.com/abap2UI5-addons/popups)@b9e6cad (branch `702`) |
-| `src/03` | layout | [abap2UI5-addons/layout-management](https://github.com/abap2UI5-addons/layout-management)@685e25f (branch `702`) |
-| `src/04` | table-maintenance | [abap2UI5-addons/table-maintenance](https://github.com/abap2UI5-addons/table-maintenance)@79ee4a1 (branch `702`) |
+| `src/01` | abap2UI5 - the framework and, in `src/01/03`, ICF node `/sap/bc/ca2ui5/ui5`, handler `/ca2ui5/cl_ui5_icf_handler` | [abap2UI5/abap2UI5](https://github.com/abap2UI5/abap2UI5)@28b5ba6 (branch `702`) |
+| `src/02` | popups | [abap2UI5-addons/popups](https://github.com/abap2UI5-addons/popups)@1abef33 (branch `702`) |
+| `src/03` | layout | [abap2UI5-addons/layout-management](https://github.com/abap2UI5-addons/layout-management)@a32e618 (branch `702`) |
+| `src/04` | table-maintenance | [abap2UI5-addons/table-maintenance](https://github.com/abap2UI5-addons/table-maintenance)@fef40f1 (branch `702`) |
 
 ## Install
 
