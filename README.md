@@ -1,88 +1,93 @@
-# test-build
+# build
 
-abap2UI5 and its frontend, renamed into a namespace of your choice and
-assembled as **one abapGit repository** on a branch of this repository - for a
-parallel installation next to an existing abap2UI5, or for a system that
-installs everything under a registered namespace.
+[abap2UI5](https://github.com/abap2UI5/abap2UI5) in its three variants on
+`main`, and from them **renamed installations** on delivery branches - each one
+an abapGit repository to pull, for a parallel installation next to an existing
+abap2UI5 or for a system that installs everything under a registered namespace.
 
-| Input | Backend objects | Frontend BSP | Branch |
-|---|---|---|---|
-| `/CA2UI5/` | `/ca2ui5/cl_ui5_client`, ... | `/CA2UI5/UI5`, node `/sap/bc/ca2ui5/ui5` | `rename_ca2ui5` |
-| `/ABAP2UI5/` | `/abap2ui5/cl_ui5_client`, ... | `/ABAP2UI5/UI5`, node `/sap/bc/abap2ui5/ui5` | `rename_abap2ui5` |
-| `ZABAP2UI5Z` | `zabap2ui5z_cl_ui5_client`, ... | `ZABAP2UI5Z`, node `/sap/bc/zabap2ui5z` | `rename_zabap2ui5z` |
+## main
 
-## Run it
+| Folder | Source | For |
+|---|---|---|
+| `src/standard` | `src/` of abap2UI5 `main` | Standard ABAP from 7.50: framework, ICF node, handler, BSP |
+| `src/702` | `src/` of the branch `702` | the same downported to 7.02, without the BSP |
+| `src/cloud` | `src/` of the branch `cloud` | ABAP Cloud: an HTTP service in place of the ICF node |
 
-**GitHub**: Actions → `rename` → Run workflow → enter the name. The result is
-pushed to `rename_<name>`; re-running with the same name updates that branch.
-Optionally a branch or tag of abap2UI5 and of the frontend to rename.
+Nothing in `src/` or `upstream/` is edited here - `node build.mjs sync`
+replaces it, and `sources.json` names the commits it was taken from.
+`upstream/` is what a rename needs of abap2UI5's own tooling (its rename
+config, `rename-literal-gate`, `tools/bsp_rename`), from the same commit as
+`src/standard`.
 
-**Locally**:
+Each folder has its own two lint configurations, pointing at that folder only:
+
+| Folder | abaplint | abap2UI5-linter |
+|---|---|---|
+| `src/standard` | `abaplint.standard.jsonc` (v750) | `abap2ui5lint.standard.jsonc` |
+| `src/702` | `abaplint.702.jsonc` (v702) | `abap2ui5lint.702.jsonc` |
+| `src/cloud` | `abaplint.cloud.jsonc` (Cloud) | `abap2ui5lint.cloud.jsonc` |
 
 ```bash
 npm ci
-node rename.mjs /abap2ui5/                 # clones both repositories into work/, result in out/rename_abap2ui5/
-node rename.mjs zabap2ui5z --abap2ui5 ../abap2UI5 --frontend ../frontend   # existing checkouts (frontend on standard_new)
+npm run lint            # all three, or lint:standard / lint:702 / lint:cloud
+npm test
 ```
 
-## What it does
+## Delivery branches
 
-1. Clones [abap2UI5/abap2UI5](https://github.com/abap2UI5/abap2UI5) (`main`)
-   and the branch `standard_new` of [abap2UI5/frontend](https://github.com/abap2UI5/frontend)
-   - the frontend app around the embed control, which loads the abap2UI5
-   frontend from the backend.
-2. Renames the backend with abap2UI5's own rename config
-   (`.github/abaplint/rename.jsonc`, what its `build-rename` workflow uses):
-   `abaplint --rename` turns every `z2ui5_*` class, interface and table into
-   `<prefix>*` and rewrites every reference. abap2UI5's `rename-literal-gate`
-   then proves no string literal still names an object by its old name.
-   Two kinds of literal it leaves alone are rewritten here: in the test
-   classes every literal naming an abap2UI5 object (rtti checks, expected
-   texts), and in the start app every class name - the user's config class
-   (`<prefix>cl_config_app`) and the sample apps (`<prefix>cl_smp_app_000`,
-   ...), which are expected under the same prefix.
-3. Renames the frontend BSP with abap2UI5's `tools/bsp_rename` (BSP, ICF
-   nodes, SMIM folder, handler class, file names; for a `/NS/` the nodes move
-   to `/sap/bc/<ns>/ui5` and the namespace-level nodes are generated). The
-   one thing that script keeps for an unrenamed backend is rewritten here:
-   the handler's call of the backend class (`<prefix>cl_ui5_http_handler`).
-   The endpoint the embed control loads the frontend from is the manifest's
-   data source, which the script repoints at the renamed node - checked
-   here, so a frontend that takes it from elsewhere stops the run.
-4. Assembles `.abapgit.xml`, `LICENSE`, a `README.md` with the install steps
-   and `src/` with two folders: `src/01` the backend (its packages `00`..`99`
-   below it) and `src/02` the frontend (`01` handler and node, `02` BSP and
-   nodes).
-5. Runs abaplint on the result with the `abaplint.jsonc` it writes to the
-   branch (syntax v750, the API abap2UI5 is checked against plus
-   [abaplint/deps](https://github.com/abaplint/deps) for the frontend
-   handler's on-premise interfaces). The outcome is the badge of the branch
-   README (`.badges/abaplint.json`, a shields.io endpoint). The branch is
-   pushed either way; issues fail the workflow run after the push.
+`deliveries.json` lists the names and the variants; every name is built in
+every variant, on the branch `<name>-<variant>` (`#` for the `/` of a
+namespace, as abapGit writes it):
 
-Rules for the name are abap2UI5's: a customer name has at most 10 characters,
-a registered namespace at most 10 with both slashes (every abap2UI5 object
-name is at most 25 characters, so the renamed one stays within ABAP's 30).
-`z2ui5` is refused. A `/NS/` namespace has to exist in the target system
-(SE03) before the pull.
+| Name | Objects | Standard | Cloud |
+|---|---|---|---|
+| `ZABAP2UI5` | `zabap2ui5_cl_ui5_client`, ... | [`zabap2ui5-standard`](https://github.com/abap2UI5/build/tree/zabap2ui5-standard) | [`zabap2ui5-cloud`](https://github.com/abap2UI5/build/tree/zabap2ui5-cloud) |
+| `/Z2UI5/` | `/z2ui5/cl_ui5_client`, ... | [`#z2ui5#-standard`](https://github.com/abap2UI5/build/tree/%23z2ui5%23-standard) | [`#z2ui5#-cloud`](https://github.com/abap2UI5/build/tree/%23z2ui5%23-cloud) |
+| `/KRO/` | `/kro/cl_ui5_client`, ... | [`#kro#-standard`](https://github.com/abap2UI5/build/tree/%23kro%23-standard) | [`#kro#-cloud`](https://github.com/abap2UI5/build/tree/%23kro%23-cloud) |
+| `/CA2UI5/` | `/ca2ui5/cl_ui5_client`, ... | [`#ca2ui5#-standard`](https://github.com/abap2UI5/build/tree/%23ca2ui5%23-standard) | [`#ca2ui5#-cloud`](https://github.com/abap2UI5/build/tree/%23ca2ui5%23-cloud) |
 
-## Branches
-
-| Branch | abaplint |
-|---|---|
-| [`rename_ca2ui5`](https://github.com/abap2UI5/test-build/tree/rename_ca2ui5) | ![abaplint](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fabap2UI5%2Ftest-build%2Frename_ca2ui5%2F.badges%2Fabaplint.json) |
-| [`rename_abap2ui5`](https://github.com/abap2UI5/test-build/tree/rename_abap2ui5) | ![abaplint](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fabap2UI5%2Ftest-build%2Frename_abap2ui5%2F.badges%2Fabaplint.json) |
-
-## Install the result
-
-abapGit → New Online → this repository, branch `rename_<name>` → a package of
-yours (in the namespace, for a `/NS/` name) → Pull. Then activate the ICF nodes
-the branch's README lists and open its `index.html`. The packages are `<package>_01`
-(backend, with `_01_00` .. `_01_99`) and `<package>_02` (frontend, with
-`_02_01`, `_02_02`) - abapGit's PREFIX folder logic.
-
-## Checks
+A branch holds `.abapgit.xml`, `LICENSE`, a `README.md` with the install
+steps, `src/` and the `abaplint.jsonc` it is checked with; the outcome is the
+badge of its README.
 
 ```bash
-npm test      # the name derivation, the lint config and the badge
+node build.mjs deliver zabap2ui5 standard     # -> out/zabap2ui5-standard
+node build.mjs deliver /kro/ cloud            # -> out/#kro#-cloud
 ```
+
+What a delivery is made of:
+
+1. `src/00`..`src/02`, the framework: `abaplint --rename` with abap2UI5's
+   rename config turns every `z2ui5_*` class, interface and table into
+   `<prefix>*` and rewrites every reference; abap2UI5's `rename-literal-gate`
+   proves no string literal still names an object by its old name. Two kinds
+   of literal that gate leaves alone are rewritten here: in the test classes
+   every literal naming an abap2UI5 object, and in the start app every class
+   name (config class and sample apps are expected under the same prefix).
+2. `src/03`, the service package:
+   - **standard**: abap2UI5's `tools/bsp_rename` - the ICF node becomes
+     `/sap/bc/<name>` (`/sap/bc/<ns>/ui5` for a namespace, with its namespace
+     nodes), the BSP `<NAME>` (`/NS/UI5`), and the handler calls the renamed
+     framework.
+   - **cloud**: the HTTP service becomes `<NAME>` (`/NS/UI5`), with its
+     inbound service, communication scenario and handler. Not carried: the
+     SUSH of the HTTP service (its object name is a hash the system derives,
+     the system creates it with the service) and `src/03/02`, the launchpad
+     integration (IAM app, business catalog), which names that hash and the
+     deployed Fiori app of the original.
+3. abaplint over the result, with the configuration of its variant.
+
+Rules for a name are abap2UI5's: a customer name has at most 10 characters, a
+registered namespace at most 10 with both slashes. A namespace has to exist in
+the target system (SE03) before the pull.
+
+`/Z2UI5/` is not a neighbour of the original: its namespace node
+`/sap/bc/z2ui5` is the ICF node the original abap2UI5 serves its handler from.
+Install one or the other in a system.
+
+## Workflow
+
+[`build`](.github/workflows/build.yaml) runs daily, on a push to `main` and by
+hand: it syncs `main` from abap2UI5, lints the three folders and pushes every
+delivery branch that changed. On a pull request it lints and builds, and pushes
+nothing. To add a delivery, add its name to `deliveries.json`.

@@ -1,0 +1,20 @@
+{
+  "repository": "abap2UI5/abap2UI5",
+  "variants": {
+    "702": {
+      "branch": "702",
+      "commit": "de8a95da44fe7967d6db1ea40140797ad6d14e94",
+      "date": "2026-11-27T08:28:41+00:00"
+    },
+    "standard": {
+      "branch": "main",
+      "commit": "98af8749325e27a0fcea67a38ab6e1a7dc6ba4bf",
+      "date": "2026-11-27T09:26:55+01:00"
+    },
+    "cloud": {
+      "branch": "cloud",
+      "commit": "0e750e329caab6701471d0dfcea8a8e3205e14fe",
+      "date": "2026-11-27T08:27:38+00:00"
+    }
+  }
+}

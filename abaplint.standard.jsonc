@@ -1,0 +1,43 @@
+// src/standard only - src/ of abap2UI5 main, Standard ABAP from 7.50.
+// The rules of abap2UI5's abap_standard.jsonc; checked against the released
+// APIs, plus abaplint/deps for the interface of the ICF handler in src/03
+// (if_http_extension).
+{
+  "global": {
+    "files": "/src/standard/**/*.*"
+  },
+  "dependencies": [
+    {
+      "url": "https://github.com/abapedia/steampunk-2305-api-intersect-702",
+      "folder": "/deps/steampunk-2305-api-intersect-702",
+      "files": "/src/**/*.*"
+    },
+    {
+      "url": "https://github.com/abaplint/deps",
+      "folder": "/deps/abaplint-deps",
+      "files": "/src/**/*.*"
+    }
+  ],
+  "syntax": {
+    "version": "v750",
+    "errorNamespace": "."
+  },
+  "rules": {
+    "begin_end_names": true,
+    "cds_parser_error": true,
+    "check_ddic": true,
+    "strict_sql": true,
+    "sql_escape_host_variables": true,
+    "check_include": true,
+    "check_syntax": true,
+    "cloud_types": true,
+    "global_class": true,
+    "implement_methods": true,
+    "method_implemented_twice": true,
+    "parser_error": true,
+    "superclass_final": true,
+    "unknown_types": true,
+    "xml_bom": true,
+    "xml_consistency": true
+  }
+}

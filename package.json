@@ -1,18 +1,23 @@
 {
-  "name": "abap2ui5-test-build",
+  "name": "abap2ui5-build",
   "private": true,
   "version": "0.1.0",
-  "description": "abap2UI5 and its frontend renamed into a namespace of your choice, as one abapGit repository on a branch of this repository",
+  "description": "abap2UI5 in its three variants (standard, 702, cloud) and renamed installations of it on delivery branches",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "rename": "node rename.mjs",
-    "check": "node rename.mjs --help >/dev/null && node --test \"test/*.test.mjs\"",
+    "sync": "node build.mjs sync",
+    "deliver": "node build.mjs deliver",
+    "lint:standard": "abaplint abaplint.standard.jsonc && abap2ui5lint --config abap2ui5lint.standard.jsonc",
+    "lint:702": "abaplint abaplint.702.jsonc && abap2ui5lint --config abap2ui5lint.702.jsonc",
+    "lint:cloud": "abaplint abaplint.cloud.jsonc && abap2ui5lint --config abap2ui5lint.cloud.jsonc",
+    "lint": "npm run lint:standard && npm run lint:702 && npm run lint:cloud",
     "test": "node --test \"test/*.test.mjs\""
   },
   "devDependencies": {
-    "@abaplint/cli": "^2.120.75"
+    "@abap2ui5/linter": "^0.12.1",
+    "@abaplint/cli": "^2.120.121"
   }
 }

@@ -1,0 +1,41 @@
+// src/cloud only - src/ of abap2UI5's branch cloud, ABAP Cloud.
+// The rules of abap2UI5's abap_cloud.jsonc; checked against the released
+// APIs, plus the three interfaces of the HTTP service handler in src/03
+// (if_http_service_extension and its request and response).
+{
+  "global": {
+    "files": "/src/cloud/**/*.*"
+  },
+  "dependencies": [
+    {
+      "url": "https://github.com/abapedia/steampunk-2305-api-intersect-702",
+      "folder": "/deps/steampunk-2305-api-intersect-702",
+      "files": "/src/**/*.*"
+    },
+    {
+      "url": "https://github.com/open-abap/open-abap-core",
+      "folder": "/deps/open-abap-core",
+      "files": "/src/**/{if_http_service_extension,if_web_http_request,if_web_http_response}.*"
+    }
+  ],
+  "syntax": {
+    "version": "Cloud",
+    "errorNamespace": "."
+  },
+  "rules": {
+    "downport": true,
+    "begin_end_names": true,
+    "check_ddic": true,
+    "check_include": true,
+    "check_syntax": true,
+    "global_class": true,
+    "definitions_top": false,
+    "implement_methods": true,
+    "method_implemented_twice": true,
+    "parser_error": true,
+    "superclass_final": true,
+    "unknown_types": true,
+    "xml_bom": true,
+    "xml_consistency": true
+  }
+}

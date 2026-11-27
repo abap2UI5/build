@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renameLiterals } from "../rename.mjs";
+import { renameLiterals } from "../build.mjs";
 
 const objects = new Set(["z2ui5_cl_ui5_app_hi_world", "z2ui5_if_app", "z2ui5_cx_ui5_util_error"]);
 
@@ -30,11 +30,4 @@ test("without an object list every name is renamed, urls stay", () => {
   assert.equal(renameLiterals("    c = `Z2UI5_CL_CONFIG_APP`. x = `z2ui5_cl_smp_app_000`.", null, "/kro/"), "    c = `/KRO/CL_CONFIG_APP`. x = `/kro/cl_smp_app_000`.");
   const url = "    h = `https://github.com/abap2UI5/abap2UI5/blob/main/src/01/04/z2ui5_cl_ui5_app_hi_world.clas.abap`.";
   assert.equal(renameLiterals(url, null, "/kro/"), url);
-});
-
-test("page names of the BSP stay paths inside it", async () => {
-  const { restorePageNames } = await import("../rename.mjs");
-  const orig = "<APPLNAME>Z2UI5</APPLNAME><PAGEKEY>THIRDPARTY/Z2UI5/EMBED/C.JS</PAGEKEY><PAGENAME>thirdparty/z2ui5/embed/C.js</PAGENAME>";
-  const renamed = "<APPLNAME>/KRO/UI5</APPLNAME><PAGEKEY>THIRDPARTY//KRO/UI5/EMBED/C.JS</PAGEKEY><PAGENAME>thirdparty//kro/ui5/embed/C.js</PAGENAME>";
-  assert.equal(restorePageNames(renamed, orig), "<APPLNAME>/KRO/UI5</APPLNAME><PAGEKEY>THIRDPARTY/Z2UI5/EMBED/C.JS</PAGEKEY><PAGENAME>thirdparty/z2ui5/embed/C.js</PAGENAME>");
 });
