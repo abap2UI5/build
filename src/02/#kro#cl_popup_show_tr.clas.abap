@@ -3,7 +3,6 @@ CLASS /kro/cl_popup_show_tr DEFINITION
   CREATE PUBLIC.
 
   PUBLIC SECTION.
-    " abap2ui5lint-disable unbound-public-attribute -- a popup's attributes are its interface to the app that called it, which reads them once the popup returns
     INTERFACES /kro/if_app.
     " check_confirmed( ) - a transport request chosen, or No Transport
     " (ms_transport-locl); abap_false when closed or Select without a row;
@@ -38,7 +37,6 @@ DATA mt_data TYPE temp1_25b75d9fca.
     CLASS-METHODS factory
       RETURNING
         VALUE(result) TYPE REF TO /kro/cl_popup_show_tr.
-    " abap2ui5lint-enable unbound-public-attribute
 
   PROTECTED SECTION.
     METHODS on_init.
