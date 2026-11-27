@@ -1,8 +1,8 @@
 {
-  "name": "abap2ui5-build",
+  "name": "abap2ui5-distributions",
   "private": true,
   "version": "0.1.0",
-  "description": "abap2UI5 for Standard ABAP (702) and ABAP Cloud, and renamed installations of it on delivery branches",
+  "description": "abap2UI5 distributions for Standard ABAP and ABAP Cloud - under custom names and namespaces, as ready-to-pull abapGit branches",
   "type": "module",
   "engines": {
     "node": ">=22"

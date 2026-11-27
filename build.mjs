@@ -71,7 +71,7 @@ const TOOLING = [
   ".abapgit.xml",
 ];
 // the repository the branches are pushed to: the badge's url points there
-const REPOSITORY = process.env.GITHUB_REPOSITORY || "abap2UI5/build";
+const REPOSITORY = process.env.GITHUB_REPOSITORY || "abap2UI5/distributions";
 
 function fail(message) {
   console.error(`build: ${message}`);
