@@ -1,17 +1,17 @@
 {
   "repository": "abap2UI5/abap2UI5",
-  "branches": {
-    "702": {
-      "variant": "standard",
-      "commit": "99b4a3164af8bb82bfa5c2ef15fde03bec3a714a",
-      "tree": "20ef45887f9ffd9e55733861e14f6cf0c1f58995",
-      "date": "2026-11-27T09:03:25+00:00"
+  "variants": {
+    "standard": {
+      "branch": "702",
+      "commit": "3d103e8cba6ca09701cf02c5929e87da2e67804a",
+      "tree": "d6efba813820621f6be08c02a636132af478a1fd",
+      "date": "2026-11-27T09:54:41+00:00"
     },
     "cloud": {
-      "variant": "cloud",
-      "commit": "b316414fa5ad7cd6c93db96e0e0e10c3f7ebe1e4",
-      "tree": "ab2c2b52e9b5a22c5c4e6cd2d734952882398d34",
-      "date": "2026-11-27T09:02:32+00:00"
+      "branch": "cloud",
+      "commit": "22a8cf8df513c610adde2d3bc15614d448212cbf",
+      "tree": "7eef38567e4a70dc942768f5f02298f50daa9943",
+      "date": "2026-11-27T09:53:17+00:00"
     }
   }
 }

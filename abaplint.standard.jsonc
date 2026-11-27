@@ -1,9 +1,8 @@
-// src/702 only - src/ of abap2UI5's branch 702, the downported sources:
-// the variant "standard" of the deliveries.
+// src/standard only - src/ of abap2UI5's branch 702, the downported sources.
 // The rules and the dependency of abap2UI5's abap_702.jsonc.
 {
   "global": {
-    "files": "/src/702/**/*.*"
+    "files": "/src/standard/**/*.*"
   },
   "dependencies": [
     {

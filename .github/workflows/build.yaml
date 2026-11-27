@@ -1,6 +1,6 @@
 name: build
 
-# main holds abap2UI5 in its two variants - src/702 for every Standard ABAP
+# main holds abap2UI5 in its two variants - src/standard for every Standard ABAP
 # system, src/cloud for ABAP Cloud - and every delivery branch is one of
 # them under another name
 # (deliveries.json: every name in every variant, branch <name>-<variant>).
@@ -61,10 +61,10 @@ jobs:
             echo "abap2UI5 unchanged"
             exit 0
           fi
-          short() { node -p "require('./sources.json').branches['$1'].commit.slice(0, 7)"; }
+          short() { node -p "require('./sources.json').variants['$1'].commit.slice(0, 7)"; }
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git commit -q -m "sync: abap2UI5 702 $(short 702), cloud $(short cloud)"
+          git commit -q -m "sync: abap2UI5 702 $(short standard), cloud $(short cloud)"
           git push origin "HEAD:${GITHUB_REF_NAME}"
           echo "SYNCED=true" >> "$GITHUB_ENV"
       - name: State
@@ -85,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        folder: ["702", cloud]
+        folder: [standard, cloud]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -149,7 +149,7 @@ jobs:
             echo "$BRANCH: no changes"
             exit 0
           fi
-          source=$(node -p "Object.values(require('./sources.json').branches).find((b) => b.variant === '$VARIANT').commit.slice(0, 7)")
+          source=$(node -p "require('./sources.json').variants['$VARIANT'].commit.slice(0, 7)")
           commit=$(git commit-tree "$tree" ${parent:+-p "$parent"} -m "build: $NAME $VARIANT (abap2UI5 $source)")
           git push origin "$commit:refs/heads/$BRANCH"
           echo "$BRANCH: pushed $commit"
