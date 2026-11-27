@@ -1,4 +1,4 @@
-# build
+# distributions
 
 [abap2UI5](https://github.com/abap2UI5/abap2UI5) in its two delivery variants
 on `main`, and from them **renamed installations** on delivery branches - each
@@ -10,10 +10,10 @@ namespace.
 
 | Name | Objects | Standard | Cloud |
 |---|---|---|---|
-| `ZABAP2UI5` | `zabap2ui5_cl_ui5_client`, ... | [`zabap2ui5-standard`](https://github.com/abap2UI5/build/tree/zabap2ui5-standard) | [`zabap2ui5-cloud`](https://github.com/abap2UI5/build/tree/zabap2ui5-cloud) |
-| `/Z2UI5/` | `/z2ui5/cl_ui5_client`, ... | [`#z2ui5#-standard`](https://github.com/abap2UI5/build/tree/%23z2ui5%23-standard) | [`#z2ui5#-cloud`](https://github.com/abap2UI5/build/tree/%23z2ui5%23-cloud) |
-| `/KRO/` | `/kro/cl_ui5_client`, ... | [`#kro#-standard`](https://github.com/abap2UI5/build/tree/%23kro%23-standard) | [`#kro#-cloud`](https://github.com/abap2UI5/build/tree/%23kro%23-cloud) |
-| `/CA2UI5/` | `/ca2ui5/cl_ui5_client`, ... | [`#ca2ui5#-standard`](https://github.com/abap2UI5/build/tree/%23ca2ui5%23-standard) | [`#ca2ui5#-cloud`](https://github.com/abap2UI5/build/tree/%23ca2ui5%23-cloud) |
+| `ZABAP2UI5` | `zabap2ui5_cl_ui5_client`, ... | [`zabap2ui5-standard`](https://github.com/abap2UI5/distributions/tree/zabap2ui5-standard) | [`zabap2ui5-cloud`](https://github.com/abap2UI5/distributions/tree/zabap2ui5-cloud) |
+| `/Z2UI5/` | `/z2ui5/cl_ui5_client`, ... | [`#z2ui5#-standard`](https://github.com/abap2UI5/distributions/tree/%23z2ui5%23-standard) | [`#z2ui5#-cloud`](https://github.com/abap2UI5/distributions/tree/%23z2ui5%23-cloud) |
+| `/KRO/` | `/kro/cl_ui5_client`, ... | [`#kro#-standard`](https://github.com/abap2UI5/distributions/tree/%23kro%23-standard) | [`#kro#-cloud`](https://github.com/abap2UI5/distributions/tree/%23kro%23-cloud) |
+| `/CA2UI5/` | `/ca2ui5/cl_ui5_client`, ... | [`#ca2ui5#-standard`](https://github.com/abap2UI5/distributions/tree/%23ca2ui5%23-standard) | [`#ca2ui5#-cloud`](https://github.com/abap2UI5/distributions/tree/%23ca2ui5%23-cloud) |
 
 Pull a branch with abapGit; its README has the install steps. `standard` is for
 every Standard ABAP system from 7.02, `cloud` for ABAP Cloud.
