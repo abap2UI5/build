@@ -1,0 +1,150 @@
+CLASS /kro/cl_popup_sample_08 DEFINITION PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES /kro/if_app.
+
+    METHODS view_display.
+    METHODS on_event.
+
+  PROTECTED SECTION.
+    DATA client TYPE REF TO /kro/if_client.
+
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+CLASS /kro/cl_popup_sample_08 IMPLEMENTATION.
+
+  METHOD on_event.
+
+    TYPES BEGIN OF ty_s_log_entry.
+    TYPES msgnumber TYPE n LENGTH 6.
+    TYPES msgty     TYPE c LENGTH 1.
+    TYPES msgid     TYPE c LENGTH 20.
+    TYPES msgno     TYPE n LENGTH 3.
+    TYPES msgv1     TYPE c LENGTH 50.
+    TYPES msgv2     TYPE c LENGTH 50.
+    TYPES msgv3     TYPE c LENGTH 50.
+    TYPES msgv4     TYPE c LENGTH 50.
+    TYPES msgv1_src TYPE c LENGTH 15.
+    TYPES msgv2_src TYPE c LENGTH 15.
+    TYPES msgv3_src TYPE c LENGTH 15.
+    TYPES msgv4_src TYPE c LENGTH 15.
+    TYPES detlevel  TYPE c LENGTH 1.
+    TYPES probclass TYPE c LENGTH 1.
+    TYPES alsort    TYPE c LENGTH 3.
+    TYPES time_stmp TYPE p LENGTH 16 DECIMALS 7.
+    TYPES msg_count TYPE i.
+    TYPES context   TYPE c LENGTH 255.
+    TYPES params    TYPE c LENGTH 255.
+    TYPES msg_txt   TYPE string.
+    TYPES END OF ty_s_log_entry.
+    DATA lt_bal TYPE STANDARD TABLE OF ty_s_log_entry WITH DEFAULT KEY.
+        DATA temp1 TYPE bapirettab.
+        DATA temp2 LIKE LINE OF temp1.
+        DATA lt_msg LIKE temp1.
+        DATA temp3 LIKE lt_bal.
+        DATA temp4 LIKE LINE OF temp3.
+            DATA lv_dummy TYPE i.
+            DATA lx TYPE REF TO cx_root.
+        DATA lo_app TYPE REF TO /kro/cl_popup_error.
+
+    CASE client->get( )-event.
+
+      WHEN `POPUP_BAPIRET`.
+
+
+        CLEAR temp1.
+
+        temp2-type = `E`.
+        temp2-id = `MSG1`.
+        temp2-number = `001`.
+        temp2-message = `An empty Report field causes an empty XML Message to be sent`.
+        INSERT temp2 INTO TABLE temp1.
+        temp2-type = `I`.
+        temp2-id = `MSG2`.
+        temp2-number = `002`.
+        temp2-message = `Product already in use`.
+        INSERT temp2 INTO TABLE temp1.
+
+        lt_msg = temp1.
+
+        client->nav_app_call( /kro/cl_popup_messages=>factory( lt_msg ) ).
+
+      WHEN `POPUP_BALLOG`.
+
+
+        CLEAR temp3.
+
+        temp4-msgid = `MSG1`.
+        temp4-msgno = `001`.
+        temp4-msgty = `S`.
+        temp4-time_stmp = /kro/cl_popup_context=>time_get_timestampl( ).
+        temp4-msgnumber = `01`.
+        INSERT temp4 INTO TABLE temp3.
+        temp4-msgid = `MSG2`.
+        temp4-msgno = `002`.
+        temp4-msgty = `S`.
+        temp4-time_stmp = /kro/cl_popup_context=>time_get_timestampl( ).
+        temp4-msgnumber = `02`.
+        INSERT temp4 INTO TABLE temp3.
+        lt_bal = temp3.
+
+        client->nav_app_call( /kro/cl_popup_messages=>factory( lt_bal ) ).
+
+      WHEN `POPUP_EXCEPTION`.
+        TRY.
+
+            lv_dummy = 1 / 0.
+
+          CATCH cx_root INTO lx.
+        ENDTRY.
+
+        lo_app = /kro/cl_popup_error=>factory( lx ).
+        client->nav_app_call( lo_app ).
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD view_display.
+
+    DATA view TYPE REF TO /kro/cl_ui5_view_builder.
+    view = /kro/cl_ui5_view_builder=>factory(
+                     )->ele( n = `View` ns = `mvc`
+                     )->a( n = `xmlns` v = `sap.m`
+                     )->a( n = `xmlns:mvc` v = `sap.ui.core.mvc`
+                     )->a( n = `displayBlock` v = `true`
+                     )->a( n = `height` v = `100%` ).
+    view->ele( `Shell`
+        )->ele( `Page`
+        )->a( n = `title` v = `abap2UI5 - Popup Messages`
+        )->a( n = `navButtonPress` v = client->_event_nav_app_leave( )
+        )->a( n = `showNavButton` b = client->check_app_prev_stack( )
+        )->tag( `Button`
+        )->a( n = `text` v = `Open Popup BAPIRET`
+        )->a( n = `press` v = client->_event( `POPUP_BAPIRET` )
+        )->tag( `Button`
+        )->a( n = `text` v = `Open Popup BALLOG`
+        )->a( n = `press` v = client->_event( `POPUP_BALLOG` )
+        )->tag( `Button`
+        )->a( n = `text` v = `Open Popup Exception`
+        )->a( n = `press` v = client->_event( `POPUP_EXCEPTION` ) ).
+
+    client->view_display( view->stringify( ) ).
+
+  ENDMETHOD.
+
+
+  METHOD /kro/if_app~main.
+
+    me->client = client.
+    IF client->check_on_navigated( ) IS NOT INITIAL.
+      view_display( ).
+    ELSE.
+      on_event( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.

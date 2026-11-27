@@ -1,0 +1,302 @@
+CLASS /kro/cl_popup_demo_out DEFINITION PUBLIC FINAL CREATE PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES /kro/if_app.
+    " check_confirmed( ) - always abap_true, the popup only shows output;
+    " value( ) - unbound; value_string( ) - empty
+    INTERFACES /kro/if_popup_result.
+
+    CLASS-METHODS factory
+      IMPORTING
+        i_output        TYPE REF TO object
+        i_title         TYPE string DEFAULT `Output`
+        i_icon          TYPE string DEFAULT `sap-icon://text-formatting`
+        i_button_text   TYPE string DEFAULT `OK`
+        i_stretch       TYPE abap_bool DEFAULT abap_false
+        i_as_page       TYPE abap_bool DEFAULT abap_false
+      RETURNING
+        VALUE(r_result) TYPE REF TO /kro/cl_popup_demo_out.
+
+  PROTECTED SECTION.
+    DATA client              TYPE REF TO /kro/if_client.
+    DATA title               TYPE string.
+    DATA icon                TYPE string.
+    DATA html                TYPE string.
+    DATA button_text_confirm TYPE string.
+    DATA stretch             TYPE abap_bool.
+    DATA as_page             TYPE abap_bool.
+
+    METHODS view_display.
+
+    METHODS render_popup.
+
+    METHODS render_page.
+
+    METHODS get_style
+      RETURNING
+        VALUE(result) TYPE string.
+
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+CLASS /kro/cl_popup_demo_out IMPLEMENTATION.
+
+  METHOD factory.
+
+    CREATE OBJECT r_result.
+    r_result->title               = i_title.
+    r_result->icon                = i_icon.
+    r_result->button_text_confirm = i_button_text.
+    r_result->stretch             = i_stretch.
+    r_result->as_page             = i_as_page.
+
+    " CL_DEMO_OUTPUT is typed generically for compatibility - it is not
+    " available on every ABAP release / environment. The HTML output is
+    " extracted dynamically via its GET( ) method.
+    TRY.
+        CALL METHOD i_output->('GET')
+          RECEIVING
+            output = r_result->html.
+      CATCH cx_root ##NO_HANDLER.
+    ENDTRY.
+
+    " CL_DEMO_OUTPUT emits a full HTML document including a <style> block,
+    " whose braces UI5 would read as a binding in the core:HTML `content`
+    " attribute. That is escaped where it is rendered - `t = html` - and only
+    " there: escaping here as well left a visible backslash in front of every
+    " brace (`\{` became `\\\{`, which UI5 unescapes to `\{`), so the CSS of
+    " the output did not parse
+
+  ENDMETHOD.
+
+  METHOD view_display.
+
+    IF as_page = abap_true.
+      render_page( ).
+    ELSE.
+      render_popup( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD render_popup.
+
+    DATA popup TYPE REF TO /kro/cl_ui5_view_builder.
+    popup = /kro/cl_ui5_view_builder=>factory(
+                      )->ele( n = `FragmentDefinition` ns = `core`
+                      )->a( n = `xmlns` v = `sap.m`
+                      )->a( n = `xmlns:core` v = `sap.ui.core`
+                      )->a( n = `xmlns:html` v = `http://www.w3.org/1999/xhtml`
+                      )->ele( `Dialog`
+                      )->a( n = `title` t = title
+                      )->a( n = `icon` v = icon
+                      )->a( n = `stretch` b = stretch
+                      )->a( n = `contentHeight` v = `100%`
+                      )->a( n = `contentWidth` v = `100%`
+                      )->a( n = `afterClose` v = client->_event( `BUTTON_CONFIRM` )
+                      )->ele( `content`
+                      )->ele( `VBox`
+                      )->a( n = `class` v = `sapUiMediumMargin`
+                      )->tag( n = `ZZPLAIN` ns = `html`
+                      )->a( n = `VALUE` v = get_style( )
+                      )->ele( n = `HTML` ns = `core`
+                      )->a( n = `content` t = html
+                      )->end(
+                      )->end(
+                      )->end(
+                      )->ele( `buttons`
+                      )->tag( `Button`
+                      )->a( n = `text` v = `Fullscreen`
+                      )->a( n = `icon` v = `sap-icon://full-screen`
+                      )->a( n = `press` v = client->_event( `TOGGLE_FULLSCREEN` )
+                      )->tag( `Button`
+                      )->a( n = `text` t = button_text_confirm
+                      )->a( n = `press` v = client->_event( `BUTTON_CONFIRM` )
+                      )->a( n = `type` v = `Emphasized` ).
+
+    client->popup_display( popup->stringify( ) ).
+
+  ENDMETHOD.
+
+  METHOD render_page.
+
+    DATA page TYPE REF TO /kro/cl_ui5_view_builder.
+    page = /kro/cl_ui5_view_builder=>factory(
+                     )->ele( n = `View` ns = `mvc`
+                     )->a( n = `xmlns` v = `sap.m`
+                     )->a( n = `xmlns:mvc` v = `sap.ui.core.mvc`
+                     )->a( n = `xmlns:core` v = `sap.ui.core`
+                     )->a( n = `xmlns:html` v = `http://www.w3.org/1999/xhtml`
+                     )->a( n = `displayBlock` v = `true`
+                     )->a( n = `height` v = `100%`
+                     )->ele( `Shell`
+                     )->ele( `Page`
+                     )->a( n = `title` t = title
+                     )->a( n = `navButtonPress` v = client->_event_nav_app_leave( )
+                     )->a( n = `showNavButton` b = abap_true
+                     )->ele( `headerContent`
+                     )->tag( `Button`
+                     )->a( n = `text` v = `Popup`
+                     )->a( n = `icon` v = `sap-icon://exit-full-screen`
+                     )->a( n = `press` v = client->_event( `TOGGLE_FULLSCREEN` )
+                     )->end( ).
+
+    page->ele( `content`
+        )->ele( `VBox`
+        )->a( n = `class` v = `sapUiMediumMargin`
+        )->tag( n = `ZZPLAIN` ns = `html`
+        )->a( n = `VALUE` v = get_style( )
+        )->ele( n = `HTML` ns = `core`
+        )->a( n = `content` t = html ).
+
+    client->view_display( page->stringify( ) ).
+
+  ENDMETHOD.
+
+  METHOD /kro/if_app~main.
+      DATA temp1 TYPE xsdboolean.
+
+    me->client = client.
+
+    IF client->check_on_init( ) IS NOT INITIAL.
+      view_display( ).
+      RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      view_display( ).
+    ENDIF.
+
+    IF client->check_on_event( `TOGGLE_FULLSCREEN` ) IS NOT INITIAL.
+      IF as_page = abap_true.
+        client->view_destroy( ).
+      ELSE.
+        client->popup_destroy( ).
+      ENDIF.
+
+      temp1 = boolc( as_page = abap_false ).
+      as_page = temp1.
+      view_display( ).
+      RETURN.
+    ENDIF.
+
+    IF client->check_on_event( `BUTTON_CONFIRM` ) IS NOT INITIAL.
+      client->popup_destroy( ).
+      client->nav_app_leave( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD get_style.
+
+    result = `<html:style type="text/css">` && |\n| &&
+              `  body {` && |\n| &&
+              `    font-family: Arial;` && |\n| &&
+              `    font-size: 90%;` && |\n| &&
+              `  }` && |\n| &&
+              `  table {` && |\n| &&
+              `    font-family: Arial;` && |\n| &&
+              `    font-size: 90%;` && |\n| &&
+              `  }` && |\n| &&
+              `  caption {` && |\n| &&
+              `    font-family: Arial;` && |\n| &&
+              `    font-size: 90%;` && |\n| &&
+              `    font-weight: bold;` && |\n| &&
+              `    text-align: left;` && |\n| &&
+              `  }` && |\n| &&
+              `  span.heading1 {` && |\n| &&
+              `    font-size: 150%;` && |\n| &&
+              `    color: #000080;` && |\n| &&
+              `    font-weight: bold;` && |\n| &&
+              `  }` && |\n| &&
+              `  span.heading2 {` && |\n| &&
+              `    font-size: 135%;` && |\n| &&
+              `    color: #000080;` && |\n| &&
+              `    font-weight: bold;` && |\n| &&
+              `  }` && |\n| &&
+              `  span.heading3 {` && |\n| &&
+              `    font-size: 120%;` && |\n| &&
+              `    color: #000080;` && |\n| &&
+              `    font-weight: bold;` && |\n| &&
+              `  }` && |\n| &&
+              `  span.heading4 {` && |\n| &&
+              `    font-size: 105%;` && |\n| &&
+              `    color: #000080;` && |\n| &&
+              `    font-weight: bold;` && |\n| &&
+              `  }` && |\n| &&
+              `  span.normal {` && |\n| &&
+              `    font-family: Arial;` && |\n| &&
+              `    font-size: 100%;` && |\n| &&
+              `    color: #000000;` && |\n| &&
+              `    font-weight: normal;` && |\n| &&
+              `    white-space: pre;` && |\n| &&
+              `  }` && |\n| &&
+              `  span.nonprop {` && |\n| &&
+              `    font-family: Courier New;` && |\n| &&
+              `    font-size: 100%;` && |\n| &&
+              `    color: #000000;` && |\n| &&
+              `    font-weight: 400;` && |\n| &&
+              `    white-space: pre;` && |\n| &&
+              `  }` && |\n| &&
+              `  span.nowrap {` && |\n| &&
+              `    white-space: nowrap;` && |\n| &&
+              `  }` && |\n| &&
+              `  span.nprpnwrp {` && |\n| &&
+              `    font-family: Courier New;` && |\n| &&
+              `    font-size: 100%;` && |\n| &&
+              `    color: #000000;` && |\n| &&
+              `    font-weight: 400;` && |\n| &&
+              `    white-space: nowrap;` && |\n| &&
+              `  }` && |\n| &&
+              `  tr.header {` && |\n| &&
+              `    background-color: #D1D1D1;` && |\n| &&
+              `  }` && |\n| &&
+              `  tr.body {` && |\n| &&
+              `    background-color: #F4F4F4;` && |\n| &&
+              `  }` && |\n| &&
+              `  th {` && |\n| &&
+              `    text-align: left;` && |\n| &&
+              `  }` && |\n| &&
+              `  table.nested_table {` && |\n| &&
+              `    border: 1px solid #D1D1D1;` && |\n| &&
+              `    border-collapse: collapse;` && |\n| &&
+              `    padding: 4px;` && |\n| &&
+              `    text-align: center;` && |\n| &&
+              `  }` && |\n| &&
+              `  .nested_table td {` && |\n| &&
+              `    border: 1px solid #D1D1D1;` && |\n| &&
+              `    border-collapse: collapse;` && |\n| &&
+              `    padding: 4px;` && |\n| &&
+              `    text-align: left;` && |\n| &&
+              `  }` && |\n| &&
+              `  .nested_table th {` && |\n| &&
+              `    border: 1px solid #D1D1D1;` && |\n| &&
+              `    border-collapse: collapse;` && |\n| &&
+              `    background-color: #D1D1D1;` && |\n| &&
+              `    padding: 4px;` && |\n| &&
+              `  }` && |\n| &&
+              `</html:style>`.
+
+  ENDMETHOD.
+
+  METHOD /kro/if_popup_result~check_confirmed.
+
+    " shows something only - nothing to decline
+    result = abap_true.
+
+  ENDMETHOD.
+
+  METHOD /kro/if_popup_result~value.
+
+    " no value - the reference stays unbound
+    CLEAR result.
+
+  ENDMETHOD.
+
+  METHOD /kro/if_popup_result~value_string.
+
+    " no single value - empty
+    CLEAR result.
+
+  ENDMETHOD.
+
+ENDCLASS.
