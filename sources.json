@@ -4,53 +4,53 @@
       "abap2UI5": {
         "repository": "abap2UI5/abap2UI5",
         "branch": "702",
-        "commit": "8ca15d79d878982fbadca513d6cfb2affc8e0b45",
-        "tree": "a8d36b8b45fad48e94a0e13a411f1a2a3d735e9a",
-        "date": "2026-11-27T10:32:23Z"
+        "commit": "b554a61d2c0d5f7cb5ae703ed9b94b349e572d94",
+        "tree": "143363992721f2c069c426eeb3396aa6f0b02081",
+        "date": "2026-11-27T11:25:32+00:00"
       },
       "popups": {
         "repository": "abap2UI5-addons/popups",
         "branch": "702",
-        "commit": "4219bb9a9536917b5b708298e2a7500f8169b88f",
-        "tree": "fd208d67cf948d60b37e646e42c6725df96fb38e",
-        "date": "2026-11-27T10:36:50Z"
+        "commit": "b9e6cadd676b05121fba857676d8bb90e4bbccec",
+        "tree": "9265c7ed0d663635b6d08a7d2856d12f4c54f234",
+        "date": "2026-11-27T11:27:46+00:00"
       },
       "layout": {
         "repository": "abap2UI5-addons/layout-management",
         "branch": "702",
-        "commit": "f00ab9d3e24db6adb711602b47d9ae666cb5ca56",
-        "tree": "488f012ab6e8aaf4391d82b3806a1e833741b162",
-        "date": "2026-11-26T13:29:21+00:00"
+        "commit": "685e25fa423844801c0586bbdb81fa68070297cb",
+        "tree": "e09a686584bde993f6269c41357e4149ab5609cf",
+        "date": "2026-11-27T11:25:59+00:00"
       },
       "table-maintenance": {
         "repository": "abap2UI5-addons/table-maintenance",
         "branch": "702",
-        "commit": "048917c84c2138dc6b44b9b93fff0c98ad1c766c",
-        "tree": "523296bd2e44c797fb4c6157e33393c6058b92a9",
-        "date": "2026-11-26T13:29:12+00:00"
+        "commit": "79ee4a1bfb1920b3bfda79ecd03441fdc1434029",
+        "tree": "2b52ccc5fdfd3d2a8fd46aac351e629251506b93",
+        "date": "2026-11-27T11:22:23+00:00"
       }
     },
     "cloud": {
       "abap2UI5": {
         "repository": "abap2UI5/abap2UI5",
         "branch": "cloud",
-        "commit": "5908166ac5327f3ab64dd548ded526f5acd92507",
-        "tree": "a3e08b7d3ed39bc29e878cfe5972af534d639b27",
-        "date": "2026-11-27T10:31:06Z"
+        "commit": "399245ec1b6aff76e48d9d90bb98a7e1592778e1",
+        "tree": "3ada2c9e294ab56e2bd79bb4c26d869a99fb6a8d",
+        "date": "2026-11-27T11:24:57+00:00"
       },
       "popups": {
         "repository": "abap2UI5-addons/popups",
         "branch": "main",
-        "commit": "6d61cca7e70d34a798f1b1ccba8ab2ea7d442944",
-        "tree": "7d51d9294f0e0034bfd9c271f03d1d12d1d1289e",
-        "date": "2026-11-27T11:35:39+01:00"
+        "commit": "d4310347cbee2d76f7e70e30f395f6dea6add657",
+        "tree": "ac5a9b5e46a937c19a14f6e62c275399b7d41682",
+        "date": "2026-11-27T12:26:14+01:00"
       },
       "layout": {
         "repository": "abap2UI5-addons/layout-management",
         "branch": "main",
-        "commit": "d3ad4326bc3d123a1882127d2def1346a5aec0ac",
-        "tree": "a5a785ae230000a740a549f50d6e2f97dae11f06",
-        "date": "2026-11-26T14:28:21+01:00"
+        "commit": "2a91e974b6ea34c8763e7daab5b51d93f08e703b",
+        "tree": "65cc2f3186e842cdae011f019fb929df23cbd44b",
+        "date": "2026-11-27T12:24:57+01:00"
       },
       "table-maintenance": {
         "repository": "abap2UI5-addons/table-maintenance",
