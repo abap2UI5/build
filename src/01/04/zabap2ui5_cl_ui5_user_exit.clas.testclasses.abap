@@ -1,0 +1,971 @@
+CLASS ltcl_test_user_exit DEFINITION DEFERRED.
+" the tests own the protected references the class lookup fills - see setup
+CLASS zabap2ui5_cl_ui5_user_exit DEFINITION LOCAL FRIENDS ltcl_test_user_exit.
+
+" A host's own exit, handed in through set_instance - what a Node host
+" passes in its options instead of a class the lookup would find.
+CLASS ltcl_exit_host DEFINITION FINAL.
+
+  PUBLIC SECTION.
+    INTERFACES zabap2ui5_if_ui5_exit.
+
+ENDCLASS.
+
+
+CLASS ltcl_exit_host IMPLEMENTATION.
+
+  METHOD zabap2ui5_if_ui5_exit~set_config_http_get.
+
+    cs_config-theme = `sap_fiori_3`.
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_ui5_exit~set_config_http_post.
+
+    cs_config-draft_exp_time_in_hours = 7.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+" A host exit that counts how often it is asked, with the two switches a
+" roundtrip reads under test control - and one that raises AFTER it wrote
+" into the config, the shape config_http_post has to hand on unchanged.
+CLASS ltcl_exit_counting DEFINITION FINAL.
+
+  PUBLIC SECTION.
+    INTERFACES zabap2ui5_if_ui5_exit.
+    DATA mv_calls_get  TYPE i.
+    DATA mv_calls_post TYPE i.
+    DATA mv_monitor    TYPE abap_bool.
+    DATA mv_raise      TYPE abap_bool.
+
+ENDCLASS.
+
+
+CLASS ltcl_exit_counting IMPLEMENTATION.
+
+  METHOD zabap2ui5_if_ui5_exit~set_config_http_get.
+    DATA temp1 TYPE zabap2ui5_if_client=>ty_s_name_value.
+
+    mv_calls_get = mv_calls_get + 1.
+    " a header derived from a default the shipped exit seeded first - what
+    " an exit is free to do, and why it gets the whole config
+
+    CLEAR temp1.
+    temp1-n = `X-Seeded-Theme`.
+    temp1-v = cs_config-theme.
+    INSERT temp1 INTO TABLE cs_config-t_security_header.
+
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_ui5_exit~set_config_http_post.
+
+    mv_calls_post = mv_calls_post + 1.
+    cs_config-check_monitor_active     = mv_monitor.
+    cs_config-check_hide_error_details = abap_true.
+    IF mv_raise = abap_true.
+      RAISE EXCEPTION TYPE zabap2ui5_cx_ui5_util_error
+        EXPORTING
+          val = `the exit raised`.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+" A host exit that asks for an expiry the cleanup could not turn into
+" integer seconds - more than 596,523 hours overflowed it
+CLASS ltcl_exit_long_expiry DEFINITION FINAL.
+
+  PUBLIC SECTION.
+    INTERFACES zabap2ui5_if_ui5_exit.
+
+ENDCLASS.
+
+
+CLASS ltcl_exit_long_expiry IMPLEMENTATION.
+
+  METHOD zabap2ui5_if_ui5_exit~set_config_http_get.
+  ENDMETHOD.
+
+  METHOD zabap2ui5_if_ui5_exit~set_config_http_post.
+
+    cs_config-draft_exp_time_in_hours = 2000000.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+" A subclass of the shipped exit that redefines nothing - the shape a host
+" writes to "extend" the defaults. set_instance must install it as the
+" shipped instance, never as a customer exit the shipped body dispatches
+" to (reasoning at set_instance).
+CLASS ltcl_exit_subclass DEFINITION INHERITING FROM zabap2ui5_cl_ui5_user_exit FINAL.
+  PUBLIC SECTION.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+CLASS ltcl_exit_subclass IMPLEMENTATION.
+ENDCLASS.
+
+
+CLASS ltcl_test_user_exit DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    " whatever exit class the SYSTEM has installed, parked for the test's
+    " duration - see setup
+    DATA installed_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+
+    METHODS setup.
+    METHODS teardown.
+
+    METHODS test_defaults_http_get   FOR TESTING RAISING cx_static_check.
+    METHODS test_no_secure_ctx_header FOR TESTING RAISING cx_static_check.
+    METHODS test_defaults_http_post  FOR TESTING RAISING cx_static_check.
+    METHODS test_expiry_clamped      FOR TESTING RAISING cx_static_check.
+    METHODS test_broken_exit_closed  FOR TESTING RAISING cx_static_check.
+    METHODS test_lookup_fail_no_latch FOR TESTING RAISING cx_static_check.
+    METHODS test_set_instance_shipped FOR TESTING RAISING cx_static_check.
+    METHODS test_set_instance_host    FOR TESTING RAISING cx_static_check.
+    METHODS test_set_instance_reset   FOR TESTING RAISING cx_static_check.
+    METHODS test_set_instance_subclass FOR TESTING RAISING cx_static_check.
+    METHODS test_context_app_start   FOR TESTING RAISING cx_static_check.
+    " the POST config: asked once per request, never kept across requests
+    " or outside one, and a raising exit is not remembered
+    METHODS test_post_once_per_request FOR TESTING RAISING cx_static_check.
+    METHODS test_post_new_request_asks FOR TESTING RAISING cx_static_check.
+    METHODS test_post_outside_request  FOR TESTING RAISING cx_static_check.
+    METHODS test_post_raise_not_kept   FOR TESTING RAISING cx_static_check.
+    " the response headers without the page config - only where no
+    " customer code could have changed them
+    METHODS test_headers_default       FOR TESTING RAISING cx_static_check.
+    METHODS test_headers_exit_asked    FOR TESTING RAISING cx_static_check.
+    METHODS test_csp_no_unsafe_eval  FOR TESTING RAISING cx_static_check.
+    METHODS test_csp_wasm_unsafe_eval FOR TESTING RAISING cx_static_check.
+    METHODS test_csp_no_unsafe_inline FOR TESTING RAISING cx_static_check.
+ENDCLASS.
+
+
+CLASS ltcl_test_user_exit IMPLEMENTATION.
+
+  METHOD setup.
+
+    " get_instance( ) binds gi_user_exit to the exit class it FINDS on the
+    " system, and the shipped exit dispatches to it. Every test here asserts
+    " the shipped defaults or an exit it installs itself, so an installed
+    " customer exit changes what they measure - a test failed on a system
+    " with one while passing in CI. The static is owned here and put back in
+    " teardown; it is class-wide, so leaving it changed would leak into
+    " whatever runs next.
+    zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    installed_exit = zabap2ui5_cl_ui5_user_exit=>gi_user_exit.
+    CLEAR zabap2ui5_cl_ui5_user_exit=>gi_user_exit.
+
+  ENDMETHOD.
+
+
+  METHOD teardown.
+
+    " no request stays open behind a test - the memo of config_http_post
+    " is class-wide like the exit itself
+    zabap2ui5_cl_ui5_user_exit=>close_context( ).
+    zabap2ui5_cl_ui5_user_exit=>gi_user_exit = installed_exit.
+
+  ENDMETHOD.
+
+  METHOD test_post_once_per_request.
+
+    " one request, several readers (the CSRF gate, the monitor switch, the
+    " draft cleanup, the error response): the exit - customer code - is
+    " asked once, and every reader gets the same answer
+    DATA ls_first  TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+    DATA ls_second TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+
+    DATA lo_exit TYPE REF TO ltcl_exit_counting.
+    DATA temp2 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    DATA lo_other TYPE REF TO ltcl_exit_counting.
+    DATA temp3 TYPE REF TO zabap2ui5_if_ui5_exit.
+    CREATE OBJECT lo_exit TYPE ltcl_exit_counting.
+    lo_exit->mv_monitor = abap_true.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( lo_exit ).
+
+
+    CLEAR temp2.
+    temp2-method = `POST`.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp2 ).
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_first ).
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_second ).
+
+    cl_abap_unit_assert=>assert_equals( exp = 1
+                                        act = lo_exit->mv_calls_post ).
+    cl_abap_unit_assert=>assert_equals( exp = ls_first
+                                        act = ls_second ).
+    " the exit's answer on top of the seeded defaults, as with the direct call
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = ls_second-check_monitor_active ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = ls_second-check_csrf_active ).
+    cl_abap_unit_assert=>assert_equals( exp = 4
+                                        act = ls_second-draft_exp_time_in_hours ).
+
+    " another exit installed mid-request answers for itself
+
+    CREATE OBJECT lo_other TYPE ltcl_exit_counting.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( lo_other ).
+    CLEAR ls_second.
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_second ).
+    cl_abap_unit_assert=>assert_equals( exp = 1
+                                        act = lo_other->mv_calls_post ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false
+                                        act = ls_second-check_monitor_active ).
+
+
+    CLEAR temp3.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp3 ).
+
+  ENDMETHOD.
+
+  METHOD test_post_new_request_asks.
+
+    " per REQUEST: a stateful session keeps the statics across requests,
+    " and a switch the exit flips has to take effect on the next roundtrip
+    " - whether or not the previous request was ever closed
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+
+    DATA lo_exit TYPE REF TO ltcl_exit_counting.
+    DATA temp4 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    DATA temp5 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    DATA temp6 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    DATA temp7 TYPE REF TO zabap2ui5_if_ui5_exit.
+    CREATE OBJECT lo_exit TYPE ltcl_exit_counting.
+    lo_exit->mv_monitor = abap_true.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( lo_exit ).
+
+
+    CLEAR temp4.
+    temp4-method = `POST`.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp4 ).
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_config ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = ls_config-check_monitor_active ).
+
+    " the next request, the previous one not closed
+    lo_exit->mv_monitor = abap_false.
+
+    CLEAR temp5.
+    temp5-method = `POST`.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp5 ).
+    CLEAR ls_config.
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_config ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false
+                                        act = ls_config-check_monitor_active ).
+    cl_abap_unit_assert=>assert_equals( exp = 2
+                                        act = lo_exit->mv_calls_post ).
+
+    " ... and one that was closed
+    zabap2ui5_cl_ui5_user_exit=>close_context( ).
+    lo_exit->mv_monitor = abap_true.
+
+    CLEAR temp6.
+    temp6-method = `POST`.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp6 ).
+    CLEAR ls_config.
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_config ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = ls_config-check_monitor_active ).
+    cl_abap_unit_assert=>assert_equals( exp = 3
+                                        act = lo_exit->mv_calls_post ).
+
+
+    CLEAR temp7.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp7 ).
+
+  ENDMETHOD.
+
+  METHOD test_post_outside_request.
+
+    " no request open - a caller that is not the HTTP handler, or one that
+    " comes after the request was closed: nothing is kept, every read asks
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+
+    DATA lo_exit TYPE REF TO ltcl_exit_counting.
+    DATA temp8 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    DATA temp9 TYPE REF TO zabap2ui5_if_ui5_exit.
+    CREATE OBJECT lo_exit TYPE ltcl_exit_counting.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( lo_exit ).
+    zabap2ui5_cl_ui5_user_exit=>close_context( ).
+
+    lo_exit->mv_monitor = abap_true.
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_config ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = ls_config-check_monitor_active ).
+
+    lo_exit->mv_monitor = abap_false.
+    CLEAR ls_config.
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_config ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false
+                                        act = ls_config-check_monitor_active ).
+    cl_abap_unit_assert=>assert_equals( exp = 2
+                                        act = lo_exit->mv_calls_post ).
+
+    " a request that was opened and closed leaves nothing behind either
+    lo_exit->mv_monitor = abap_true.
+
+    CLEAR temp8.
+    temp8-method = `POST`.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp8 ).
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_config ).
+    zabap2ui5_cl_ui5_user_exit=>close_context( ).
+    lo_exit->mv_monitor = abap_false.
+    CLEAR ls_config.
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_config ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false
+                                        act = ls_config-check_monitor_active ).
+    cl_abap_unit_assert=>assert_equals( exp = 4
+                                        act = lo_exit->mv_calls_post ).
+
+
+    CLEAR temp9.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp9 ).
+
+  ENDMETHOD.
+
+  METHOD test_post_raise_not_kept.
+
+    " an exit that raises is not an answer: the exception travels on, what
+    " the exit wrote before it raised stays with the caller (the error
+    " response reads check_hide_error_details after its CATCH - a hardening
+    " switch must not be lost to the raise), and the next reader of the
+    " same request asks again
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+    DATA lv_raised TYPE abap_bool.
+
+    DATA lo_exit TYPE REF TO ltcl_exit_counting.
+    DATA temp10 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    DATA temp11 TYPE REF TO zabap2ui5_if_ui5_exit.
+    CREATE OBJECT lo_exit TYPE ltcl_exit_counting.
+    lo_exit->mv_raise = abap_true.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( lo_exit ).
+
+    CLEAR temp10.
+    temp10-method = `POST`.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp10 ).
+
+    TRY.
+        zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_config ).
+      CATCH cx_root.
+        lv_raised = abap_true.
+    ENDTRY.
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = lv_raised ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = ls_config-check_hide_error_details ).
+
+    lo_exit->mv_raise = abap_false.
+    CLEAR ls_config.
+    zabap2ui5_cl_ui5_user_exit=>config_http_post( CHANGING cs_config = ls_config ).
+    cl_abap_unit_assert=>assert_equals( exp = 2
+                                        act = lo_exit->mv_calls_post ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = ls_config-check_csrf_active ).
+
+
+    CLEAR temp11.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp11 ).
+
+  ENDMETHOD.
+
+  METHOD test_headers_default.
+
+    " no customer code installed: the headers of a response that is not the
+    " page are the rows the GET config carries - the same table, without
+    " the config around it
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config.
+
+    DATA li_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp12 TYPE REF TO zabap2ui5_cl_ui5_user_exit.
+    DATA temp13 TYPE REF TO zabap2ui5_if_ui5_exit.
+    li_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    li_exit->set_config_http_get( CHANGING cs_config = ls_config ).
+
+    cl_abap_unit_assert=>assert_not_initial( ls_config-t_security_header ).
+    cl_abap_unit_assert=>assert_equals( exp = ls_config-t_security_header
+                                        act = zabap2ui5_cl_ui5_user_exit=>security_headers( ) ).
+
+    " the shipped exit a host installs itself is the same case
+
+    CREATE OBJECT temp12 TYPE zabap2ui5_cl_ui5_user_exit.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp12 ).
+    cl_abap_unit_assert=>assert_bound( zabap2ui5_cl_ui5_user_exit=>go_shipped ).
+    cl_abap_unit_assert=>assert_equals( exp = ls_config-t_security_header
+                                        act = zabap2ui5_cl_ui5_user_exit=>security_headers( ) ).
+
+
+    CLEAR temp13.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp13 ).
+
+  ENDMETHOD.
+
+  METHOD test_headers_exit_asked.
+
+    " an installed exit is asked through set_config_http_get exactly as
+    " before - with the full defaults seeded, because it may derive a
+    " header from any of them
+    DATA lo_exit TYPE REF TO ltcl_exit_counting.
+    DATA lt_header TYPE zabap2ui5_if_client=>ty_t_name_value.
+    DATA temp1 TYPE xsdboolean.
+    DATA temp3 LIKE sy-subrc.
+    DATA temp2 TYPE xsdboolean.
+    DATA temp4 LIKE sy-subrc.
+    DATA lo_sub TYPE REF TO ltcl_exit_subclass.
+    DATA temp14 TYPE REF TO zabap2ui5_if_ui5_exit.
+    CREATE OBJECT lo_exit TYPE ltcl_exit_counting.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( lo_exit ).
+
+
+    lt_header = zabap2ui5_cl_ui5_user_exit=>security_headers( ).
+
+    cl_abap_unit_assert=>assert_equals( exp = 1
+                                        act = lo_exit->mv_calls_get ).
+
+
+    READ TABLE lt_header WITH KEY n = `X-Seeded-Theme` v = `sap_horizon` TRANSPORTING NO FIELDS.
+    temp3 = sy-subrc.
+    temp1 = boolc( temp3 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp1 ).
+
+
+    READ TABLE lt_header WITH KEY n = `X-Content-Type-Options` TRANSPORTING NO FIELDS.
+    temp4 = sy-subrc.
+    temp2 = boolc( temp4 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp2 ).
+
+    " a subclass of the shipped exit may redefine the method: asked too,
+    " never short-cut (go_shipped is the instance this class created)
+
+    CREATE OBJECT lo_sub TYPE ltcl_exit_subclass.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( lo_sub ).
+    cl_abap_unit_assert=>assert_not_bound( zabap2ui5_cl_ui5_user_exit=>go_shipped ).
+    cl_abap_unit_assert=>assert_not_initial( zabap2ui5_cl_ui5_user_exit=>security_headers( ) ).
+
+
+    CLEAR temp14.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp14 ).
+
+  ENDMETHOD.
+
+
+  METHOD test_defaults_http_get.
+
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config.
+
+    DATA lo_user_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp3 TYPE xsdboolean.
+    lo_user_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    lo_user_exit->set_config_http_get( CHANGING cs_config = ls_config ).
+
+    cl_abap_unit_assert=>assert_equals( exp = `sap_horizon`
+                                        act = ls_config-theme ).
+
+    " the OpenUI5 CDN - except in ABAP Cloud, whose own CSP header refuses
+    " it (reasoning at set_config_http_get)
+    IF zabap2ui5_cl_ui5_util_context=>check_abap_cloud( ) = abap_true.
+      cl_abap_unit_assert=>assert_equals(
+          exp = `https://ui5.sap.com/resources/sap-ui-cachebuster/sap-ui-core.js`
+          act = ls_config-src ).
+    ELSE.
+      cl_abap_unit_assert=>assert_equals(
+          exp = `https://sdk.openui5.org/resources/sap-ui-cachebuster/sap-ui-core.js`
+          act = ls_config-src ).
+    ENDIF.
+
+
+    temp3 = boolc( ls_config-content_security_policy CS `Content-Security-Policy` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp3 ).
+
+    cl_abap_unit_assert=>assert_not_initial( ls_config-t_security_header ).
+
+  ENDMETHOD.
+
+  METHOD test_csp_no_unsafe_eval.
+
+    " the default CSP carries no 'unsafe-eval' - UI5 from 1.84 on needs none -
+    " and the one-line REPLACE the exit interface documents for UI5 1.71 to
+    " 1.82 puts it into script-src, the one directive that needs it
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config.
+
+    DATA lo_user_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp4 TYPE xsdboolean.
+    DATA temp5 TYPE xsdboolean.
+    lo_user_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    lo_user_exit->set_config_http_get( CHANGING cs_config = ls_config ).
+
+    " with its quotes: 'wasm-unsafe-eval' contains the bare word, and is not
+    " the keyword this test is about (see test_csp_wasm_unsafe_eval)
+
+    temp4 = boolc( ls_config-content_security_policy CS `'unsafe-eval'` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp4 ).
+
+    ls_config-content_security_policy = replace( val  = ls_config-content_security_policy
+                                                 sub  = `script-src 'self'`
+                                                 with = `script-src 'self' 'unsafe-eval'` ).
+
+
+    temp5 = boolc( ls_config-content_security_policy CS `script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' ui5.sap.com` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp5 ).
+
+  ENDMETHOD.
+
+  METHOD test_csp_wasm_unsafe_eval.
+
+    " the default script-src lets a script compile WebAssembly - the camera
+    " scanner of sap.ndc and the BarcodeScanner of the custom controls do -
+    " and no other directive carries the keyword
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config.
+
+    DATA lo_user_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp6 TYPE xsdboolean.
+    lo_user_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    lo_user_exit->set_config_http_get( CHANGING cs_config = ls_config ).
+
+
+    temp6 = boolc( ls_config-content_security_policy CS `script-src 'self' 'wasm-unsafe-eval' ui5.sap.com` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp6 ).
+
+    cl_abap_unit_assert=>assert_equals( exp = 1
+                                        act = count( val = ls_config-content_security_policy
+                                                     sub = `wasm-unsafe-eval` ) ).
+
+  ENDMETHOD.
+
+  METHOD test_csp_no_unsafe_inline.
+
+    " the default script-src carries no 'unsafe-inline': the page's one
+    " inline script is allowed by the hash z2ui5_cl_ui5_http_handler adds,
+    " nothing else inline runs. style-src keeps it - UI5 writes style
+    " attributes itself
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config.
+    DATA lt_directive TYPE string_table.
+    DATA lv_checked TYPE i.
+
+    DATA lo_user_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA lv_directive LIKE LINE OF lt_directive.
+        DATA temp7 TYPE xsdboolean.
+        DATA temp8 TYPE xsdboolean.
+    lo_user_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    lo_user_exit->set_config_http_get( CHANGING cs_config = ls_config ).
+
+    SPLIT ls_config-content_security_policy AT `;` INTO TABLE lt_directive.
+
+    LOOP AT lt_directive INTO lv_directive.
+      IF lv_directive CS `script-src`.
+
+        temp7 = boolc( lv_directive CS `'unsafe-inline'` ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp7 ).
+        lv_checked = lv_checked + 1.
+      ELSEIF lv_directive CS `style-src`.
+
+        temp8 = boolc( lv_directive CS `'unsafe-inline'` ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp8 ).
+        lv_checked = lv_checked + 1.
+      ENDIF.
+    ENDLOOP.
+
+    " both directives exist and were looked at - a renamed one must not
+    " turn this into a test of nothing
+    cl_abap_unit_assert=>assert_equals( exp = 2
+                                        act = lv_checked ).
+
+  ENDMETHOD.
+
+  METHOD test_no_secure_ctx_header.
+
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config.
+
+    DATA lo_user_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp9 TYPE xsdboolean.
+    DATA temp5 LIKE sy-subrc.
+    DATA temp10 TYPE xsdboolean.
+    DATA temp6 LIKE sy-subrc.
+    lo_user_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    lo_user_exit->set_config_http_get( CHANGING cs_config = ls_config ).
+
+    " a secure-context-only header must not be in the shipped defaults: the
+    " plain-HTTP on-premise system ignores it and logs a console error on
+    " every app start (reasoning at set_config_http_get). HTTPS installations
+    " add it in their own exit
+
+
+    READ TABLE ls_config-t_security_header WITH KEY n = `Cross-Origin-Opener-Policy` TRANSPORTING NO FIELDS.
+    temp5 = sy-subrc.
+    temp9 = boolc( temp5 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp9 ). "#EC CI_SORTSEQ
+
+    " ... while the one that IS honoured over plain HTTP stays
+
+
+    READ TABLE ls_config-t_security_header WITH KEY n = `Cross-Origin-Resource-Policy` TRANSPORTING NO FIELDS.
+    temp6 = sy-subrc.
+    temp10 = boolc( temp6 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp10 ). "#EC CI_SORTSEQ
+
+  ENDMETHOD.
+
+  METHOD test_defaults_http_post.
+
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+
+    DATA lo_user_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    lo_user_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    lo_user_exit->set_config_http_post( CHANGING cs_config = ls_config ).
+
+    " CSRF on unless an exit opts out, and a positive default expiry
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = ls_config-check_csrf_active ).
+
+    cl_abap_unit_assert=>assert_equals( exp = 4
+                                        act = ls_config-draft_exp_time_in_hours ).
+
+    " the roundtrip monitor is off until an exit switches it on - an
+    " installed monitor must not be able to break abap2UI5 by itself
+    cl_abap_unit_assert=>assert_equals( exp = abap_false
+                                        act = ls_config-check_monitor_active ).
+
+  ENDMETHOD.
+
+  METHOD test_expiry_clamped.
+
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+    DATA lo_user_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp15 TYPE REF TO ltcl_exit_long_expiry.
+    DATA temp1 TYPE REF TO zabap2ui5_if_ui5_exit.
+
+    " an exit that hands back 0 (or a negative) would expire every draft
+    " immediately - the shipped exit clamps it back to its default
+    ls_config-draft_exp_time_in_hours = -1.
+
+
+    lo_user_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    lo_user_exit->set_config_http_post( CHANGING cs_config = ls_config ).
+
+    cl_abap_unit_assert=>assert_equals( exp = 4
+                                        act = ls_config-draft_exp_time_in_hours ).
+
+    " and from above: hours the cleanup cannot turn into integer seconds
+    " come back as the longest expiry the framework accepts
+
+    CREATE OBJECT temp15 TYPE ltcl_exit_long_expiry.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp15 ).
+    CLEAR ls_config.
+
+    temp1 = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    temp1->set_config_http_post( CHANGING cs_config = ls_config ).
+    cl_abap_unit_assert=>assert_equals( exp = zabap2ui5_cl_ui5_srv_draft=>c_max_exp_time_in_hours
+                                        act = ls_config-draft_exp_time_in_hours ).
+
+  ENDMETHOD.
+
+  METHOD test_context_app_start.
+
+    " the exit sees the app the way the handler resolves it: a case change
+    " or an encoded namespace used to bypass an exit keyed on the name
+    DATA temp16 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    DATA temp1 TYPE zabap2ui5_if_client=>ty_t_name_value.
+    DATA temp2 LIKE LINE OF temp1.
+    DATA temp17 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    DATA temp3 TYPE zabap2ui5_if_client=>ty_t_name_value.
+    DATA temp4 LIKE LINE OF temp3.
+    DATA temp18 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    DATA temp5 TYPE zabap2ui5_if_client=>ty_t_name_value.
+    DATA temp6 LIKE LINE OF temp5.
+    DATA temp19 TYPE zabap2ui5_cl_ui5_http_handler=>ty_s_http_req.
+    CLEAR temp16.
+    temp16-path = `/sap/bc/z2ui5`.
+
+    CLEAR temp1.
+
+    temp2-n = `app_start`.
+    temp2-v = ` zcl_my_app `.
+    INSERT temp2 INTO TABLE temp1.
+    temp16-t_params = temp1.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp16 ).
+    cl_abap_unit_assert=>assert_equals( exp = `ZCL_MY_APP`
+                                        act = zabap2ui5_cl_ui5_user_exit=>gs_context-app_start ).
+    cl_abap_unit_assert=>assert_equals( exp = `/sap/bc/z2ui5`
+                                        act = zabap2ui5_cl_ui5_user_exit=>gs_context-path ).
+
+
+    CLEAR temp17.
+
+    CLEAR temp3.
+
+    temp4-n = `app_start`.
+    temp4-v = `%2Fns%2Fzcl_my_app`.
+    INSERT temp4 INTO TABLE temp3.
+    temp17-t_params = temp3.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp17 ).
+    cl_abap_unit_assert=>assert_equals( exp = `/NS/ZCL_MY_APP`
+                                        act = zabap2ui5_cl_ui5_user_exit=>gs_context-app_start ).
+
+    " the launchpad spelling of a namespace - the handler's own
+    " normalisation, so the two cannot drift apart again
+
+    CLEAR temp18.
+
+    CLEAR temp5.
+
+    temp6-n = `app_start`.
+    temp6-v = `-ns-zcl_my_app`.
+    INSERT temp6 INTO TABLE temp5.
+    temp18-t_params = temp5.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp18 ).
+    cl_abap_unit_assert=>assert_equals( exp = `/NS/ZCL_MY_APP`
+                                        act = zabap2ui5_cl_ui5_user_exit=>gs_context-app_start ).
+
+    " a POST carries no app_start - the context says so instead of guessing
+
+    CLEAR temp19.
+    zabap2ui5_cl_ui5_user_exit=>init_context( temp19 ).
+    cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_user_exit=>gs_context-app_start ).
+
+  ENDMETHOD.
+
+  METHOD test_broken_exit_closed.
+
+    " an exit class the lookup named but that implements neither interface
+    " (or cannot be instantiated at all) fails closed: a chained exception
+    " instead of a silent run on the shipped defaults
+    TRY.
+        zabap2ui5_cl_ui5_user_exit=>exit_instantiate( `ZABAP2UI5_CL_UI5_SRV_DRAFT` ).
+        cl_abap_unit_assert=>fail( `a class that is no exit was accepted as one` ).
+      CATCH zabap2ui5_cx_ui5_util_error ##NO_HANDLER.
+    ENDTRY.
+
+    cl_abap_unit_assert=>assert_not_bound( zabap2ui5_cl_ui5_user_exit=>gi_user_exit ).
+
+  ENDMETHOD.
+
+  METHOD test_set_instance_shipped.
+
+    " a host installs the shipped defaults: latched as "no exit installed"
+    " - the answer the lookup gives on a system without an exit - so no
+    " later get_instance( ) asks the repository the runtime does not have
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config.
+
+    DATA temp20 TYPE REF TO zabap2ui5_cl_ui5_user_exit.
+    DATA li_first TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp11 TYPE xsdboolean.
+    DATA li_again TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp12 TYPE xsdboolean.
+    DATA temp21 TYPE REF TO zabap2ui5_if_ui5_exit.
+    CREATE OBJECT temp20 TYPE zabap2ui5_cl_ui5_user_exit.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp20 ).
+
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = zabap2ui5_cl_ui5_user_exit=>gv_exit_class_known ).
+    cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_user_exit=>gv_exit_class ).
+    cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_user_exit=>get_user_exit_class( ) ).
+    cl_abap_unit_assert=>assert_not_bound( zabap2ui5_cl_ui5_user_exit=>gi_user_exit ).
+
+    " the one instance, on every call - the early return of get_instance( )
+
+    li_first = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+
+    temp11 = boolc( li_first = zabap2ui5_cl_ui5_user_exit=>gi_me ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp11 ).
+
+    li_again = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+
+    temp12 = boolc( li_again = li_first ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp12 ).
+
+    li_first->set_config_http_get( CHANGING cs_config = ls_config ).
+    cl_abap_unit_assert=>assert_equals( exp = `sap_horizon`
+                                        act = ls_config-theme ).
+
+
+    CLEAR temp21.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp21 ).
+
+  ENDMETHOD.
+
+  METHOD test_set_instance_host.
+
+    " a host's own exit is installed the way the lookup installs a customer
+    " exit: called through the shipped one, so the defaults are seeded
+    " first and the exit overrides what it wants, and named as the
+    " installed exit
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config.
+    DATA ls_post   TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+
+    DATA lo_host TYPE REF TO ltcl_exit_host.
+    DATA temp13 TYPE xsdboolean.
+    DATA temp14 TYPE xsdboolean.
+    DATA li_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp15 TYPE xsdboolean.
+    DATA temp22 TYPE REF TO zabap2ui5_if_ui5_exit.
+    CREATE OBJECT lo_host TYPE ltcl_exit_host.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( lo_host ).
+
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = zabap2ui5_cl_ui5_user_exit=>gv_exit_class_known ).
+    cl_abap_unit_assert=>assert_equals( exp = zabap2ui5_cl_ui5_util_context=>rtti_get_classname_by_ref( lo_host )
+                                        act = zabap2ui5_cl_ui5_user_exit=>get_user_exit_class( ) ).
+
+    temp13 = boolc( zabap2ui5_cl_ui5_user_exit=>gi_user_exit = lo_host ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp13 ).
+
+    temp14 = boolc( zabap2ui5_cl_ui5_user_exit=>gi_me = lo_host ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp14 ).
+
+
+    li_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    li_exit->set_config_http_get( CHANGING cs_config = ls_config ).
+    li_exit->set_config_http_post( CHANGING cs_config = ls_post ).
+
+    cl_abap_unit_assert=>assert_equals( exp = `sap_fiori_3`
+                                        act = ls_config-theme ).
+    " ... on top of the shipped defaults, not instead of them
+
+    temp15 = boolc( ls_config-content_security_policy CS `Content-Security-Policy` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp15 ).
+    cl_abap_unit_assert=>assert_equals( exp = 7
+                                        act = ls_post-draft_exp_time_in_hours ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true
+                                        act = ls_post-check_csrf_active ).
+
+
+    CLEAR temp22.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp22 ).
+
+  ENDMETHOD.
+
+  METHOD test_set_instance_subclass.
+
+    " a subclass of the shipped exit is the shipped instance: not named as
+    " an installed exit, not dispatched to - a non-redefined method is the
+    " shipped body, which would otherwise call itself through gi_user_exit
+    DATA ls_config TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config.
+    DATA ls_post   TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+
+    DATA lo_sub TYPE REF TO ltcl_exit_subclass.
+    DATA temp16 TYPE xsdboolean.
+    DATA li_exit TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA temp23 TYPE REF TO zabap2ui5_if_ui5_exit.
+    CREATE OBJECT lo_sub TYPE ltcl_exit_subclass.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( lo_sub ).
+
+
+    temp16 = boolc( zabap2ui5_cl_ui5_user_exit=>gi_me = lo_sub ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp16 ).
+    cl_abap_unit_assert=>assert_not_bound( zabap2ui5_cl_ui5_user_exit=>gi_user_exit ).
+    cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_user_exit=>get_user_exit_class( ) ).
+
+    " returns with the defaults - the recursion would never get here
+
+    li_exit = zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    li_exit->set_config_http_get( CHANGING cs_config = ls_config ).
+    li_exit->set_config_http_post( CHANGING cs_config = ls_post ).
+    cl_abap_unit_assert=>assert_equals( exp = `sap_horizon`
+                                        act = ls_config-theme ).
+    cl_abap_unit_assert=>assert_equals( exp = 4
+                                        act = ls_post-draft_exp_time_in_hours ).
+
+
+    CLEAR temp23.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp23 ).
+
+  ENDMETHOD.
+
+  METHOD test_set_instance_reset.
+
+    " an unbound reference restores the lookup: nothing latched, nothing
+    " bound, and the next get_instance( ) asks the repository again
+    DATA temp24 TYPE REF TO ltcl_exit_host.
+    DATA temp25 TYPE REF TO zabap2ui5_if_ui5_exit.
+    DATA lv_answered TYPE abap_bool.
+    CREATE OBJECT temp24 TYPE ltcl_exit_host.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp24 ).
+
+    CLEAR temp25.
+    zabap2ui5_cl_ui5_user_exit=>set_instance( temp25 ).
+
+    cl_abap_unit_assert=>assert_equals( exp = abap_false
+                                        act = zabap2ui5_cl_ui5_user_exit=>gv_exit_class_known ).
+    cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_user_exit=>gv_exit_class ).
+    cl_abap_unit_assert=>assert_not_bound( zabap2ui5_cl_ui5_user_exit=>gi_me ).
+    cl_abap_unit_assert=>assert_not_bound( zabap2ui5_cl_ui5_user_exit=>gi_user_exit ).
+
+    " the same contract test_lookup_fail_no_latch pins: latched only when
+    " the lookup answered
+
+    TRY.
+        zabap2ui5_cl_ui5_user_exit=>exit_class_lookup( ).
+        lv_answered = abap_true.
+      CATCH cx_root.
+        lv_answered = abap_false.
+    ENDTRY.
+    zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+    cl_abap_unit_assert=>assert_bound( zabap2ui5_cl_ui5_user_exit=>gi_me ).
+    cl_abap_unit_assert=>assert_equals( exp = lv_answered
+                                        act = zabap2ui5_cl_ui5_user_exit=>gv_exit_class_known ).
+
+  ENDMETHOD.
+
+  METHOD test_lookup_fail_no_latch.
+
+    " the class name is remembered only when the repository answered. A
+    " lookup that raised - a transient repository error on a system, and
+    " in the transpiled runtime this suite runs on there is no
+    " SEO_INTERFACE_IMPLEM_GET_ALL at all - leaves gv_exit_class_known
+    " unset, so the next request asks again instead of running on "no exit
+    " installed" for the rest of a sticky session. Which of the two
+    " branches this runtime takes is asked of the lookup itself first;
+    " both are the contract, and one of them runs on every target
+    DATA lv_answered TYPE abap_bool.
+    DATA li_first LIKE zabap2ui5_cl_ui5_user_exit=>gi_me.
+    DATA temp17 TYPE xsdboolean.
+    TRY.
+        zabap2ui5_cl_ui5_user_exit=>exit_class_lookup( ).
+        lv_answered = abap_true.
+      CATCH cx_root.
+        lv_answered = abap_false.
+    ENDTRY.
+
+    CLEAR zabap2ui5_cl_ui5_user_exit=>gi_me.
+    CLEAR zabap2ui5_cl_ui5_user_exit=>gv_exit_class.
+    CLEAR zabap2ui5_cl_ui5_user_exit=>gv_exit_class_known.
+
+    zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+
+    cl_abap_unit_assert=>assert_equals( exp = lv_answered
+                                        act = zabap2ui5_cl_ui5_user_exit=>gv_exit_class_known ).
+    " and the public question goes back to the repository while nothing
+    " is latched - never to a remembered empty answer
+    cl_abap_unit_assert=>assert_equals( exp = zabap2ui5_cl_ui5_user_exit=>gv_exit_class
+                                        act = zabap2ui5_cl_ui5_user_exit=>get_user_exit_class( ) ).
+
+    " the next get_instance( ) asks again while nothing is latched - it
+    " used to return the bound instance without a lookup - and keeps the
+    " one instance either way
+
+    li_first = zabap2ui5_cl_ui5_user_exit=>gi_me.
+    zabap2ui5_cl_ui5_user_exit=>get_instance( ).
+
+    temp17 = boolc( zabap2ui5_cl_ui5_user_exit=>gi_me = li_first ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp17 ).
+    cl_abap_unit_assert=>assert_equals( exp = lv_answered
+                                        act = zabap2ui5_cl_ui5_user_exit=>gv_exit_class_known ).
+
+  ENDMETHOD.
+
+ENDCLASS.

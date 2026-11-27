@@ -1,0 +1,16 @@
+INTERFACE zabap2ui5_if_app PUBLIC.
+  INTERFACES if_serializable_object.
+
+  CONSTANTS version TYPE string VALUE `1.151.0`.
+  CONSTANTS origin  TYPE string VALUE `https://github.com/abap2UI5/abap2UI5`.
+  CONSTANTS authors TYPE string VALUE `https://github.com/abap2UI5/abap2UI5/graphs/contributors`.
+  CONSTANTS license TYPE string VALUE `MIT`.
+
+  DATA id_draft TYPE string.
+  DATA id_app   TYPE string.
+
+  METHODS main
+    IMPORTING
+      client TYPE REF TO zabap2ui5_if_client.
+
+ENDINTERFACE.
