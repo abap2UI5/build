@@ -7,15 +7,23 @@ name: build
 #
 #   sources   takes src/ of abap2UI5 and the addons (popups, layout,
 #             table-maintenance) and abap2UI5's rename tooling (build.mjs sync) and commits what changed
-#             to main. On a pull request nothing is synced: the head is built
+#             - locally; push-sources pushes that commit to main. On a pull
+#             request nothing is synced: the head is built
 #   lint      per folder: abaplint and the abap2UI5-linter, each with the
 #             config that points at that folder only
-#   deliver   per delivery: build.mjs deliver, then the branch is pushed -
-#             one commit per change, parented on the previous one. abaplint
-#             runs on the result with the branch's own abaplint.jsonc; the
-#             branch is pushed either way, so its badge shows its state, and
-#             issues fail the job after the push. On a pull request the
-#             delivery is built and not pushed
+#   deliver   per delivery: build.mjs deliver. abaplint runs on the result
+#             with the branch's own abaplint.jsonc; the result is handed to
+#             publish either way, so the branch's badge shows its state, and
+#             issues fail the job. On a pull request the delivery is built
+#             and not pushed
+#   publish   per delivery: the branch is pushed - one commit per change,
+#             parented on the previous one
+#
+# The jobs that run npm and the code of a pull request (sources, lint,
+# deliver) hold a read-only token and keep no credentials in .git/config.
+# What they produced travels as an artifact to push-sources and publish, the
+# only jobs with contents: write: they run git and nothing else, and never
+# for a pull request.
 #
 # A scheduled run that finds the sources unchanged stops after sources.
 
@@ -39,13 +47,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
     outputs:
       sha: ${{ steps.state.outputs.sha }}
       changed: ${{ steps.state.outputs.changed }}
       matrix: ${{ steps.state.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
@@ -64,7 +74,10 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git commit -q -m "sync" -m "$(node build.mjs sources)"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          # the one new commit, for push-sources - it has the parent already
+          mkdir -p "$RUNNER_TEMP/sync"
+          git branch -f synced HEAD
+          git bundle create "$RUNNER_TEMP/sync/sync.bundle" HEAD~1..synced
           echo "SYNCED=true" >> "$GITHUB_ENV"
       - name: State
         id: state
@@ -75,12 +88,50 @@ jobs:
             echo "matrix=$(node build.mjs matrix)"
           } >> "$GITHUB_OUTPUT"
       - run: npm test
+      - name: Hand the sync commit over
+        if: env.SYNCED == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sync
+          path: ${{ runner.temp }}/sync/sync.bundle
+          if-no-files-found: error
+          retention-days: 1
+
+  # pushes the commit sources made - the same commit, so its sha is the one
+  # lint and deliver check out. No npm here.
+  push-sources:
+    needs: sources
+    if: needs.sources.outputs.changed == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sync
+          path: ${{ runner.temp }}/sync
+      - name: Push the sync commit
+        env:
+          SHA: ${{ needs.sources.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch -q "$RUNNER_TEMP/sync/sync.bundle" synced:refs/sync/synced
+          test "$(git rev-parse refs/sync/synced)" = "$SHA"
+          test "$(git rev-parse refs/sync/synced~1)" = "$(git rev-parse HEAD)"
+          git push origin "$SHA:refs/heads/${GITHUB_REF_NAME}"
 
   lint:
-    needs: sources
-    if: github.event_name != 'schedule' || needs.sources.outputs.changed == 'true'
+    needs: [sources, push-sources]
+    # push-sources is skipped when nothing was synced, and on a pull request
+    if: >-
+      !cancelled() && needs.sources.result == 'success' && needs.push-sources.result != 'failure'
+      && (github.event_name != 'schedule' || needs.sources.outputs.changed == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -89,6 +140,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.sources.outputs.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
@@ -100,11 +152,12 @@ jobs:
         run: npx abap2ui5lint --config "abap2ui5lint.${{ matrix.folder }}.jsonc"
 
   deliver:
-    needs: [sources, lint]
+    needs: [sources, push-sources, lint]
+    if: ${{ !cancelled() && needs.lint.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -119,6 +172,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.sources.outputs.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
@@ -129,14 +183,87 @@ jobs:
         id: build
         run: node build.mjs deliver "$NAME" "$VARIANT"
 
-      - name: Push ${{ matrix.delivery.branch }}
+      # the delivery as built (.abapgit.xml and the other dot files with it)
+      # and the source line of its commit message, for publish
+      - name: Pack ${{ matrix.delivery.branch }}
         if: github.event_name != 'pull_request'
         env:
-          BRANCH: ${{ steps.build.outputs.branch }}
           OUT: ${{ steps.build.outputs.out }}
           SOURCE: ${{ steps.build.outputs.source }}
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/delivery"
+          tar -C "$OUT" -czf "$RUNNER_TEMP/delivery/tree.tgz" .
+          printf '%s\n' "$SOURCE" > "$RUNNER_TEMP/delivery/source.txt"
+      - name: Hand ${{ matrix.delivery.branch }} over
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: delivery-${{ matrix.delivery.branch }}
+          path: ${{ runner.temp }}/delivery
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: abaplint
+        env:
+          BRANCH: ${{ steps.build.outputs.branch }}
+          ISSUES: ${{ steps.build.outputs.issues }}
+        run: |
+          echo "abaplint on $BRANCH: $ISSUES issue(s)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$ISSUES" != "0" ]; then
+            echo "::error::abaplint found $ISSUES issue(s) on $BRANCH - see the build step"
+            exit 1
+          fi
+
+  # Pushes each delivery deliver handed over - also one with abaplint issues,
+  # whose deliver leg is red: the branch's badge says so. A delivery whose
+  # build failed handed nothing over and keeps its branch as it is.
+  publish:
+    needs: [sources, deliver]
+    # deliver is skipped as a whole when lint failed or nothing was synced on
+    # a schedule; a red leg (abaplint issues) still hands its delivery over
+    if: >-
+      !cancelled() && needs.sources.result == 'success' && github.event_name != 'pull_request'
+      && (needs.deliver.result == 'success' || needs.deliver.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        delivery: ${{ fromJSON(needs.sources.outputs.matrix) }}
+    concurrency:
+      group: publish-${{ matrix.delivery.branch }}
+      cancel-in-progress: false
+    env:
+      NAME: ${{ matrix.delivery.name }}
+      VARIANT: ${{ matrix.delivery.variant }}
+      BRANCH: ${{ matrix.delivery.branch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.sources.outputs.sha }}
+      - name: The delivery deliver built
+        id: delivery
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: delivery-${{ matrix.delivery.branch }}
+          path: ${{ runner.temp }}/delivery
+      - name: Push ${{ matrix.delivery.branch }}
+        env:
+          HANDED: ${{ steps.delivery.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$HANDED" != "success" ]; then
+            echo "::warning::$BRANCH was not built - the branch keeps its previous state"
+            exit 0
+          fi
+          OUT="$RUNNER_TEMP/out"
+          mkdir -p "$OUT"
+          tar -C "$OUT" -xzf "$RUNNER_TEMP/delivery/tree.tgz"
+          SOURCE=$(cat "$RUNNER_TEMP/delivery/source.txt")
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git fetch origin --depth 1 "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
@@ -152,14 +279,3 @@ jobs:
           commit=$(git commit-tree "$tree" ${parent:+-p "$parent"} -m "build: $NAME $VARIANT" -m "$SOURCE")
           git push origin "$commit:refs/heads/$BRANCH"
           echo "$BRANCH: pushed $commit"
-
-      - name: abaplint
-        env:
-          BRANCH: ${{ steps.build.outputs.branch }}
-          ISSUES: ${{ steps.build.outputs.issues }}
-        run: |
-          echo "abaplint on $BRANCH: $ISSUES issue(s)" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$ISSUES" != "0" ]; then
-            echo "::error::abaplint found $ISSUES issue(s) on $BRANCH - see the build step"
-            exit 1
-          fi
