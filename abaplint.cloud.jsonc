@@ -1,7 +1,8 @@
-// src/cloud only - src/ of abap2UI5's branch cloud, ABAP Cloud.
+// src/cloud only - abap2UI5 (branch cloud) and the addons (main), ABAP Cloud.
 // The rules of abap2UI5's abap_cloud.jsonc; checked against the released
 // APIs, plus the three interfaces of the HTTP service handler in src/03
-// (if_http_service_extension and its request and response).
+// (if_http_service_extension and its request and response) and abap_boolean,
+// which the layout addon's structures use.
 {
   "global": {
     "files": "/src/cloud/**/*.*"
@@ -16,6 +17,11 @@
       "url": "https://github.com/open-abap/open-abap-core",
       "folder": "/deps/open-abap-core",
       "files": "/src/**/{if_http_service_extension,if_web_http_request,if_web_http_response}.*"
+    },
+    {
+      "url": "https://github.com/abapedia/steampunk-2305-api",
+      "folder": "/deps/steampunk-2305-api",
+      "files": "/src/**/abap_boolean.*"
     }
   ],
   "syntax": {

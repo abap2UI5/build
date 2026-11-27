@@ -1,0 +1,202 @@
+CLASS z2ui5_cl_layo_sample_01 DEFINITION
+  PUBLIC
+  CREATE PUBLIC.
+
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+
+    TYPES:
+      BEGIN OF ty_s_tab,
+        names             TYPE string,
+        icon              TYPE z2ui5_xml_s_icon,
+        generictag        TYPE z2ui5_xml_s_generictag,
+        progressindicator TYPE z2ui5_xml_s_progressind,
+        radialmicrochart  TYPE z2ui5_xml_s_radialchart,
+        statusindicator   TYPE z2ui5_xml_s_statusind,
+        selkz             TYPE abap_bool,
+      END OF ty_s_tab.
+    TYPES ty_t_table TYPE STANDARD TABLE OF ty_s_tab WITH EMPTY KEY.
+
+    " abap2ui5lint-disable-next-line unbound-public-attribute -- z2ui5_cl_layo_xml_builder=>xml_build_table( ) binds it, handed over as REF #( mt_table )
+    DATA mt_table  TYPE ty_t_table.
+    DATA mo_layout TYPE REF TO z2ui5_cl_layo_manager.
+
+  PROTECTED SECTION.
+    DATA client            TYPE REF TO z2ui5_if_client.
+
+    METHODS on_init.
+    METHODS on_event.
+    METHODS render_main.
+    METHODS get_data.
+    METHODS init_layout.
+    METHODS on_after_navigation.
+
+  PRIVATE SECTION.
+
+ENDCLASS.
+
+
+CLASS z2ui5_cl_layo_sample_01 IMPLEMENTATION.
+
+  METHOD on_event.
+
+    CASE client->get( )-event.
+
+      WHEN 'ROW_SELECT'.
+
+        mo_layout->set_selkz( t_event_arg = client->get( )-t_event_arg
+                               data        = REF #( mt_table ) ).
+
+      WHEN 'BACK'.
+        client->nav_app_leave( ).
+
+      WHEN OTHERS.
+
+        " the settings button, and a click on a column header (i_col_sort)
+        z2ui5_cl_layo_pop=>on_event_layout( client = client
+                                            layout = mo_layout
+                                            data   = REF #( mt_table ) ).
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+  METHOD on_init.
+
+    get_data( ).
+
+    init_layout( ).
+
+    render_main( ).
+  ENDMETHOD.
+
+  METHOD render_main.
+
+    DATA(view) = z2ui5_cl_ui5_view_builder=>factory(
+                     )->ele( n = `View` ns = `mvc`
+                     )->a( n = `xmlns` v = `sap.m`
+                     )->a( n = `xmlns:mvc` v = `sap.ui.core.mvc`
+                     " abap2ui5lint-disable unused-namespace-declaration -- z2ui5_cl_layo_xml_builder writes controls with these prefixes into this view
+                     )->a( n = `xmlns:core` v = `sap.ui.core`
+                     )->a( n = `xmlns:form` v = `sap.ui.layout.form`
+                     )->a( n = `xmlns:mchart` v = `sap.suite.ui.microchart`
+                     )->a( n = `xmlns:si` v = `sap.suite.ui.commons.statusindicator`
+                     " abap2ui5lint-enable unused-namespace-declaration
+                     )->a( n = `displayBlock` b = abap_true
+                     )->a( n = `height` v = `100%`
+                     )->ele( `Shell` ).
+
+    DATA(page) = view->ele( `Page`
+                     )->a( n = `title` v = `Layout`
+                     )->a( n = `navButtonPress` v = client->_event( 'BACK' )
+                     )->a( n = `showNavButton` b = client->check_app_prev_stack( )
+                     )->a( n = `class` v = `sapUiContentPadding` ).
+
+    z2ui5_cl_layo_xml_builder=>xml_build_table( i_data     = REF #( mt_table )
+                                                i_xml      = page
+                                                i_client   = client
+                                                i_layout   = mo_layout
+                                                i_col_sort = abap_true ).
+
+    client->view_display( view->stringify( ) ).
+
+  ENDMETHOD.
+
+  METHOD z2ui5_if_app~main.
+    me->client = client.
+
+    IF client->check_on_init( ).
+      on_init( ).
+    ELSEIF client->check_on_navigated( ).
+      on_after_navigation( ).
+    ELSEIF client->check_on_event( ).
+      on_event( ).
+    ENDIF.
+
+    " the table again: the restored draft holds the layout's reference to a
+    " copy of it (z2ui5_cl_layo_manager=>set_data)
+    mo_layout->sort( data = REF #( mt_table ) ).
+
+  ENDMETHOD.
+
+  METHOD get_data.
+
+    mt_table = VALUE #( ( names             = 'Viktor'
+                          icon              = VALUE #( src       = 'sap-icon://customer'
+                                                       icon_size = '2rem' )
+                          generictag        = VALUE #( text   = 'Viktor'
+                                                       status = 'Warning'
+                                                       design = 'StatusIconHidden' )
+                          progressindicator = VALUE #( percentvalue = '70'
+                                                       state        = 'Warning'  )
+                          radialmicrochart  = VALUE #( percentage            = '70'
+                                                       valuecolor            = 'Critical'
+                                                       radialmicrochart_size = 'S' )
+                          statusindicator   = VALUE #( value                = '70'
+                                                       fillcolor_error      = '100'
+                                                       fillcolor_critical   = '80'
+                                                       fillcolor_good       = '40'
+                                                       shapeid              = 'tool'
+                                                       statusindicator_size = 'Medium' ) )
+                        ( names             = 'Lars'
+                          icon              = VALUE #( src       = 'sap-icon://end-user-experience-monitoring'
+                                                       icon_size = '2rem' )
+                          generictag        = VALUE #( text   = 'Lars'
+                                                       status = 'Success'
+                                                       design = 'StatusIconHidden' )
+                          progressindicator = VALUE #( percentvalue = '20'
+                                                       state        = 'Success'  )
+                          radialmicrochart  = VALUE #( percentage            = '20'
+                                                       valuecolor            = 'Good'
+                                                       radialmicrochart_size = 'S' )
+                          statusindicator   = VALUE #( value                = '20'
+                                                       fillcolor_error      = '100'
+                                                       fillcolor_critical   = '80'
+                                                       fillcolor_good       = '40'
+                                                       shapeid              = 'tool'
+                                                       statusindicator_size = 'Medium' ) ) ).
+
+  ENDMETHOD.
+
+  METHOD init_layout.
+
+    IF mo_layout IS BOUND.
+      RETURN.
+    ENDIF.
+
+    DATA(class) = cl_abap_classdescr=>get_class_name( me ).
+    class = shift_left( val = class sub = `\CLASS=` ).
+
+    " the draft table's name behind this class's own prefix (Z2UI5_, or the
+    " one a namespace rename gave it) - the rename rewrites the class name,
+    " never a literal
+    DATA(table) = substring_before( val = class
+                                    sub = `CL_LAYO_` ) && `T_01`.
+
+    mo_layout = z2ui5_cl_layo_manager=>factory( control  = z2ui5_cl_layo_manager=>m_table
+                                                data     = REF #( mt_table )
+                                                handle01 = class
+                                                handle02 = table
+                                                handle03 = ''
+                                                handle04 = '' ).
+
+  ENDMETHOD.
+
+  METHOD on_after_navigation.
+
+    TRY.
+
+        DATA(app) = CAST z2ui5_cl_layo_pop( client->get_app_prev( ) ).
+        mo_layout = app->mo_layout.
+
+        render_main( ).
+
+      CATCH cx_root.
+        " not back from the layout popup (e.g. a restored draft) - the
+        " view still has to be displayed
+        render_main( ).
+    ENDTRY.
+
+  ENDMETHOD.
+
+ENDCLASS.

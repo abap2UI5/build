@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { branchOf, deriveNames, matrix } from "../build.mjs";
+import { COMPONENTS, VARIANTS, branchOf, deriveNames, matrix } from "../build.mjs";
 
 test("a customer name", () => {
   const n = deriveNames("ZABAP2UI5");
@@ -52,4 +52,10 @@ test("the deliveries: every name in every variant, one branch each", () => {
 test("deliveries.json holds valid names and no branch twice", () => {
   const m = matrix(JSON.parse(readFileSync(new URL("../deliveries.json", import.meta.url), "utf8")));
   assert.equal(new Set(m.map((d) => d.branch)).size, m.length);
+});
+
+test("the components: one folder each, a branch for every variant", () => {
+  assert.deepEqual(COMPONENTS.map((c) => c.id), ["abap2UI5", "popups", "layout", "table-maintenance"]);
+  assert.deepEqual(COMPONENTS.map((c) => c.folder), ["01", "02", "03", "04"]);
+  for (const c of COMPONENTS) assert.deepEqual(Object.keys(c.branch), Object.keys(VARIANTS));
 });

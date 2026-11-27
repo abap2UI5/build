@@ -1,5 +1,12 @@
-// src/standard only - src/ of abap2UI5's branch 702, the downported sources.
-// The rules and the dependency of abap2UI5's abap_702.jsonc.
+// src/standard only - the downported sources (branch 702) of abap2UI5 and
+// the addons. The rules and the dependency of abap2UI5's abap_702.jsonc.
+//
+// The excludes of "downport" are findings in the addons' 702 branches, which
+// are not edited here - to be fixed there, then removed here:
+//   layout: five classes carry the language version "ABAP for Cloud
+//     Development" in their .clas.xml (cl_layo_sample_03/05/06/07, cl_layo_xml_builder)
+//   table-maintenance: cl_tm_001 has two SELECTs with INTO after ORDER BY
+// The patterns hold for a renamed delivery as well (no prefix in them).
 {
   "global": {
     "files": "/src/standard/**/*.*"
@@ -16,7 +23,13 @@
     "errorNamespace": "."
   },
   "rules": {
-    "downport": true,
+    "downport": {
+      "exclude": [
+        "cl_layo_sample_0[3567]\\.clas\\.xml$",
+        "cl_layo_xml_builder\\.clas\\.xml$",
+        "cl_tm_001\\.clas\\.abap$"
+      ]
+    },
     "begin_end_names": true,
     "check_ddic": true,
     "check_include": true,
