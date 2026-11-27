@@ -108,7 +108,7 @@ z2ui5_cl_layo_xml_builder=>xml_build_table( i_data   = temp1
 
   METHOD get_data.
 
-    SELECT * FROM z2ui5_t_11 ORDER BY PRIMARY KEY INTO TABLE mt_table UP TO 10 ROWS ##SUBRC_OK.
+    SELECT * FROM z2ui5_t_11 UP TO 10 ROWS INTO TABLE mt_table ORDER BY PRIMARY KEY   ##SUBRC_OK.
 
   ENDMETHOD.
 
