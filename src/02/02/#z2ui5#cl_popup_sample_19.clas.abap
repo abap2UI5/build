@@ -231,38 +231,37 @@ CLASS /z2ui5/cl_popup_sample_19 IMPLEMENTATION.
 
 
   METHOD /z2ui5/if_app~main.
-          DATA temp6 TYPE REF TO /z2ui5/cl_popup_get_range.
-          DATA lo_value_help LIKE temp6.
+      DATA temp6 TYPE REF TO /z2ui5/if_popup_result.
+      DATA popup LIKE temp6.
+        DATA temp7 TYPE REF TO /z2ui5/cl_popup_context=>ty_t_range.
+        DATA lr_range LIKE temp7.
 
     me->client = client.
 
-    IF client->check_on_init( ) IS NOT INITIAL.
+    IF client->check_on_nav_back( ) IS NOT INITIAL.
 
+      " back from the range popup: every popup hands its result over through
+      " z2ui5_if_popup_result, value( ) is a reference to the range
+
+      temp6 ?= client->get_app_prev( ).
+
+      popup = temp6.
+      IF popup->check_confirmed( ) = abap_true.
+
+        temp7 ?= popup->value( ).
+
+        lr_range = temp7.
+        mt_range = lr_range->*.
+        mt_token = /z2ui5/cl_popup_context=>filter_get_token_t_by_range_t( mt_range ).
+        set_data( ).
+      ENDIF.
       view_display( ).
-      RETURN.
-    ENDIF.
 
-    IF client->get( )-check_on_navigated = abap_true.
-      TRY.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " the first start, or a restored draft
+      view_display( ).
 
-          temp6 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
-
-          lo_value_help = temp6.
-
-          IF lo_value_help->result( )-check_confirmed = abap_false.
-            RETURN.
-          ENDIF.
-
-          mt_range = lo_value_help->result( )-t_range.
-          mt_token = /z2ui5/cl_popup_context=>filter_get_token_t_by_range_t( mt_range ).
-          set_data( ).
-
-        CATCH cx_root ##NO_HANDLER.
-      ENDTRY.
-      RETURN.
-    ENDIF.
-
-    IF client->get( )-event IS NOT INITIAL.
+    ELSEIF client->get( )-event IS NOT INITIAL.
       on_event( ).
     ENDIF.
 

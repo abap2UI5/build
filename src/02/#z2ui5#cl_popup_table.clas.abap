@@ -142,6 +142,8 @@ CLASS /z2ui5/cl_popup_table IMPLEMENTATION.
       r_result->title = i_title.
     ENDIF.
     r_result->mr_tab = /z2ui5/cl_popup_context=>conv_copy_ref_data( i_tab ).
+    " the table only shows rows, it has no selection: the row stays initial
+    " - kept as typed for the callers that read ms_result-row or value( )
     CREATE DATA r_result->ms_result-row LIKE LINE OF i_tab.
 
     r_result->growing          = i_growing.
@@ -183,6 +185,11 @@ CLASS /z2ui5/cl_popup_table IMPLEMENTATION.
     me->client = client.
 
     IF client->check_on_init( ) IS NOT INITIAL.
+      display( ).
+      RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft (browser Forward, a reload): the popup went with
+      " the page - show it again
       display( ).
       RETURN.
     ENDIF.

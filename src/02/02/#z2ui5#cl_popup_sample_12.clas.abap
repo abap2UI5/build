@@ -61,20 +61,9 @@ CLASS /z2ui5/cl_popup_sample_12 IMPLEMENTATION.
 
 
   METHOD on_navigation.
-        DATA lo_prev TYPE REF TO /z2ui5/if_app.
-        DATA temp1 TYPE REF TO /z2ui5/cl_popup_pdf.
-        DATA lv_text TYPE /z2ui5/cl_popup_pdf=>ty_s_result-text.
 
-    TRY.
-
-        lo_prev = client->get_app( client->get( )-s_draft-id_prev_app ).
-
-        temp1 ?= lo_prev.
-
-        lv_text = temp1->result( )-text ##NEEDED.
-        client->message_box_display( `pdf viewer closed` ).
-      CATCH cx_root ##NO_HANDLER.
-    ENDTRY.
+    " the PDF popup only shows the file - it has no value to read
+    client->message_box_display( `pdf viewer closed` ).
 
   ENDMETHOD.
 
@@ -121,10 +110,13 @@ CLASS /z2ui5/cl_popup_sample_12 IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->get( )-check_on_navigated = abap_true.
-
+    IF client->check_on_navigated( ) IS NOT INITIAL.
       view_display( ).
-      on_navigation( ).
+      " true only on the way back from the popup - not on the first start
+      " or on a restore, where get_app_prev( ) is no popup
+      IF client->check_on_nav_back( ) IS NOT INITIAL.
+        on_navigation( ).
+      ENDIF.
       RETURN.
     ENDIF.
 

@@ -629,21 +629,18 @@ CLASS /z2ui5/cl_ui5_frontend IMPLEMENTATION.
 
 
   METHOD set_opt_int.
+      DATA temp27 TYPE i.
 
     " a duration the app left alone must not appear in the payload - UI5's
     " own default has to win. A non-numeric value is dropped rather than
     " converted, so a stray string can never reach MessageToast as NaN.
-    " Condense first: `1 000` would pass a check that allows blanks and then
-    " dump in CONV, and a blanks-only value must count as left-alone.
-    " Nine digits at most: a longer digit string is past the integer range
-    " and CONV raised CX_SY_CONVERSION_OVERFLOW out of a method whose only
-    " CATCH is the ajson one - dropped like a non-numeric value instead
-    DATA lv_val TYPE string.
-      DATA temp27 TYPE i.
-    lv_val = condense( val ).
-    IF lv_val IS NOT INITIAL AND lv_val CO `0123456789` AND strlen( lv_val ) <= 9.
+    " A blanks-only value counts as left-alone, and a digit string past the
+    " integer range is dropped like a non-numeric value: CONV raised
+    " CX_SY_CONVERSION_OVERFLOW out of a method whose only CATCH is the
+    " ajson one (check_int_digits)
+    IF /z2ui5/cl_ui5_util_context=>check_int_digits( val ) = abap_true.
 
-      temp27 = lv_val.
+      temp27 = condense( val ).
       json->set_integer( iv_path = |/{ name }|
                          iv_val  = temp27 ).
     ENDIF.

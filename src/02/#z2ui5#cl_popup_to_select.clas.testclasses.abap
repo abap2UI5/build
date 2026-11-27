@@ -253,6 +253,7 @@ CLASS ltcl_test_roundtrip DEFINITION FINAL
     METHODS test_confirm_selected_row FOR TESTING RAISING cx_static_check.
     METHODS test_cancel               FOR TESTING RAISING cx_static_check.
     METHODS test_search_filters       FOR TESTING RAISING cx_static_check.
+    METHODS test_multi_keeps_selection FOR TESTING RAISING cx_static_check.
 
 ENDCLASS.
 
@@ -418,6 +419,76 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD test_multi_keeps_selection.
+
+    " a row ticked before a search is still ticked after it, and confirmed
+    " with the one ticked in the search result
+    DATA temp17 TYPE ty_t_tab.
+    DATA temp18 LIKE LINE OF temp17.
+    DATA lt_tab LIKE temp17.
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_to_select.
+    DATA temp19 TYPE string_table.
+    DATA lt_result TYPE ty_t_tab.
+    FIELD-SYMBOLS <lt_result> TYPE STANDARD TABLE.
+    DATA ls_result TYPE /z2ui5/cl_popup_to_select=>ty_s_result.
+    DATA temp21 TYPE ty_t_tab.
+    DATA temp22 LIKE LINE OF temp21.
+    CLEAR temp17.
+
+    temp18-name = `alpha`.
+    temp18-count = 1.
+    INSERT temp18 INTO TABLE temp17.
+    temp18-name = `bravo`.
+    temp18-count = 2.
+    INSERT temp18 INTO TABLE temp17.
+    temp18-name = `charlie`.
+    temp18-count = 3.
+    INSERT temp18 INTO TABLE temp17.
+
+    lt_tab = temp17.
+
+    lo_pop = /z2ui5/cl_popup_to_select=>factory( i_tab         = lt_tab
+                                                    i_multiselect = abap_true ).
+    client_create( lo_pop ).
+    lo_pop->/z2ui5/if_app~main( mi_client ).
+    mo_action->mo_app->mv_check_initialized = abap_true.
+
+    select_row( io_pop   = lo_pop
+                iv_index = 1 ).
+
+    mo_action->ms_actual-event = `SEARCH`.
+
+    CLEAR temp19.
+    INSERT `charlie` INTO TABLE temp19.
+    mo_action->ms_actual-t_event_arg = temp19.
+    lo_pop->/z2ui5/if_app~main( mi_client ).
+    select_row( io_pop   = lo_pop
+                iv_index = 1 ).
+
+    mo_action->ms_actual-event = `CONFIRM`.
+    CLEAR mo_action->ms_actual-t_event_arg.
+    lo_pop->/z2ui5/if_app~main( mi_client ).
+
+
+
+
+    ls_result = lo_pop->result( ).
+    ASSIGN ls_result-table->* TO <lt_result>.
+    lt_result = <lt_result>.
+
+    CLEAR temp21.
+
+    temp22-name = `alpha`.
+    temp22-count = 1.
+    INSERT temp22 INTO TABLE temp21.
+    temp22-name = `charlie`.
+    temp22-count = 3.
+    INSERT temp22 INTO TABLE temp21.
+    cl_abap_unit_assert=>assert_equals( exp = temp21
+                                        act = lt_result ).
+
+  ENDMETHOD.
+
   METHOD popup_xml.
 
     DATA ls_action LIKE LINE OF mo_action->ms_next-t_action_front.
@@ -430,12 +501,12 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
   METHOD popup_destroyed.
 
-    DATA temp17 LIKE sy-subrc.
+    DATA temp23 LIKE sy-subrc.
     DATA temp3 TYPE xsdboolean.
     READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = /z2ui5/if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
-    temp17 = sy-subrc.
+    temp23 = sy-subrc.
 
-    temp3 = boolc( temp17 = 0 ).
+    temp3 = boolc( temp23 = 0 ).
     result = temp3.
 
   ENDMETHOD.
@@ -520,7 +591,7 @@ CLASS ltcl_popup_result IMPLEMENTATION.
     " a roundtrip with an event, after the first one - as the button press
     " of the user
     DATA temp3 TYPE REF TO /z2ui5/cl_ui5_handler.
-    DATA temp18 TYPE REF TO /z2ui5/cl_ui5_client.
+    DATA temp24 TYPE REF TO /z2ui5/cl_ui5_client.
     CREATE OBJECT temp3 TYPE /z2ui5/cl_ui5_handler EXPORTING VAL = ``.
     CREATE OBJECT mo_action EXPORTING VAL = temp3.
     mo_action->mo_app->mo_app = io_app.
@@ -528,28 +599,28 @@ CLASS ltcl_popup_result IMPLEMENTATION.
     mo_action->ms_actual-event = iv_event.
     mo_action->ms_actual-t_event_arg = it_arg.
 
-    CREATE OBJECT temp18 TYPE /z2ui5/cl_ui5_client EXPORTING ACTION = mo_action.
-    io_app->main( temp18 ).
+    CREATE OBJECT temp24 TYPE /z2ui5/cl_ui5_client EXPORTING ACTION = mo_action.
+    io_app->main( temp24 ).
 
   ENDMETHOD.
 
   METHOD test_initial_not_confirmed.
 
-    DATA temp19 TYPE ty_t_tab.
-    DATA temp20 LIKE LINE OF temp19.
+    DATA temp25 TYPE ty_t_tab.
+    DATA temp26 LIKE LINE OF temp25.
     DATA lo_pop TYPE REF TO /z2ui5/cl_popup_to_select.
-    DATA temp21 TYPE REF TO /z2ui5/if_popup_result.
-    DATA li_result LIKE temp21.
-    CLEAR temp19.
+    DATA temp27 TYPE REF TO /z2ui5/if_popup_result.
+    DATA li_result LIKE temp27.
+    CLEAR temp25.
 
-    temp20-name = `alpha`.
-    INSERT temp20 INTO TABLE temp19.
+    temp26-name = `alpha`.
+    INSERT temp26 INTO TABLE temp25.
 
-    lo_pop = /z2ui5/cl_popup_to_select=>factory( temp19 ).
+    lo_pop = /z2ui5/cl_popup_to_select=>factory( temp25 ).
 
-    temp21 ?= lo_pop.
+    temp27 ?= lo_pop.
 
-    li_result = temp21.
+    li_result = temp27.
 
     cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
     cl_abap_unit_assert=>assert_initial( li_result->value_string( ) ).
@@ -558,36 +629,36 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD test_confirmed_row.
 
-    DATA temp22 TYPE ty_t_tab.
-    DATA temp23 LIKE LINE OF temp22.
+    DATA temp28 TYPE ty_t_tab.
+    DATA temp29 LIKE LINE OF temp28.
     DATA lo_pop TYPE REF TO /z2ui5/cl_popup_to_select.
-    DATA temp24 TYPE REF TO /z2ui5/if_popup_result.
-    DATA li_result LIKE temp24.
-    DATA temp25 TYPE REF TO ty_s_row.
-    DATA lr_value LIKE temp25.
-    CLEAR temp22.
+    DATA temp30 TYPE REF TO /z2ui5/if_popup_result.
+    DATA li_result LIKE temp30.
+    DATA temp31 TYPE REF TO ty_s_row.
+    DATA lr_value LIKE temp31.
+    CLEAR temp28.
 
-    temp23-name = `alpha`.
-    temp23-count = 1.
-    INSERT temp23 INTO TABLE temp22.
-    temp23-name = `bravo`.
-    temp23-count = 2.
-    INSERT temp23 INTO TABLE temp22.
+    temp29-name = `alpha`.
+    temp29-count = 1.
+    INSERT temp29 INTO TABLE temp28.
+    temp29-name = `bravo`.
+    temp29-count = 2.
+    INSERT temp29 INTO TABLE temp28.
 
-    lo_pop = select( io_pop   = /z2ui5/cl_popup_to_select=>factory( temp22 )
+    lo_pop = select( io_pop   = /z2ui5/cl_popup_to_select=>factory( temp28 )
                            iv_index = 2 ).
 
-    temp24 ?= lo_pop.
+    temp30 ?= lo_pop.
 
-    li_result = temp24.
+    li_result = temp30.
 
     cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
     cl_abap_unit_assert=>assert_equals( exp = `bravo`
                                         act = li_result->value_string( ) ).
 
-    temp25 ?= li_result->value( ).
+    temp31 ?= li_result->value( ).
 
-    lr_value = temp25.
+    lr_value = temp31.
     cl_abap_unit_assert=>assert_equals( exp = 2
                                         act = lr_value->count ).
 
@@ -595,20 +666,20 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD test_confirmed_elementary.
 
-    DATA temp26 TYPE string_table.
+    DATA temp32 TYPE string_table.
     DATA lo_pop TYPE REF TO /z2ui5/cl_popup_to_select.
-    DATA temp28 TYPE REF TO /z2ui5/if_popup_result.
-    DATA li_result LIKE temp28.
-    CLEAR temp26.
-    INSERT `alpha` INTO TABLE temp26.
-    INSERT `bravo` INTO TABLE temp26.
+    DATA temp34 TYPE REF TO /z2ui5/if_popup_result.
+    DATA li_result LIKE temp34.
+    CLEAR temp32.
+    INSERT `alpha` INTO TABLE temp32.
+    INSERT `bravo` INTO TABLE temp32.
 
-    lo_pop = select( io_pop   = /z2ui5/cl_popup_to_select=>factory( temp26 )
+    lo_pop = select( io_pop   = /z2ui5/cl_popup_to_select=>factory( temp32 )
                            iv_index = 1 ).
 
-    temp28 ?= lo_pop.
+    temp34 ?= lo_pop.
 
-    li_result = temp28.
+    li_result = temp34.
 
     cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
     cl_abap_unit_assert=>assert_equals( exp = `alpha`
@@ -618,33 +689,33 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD test_confirmed_multiselect.
 
-    DATA temp29 TYPE ty_t_tab.
-    DATA temp30 LIKE LINE OF temp29.
+    DATA temp35 TYPE ty_t_tab.
+    DATA temp36 LIKE LINE OF temp35.
     DATA lo_pop TYPE REF TO /z2ui5/cl_popup_to_select.
-    DATA temp31 TYPE REF TO /z2ui5/if_popup_result.
-    DATA li_result LIKE temp31.
-    DATA temp32 TYPE REF TO ty_t_tab.
-    DATA lr_value LIKE temp32.
-    CLEAR temp29.
+    DATA temp37 TYPE REF TO /z2ui5/if_popup_result.
+    DATA li_result LIKE temp37.
+    DATA temp38 TYPE REF TO ty_t_tab.
+    DATA lr_value LIKE temp38.
+    CLEAR temp35.
 
-    temp30-name = `alpha`.
-    INSERT temp30 INTO TABLE temp29.
-    temp30-name = `bravo`.
-    INSERT temp30 INTO TABLE temp29.
+    temp36-name = `alpha`.
+    INSERT temp36 INTO TABLE temp35.
+    temp36-name = `bravo`.
+    INSERT temp36 INTO TABLE temp35.
 
-    lo_pop = select( io_pop   = /z2ui5/cl_popup_to_select=>factory( i_tab         = temp29
+    lo_pop = select( io_pop   = /z2ui5/cl_popup_to_select=>factory( i_tab         = temp35
                                                                         i_multiselect = abap_true )
                            iv_index = 2 ).
 
-    temp31 ?= lo_pop.
+    temp37 ?= lo_pop.
 
-    li_result = temp31.
+    li_result = temp37.
 
     cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
 
-    temp32 ?= li_result->value( ).
+    temp38 ?= li_result->value( ).
 
-    lr_value = temp32.
+    lr_value = temp38.
     cl_abap_unit_assert=>assert_equals( exp = 1
                                         act = lines( lr_value->* ) ).
     cl_abap_unit_assert=>assert_initial( li_result->value_string( ) ).
@@ -653,23 +724,23 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD test_cancelled.
 
-    DATA temp33 TYPE ty_t_tab.
-    DATA temp34 LIKE LINE OF temp33.
+    DATA temp39 TYPE ty_t_tab.
+    DATA temp40 LIKE LINE OF temp39.
     DATA lo_pop TYPE REF TO /z2ui5/cl_popup_to_select.
-    DATA temp35 TYPE REF TO /z2ui5/if_popup_result.
-    DATA li_result LIKE temp35.
-    CLEAR temp33.
+    DATA temp41 TYPE REF TO /z2ui5/if_popup_result.
+    DATA li_result LIKE temp41.
+    CLEAR temp39.
 
-    temp34-name = `alpha`.
-    INSERT temp34 INTO TABLE temp33.
+    temp40-name = `alpha`.
+    INSERT temp40 INTO TABLE temp39.
 
-    lo_pop = /z2ui5/cl_popup_to_select=>factory( temp33 ).
+    lo_pop = /z2ui5/cl_popup_to_select=>factory( temp39 ).
     roundtrip( io_app   = lo_pop
                iv_event = `CANCEL` ).
 
-    temp35 ?= lo_pop.
+    temp41 ?= lo_pop.
 
-    li_result = temp35.
+    li_result = temp41.
 
     cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
 

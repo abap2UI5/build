@@ -17,6 +17,9 @@ CLASS /z2ui5/cl_layo_pop_w_sel DEFINITION
   PUBLIC SECTION.
     INTERFACES /z2ui5/if_app.
 
+    "! the caller's table - until the popup has started: it is cleared once
+    "! mr_out and mr_out_tmp are built from it, since every attribute is
+    "! written to the draft on every roundtrip and nothing reads it later
     DATA mr_tab          TYPE REF TO data.
     "! the rows on screen: those of mr_tab with ZZROW_ID and ZZSELKZ in front,
     "! filtered by the search and sorted by the layout
@@ -155,21 +158,21 @@ ENDCLASS.
 CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
 
   METHOD factory.
-    DATA temp25 TYPE string.
-    DATA temp26 TYPE string.
     DATA temp27 TYPE string.
-    DATA temp28 TYPE /z2ui5/cl_layo_pop_w_sel=>ty_s_handles.
+    DATA temp28 TYPE string.
+    DATA temp29 TYPE string.
+    DATA temp30 TYPE /z2ui5/cl_layo_pop_w_sel=>ty_s_handles.
 
     CREATE OBJECT r_result.
 
     IF i_title IS NOT INITIAL.
-      temp25 = i_title.
+      temp27 = i_title.
     ELSEIF i_multiselect = abap_true.
-      temp25 = `Multi Select`.
+      temp27 = `Multi Select`.
     ELSE.
-      temp25 = `Single Select`.
+      temp27 = `Single Select`.
     ENDIF.
-    r_result->title = temp25.
+    r_result->title = temp27.
     r_result->sort_field        = i_sort_field.
     r_result->descending        = i_descending.
     r_result->multiselect       = i_multiselect.
@@ -181,38 +184,38 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
     " single selection keeps the size of its content as before
 
     IF i_contentwidth IS NOT INITIAL.
-      temp26 = i_contentwidth.
+      temp28 = i_contentwidth.
     ELSEIF i_multiselect = abap_true.
-      temp26 = `90%`.
+      temp28 = `90%`.
     ELSE.
-      CLEAR temp26.
+      CLEAR temp28.
     ENDIF.
-    r_result->content_width = temp26.
+    r_result->content_width = temp28.
 
     IF i_contentheight IS NOT INITIAL.
-      temp27 = i_contentheight.
+      temp29 = i_contentheight.
     ELSEIF i_multiselect = abap_true.
-      temp27 = `70%`.
+      temp29 = `70%`.
     ELSE.
-      CLEAR temp27.
+      CLEAR temp29.
     ENDIF.
-    r_result->content_height = temp27.
+    r_result->content_height = temp29.
 
     r_result->set_input( i_tab ).
 
 
-    CLEAR temp28.
-    temp28-handle01 = i_handle01.
-    temp28-handle02 = i_handle02.
-    temp28-handle03 = i_handle03.
-    temp28-handle04 = i_handle04.
-    r_result->init_layout( r_result->get_handles( temp28 ) ).
+    CLEAR temp30.
+    temp30-handle01 = i_handle01.
+    temp30-handle02 = i_handle02.
+    temp30-handle03 = i_handle03.
+    temp30-handle04 = i_handle04.
+    r_result->init_layout( r_result->get_handles( temp30 ) ).
 
   ENDMETHOD.
 
   METHOD set_input.
-    DATA temp29 TYPE REF TO cl_abap_tabledescr.
-    DATA table_descr LIKE temp29.
+    DATA temp31 TYPE REF TO cl_abap_tabledescr.
+    DATA table_descr LIKE temp31.
     DATA line_descr TYPE REF TO cl_abap_datadescr.
     DATA temp1 TYPE xsdboolean.
 
@@ -222,9 +225,9 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
     CREATE DATA ms_result-table LIKE i_tab.
 
 
-    temp29 ?= cl_abap_typedescr=>describe_by_data( i_tab ).
+    temp31 ?= cl_abap_typedescr=>describe_by_data( i_tab ).
 
-    table_descr = temp29.
+    table_descr = temp31.
 
     line_descr = table_descr->get_table_line_type( ).
 
@@ -258,7 +261,7 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
   METHOD get_table_descr.
 
     DATA descr TYPE REF TO cl_abap_typedescr.
-    DATA temp30 TYPE REF TO cl_abap_tabledescr.
+    DATA temp32 TYPE REF TO cl_abap_tabledescr.
 
     cl_abap_typedescr=>describe_by_data_ref( EXPORTING  p_data_ref           = mr_tab
                                              RECEIVING  p_descr_ref          = descr
@@ -268,8 +271,8 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
     " error, as the functional call before did
     ASSERT sy-subrc = 0.
 
-    temp30 ?= descr.
-    result = temp30.
+    temp32 ?= descr.
+    result = temp32.
 
   ENDMETHOD.
 
@@ -277,8 +280,8 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
 
     DATA layout_tab TYPE REF TO data.
       DATA table_descr TYPE REF TO cl_abap_tabledescr.
-      DATA temp31 TYPE abap_component_tab.
-      DATA temp32 LIKE LINE OF temp31.
+      DATA temp33 TYPE abap_component_tab.
+      DATA temp34 LIKE LINE OF temp33.
       DATA layout_line TYPE REF TO cl_abap_structdescr.
       DATA layout_descr TYPE REF TO cl_abap_tabledescr.
 
@@ -288,13 +291,13 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
 
       table_descr = get_table_descr( ).
 
-      CLEAR temp31.
+      CLEAR temp33.
 
-      temp32-name = cv_tab_line.
-      temp32-type = table_descr->get_table_line_type( ).
-      INSERT temp32 INTO TABLE temp31.
+      temp34-name = cv_tab_line.
+      temp34-type = table_descr->get_table_line_type( ).
+      INSERT temp34 INTO TABLE temp33.
 
-      layout_line = cl_abap_structdescr=>create( temp31 ).
+      layout_line = cl_abap_structdescr=>create( temp33 ).
 
       layout_descr = cl_abap_tabledescr=>create( layout_line ).
       CREATE DATA layout_tab TYPE HANDLE layout_descr.
@@ -315,8 +318,8 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
 
     DATA popup TYPE REF TO /z2ui5/cl_ui5_view_builder.
     DATA dialog TYPE REF TO /z2ui5/cl_ui5_view_builder.
-      DATA temp33 LIKE REF TO mv_search_value.
-      DATA temp34 LIKE REF TO mv_search_value.
+      DATA temp35 LIKE REF TO mv_search_value.
+      DATA temp36 LIKE REF TO mv_search_value.
     DATA buttons TYPE REF TO /z2ui5/cl_ui5_view_builder.
     popup = /z2ui5/cl_ui5_view_builder=>factory(
                       )->ele( n = `FragmentDefinition` ns = `core`
@@ -344,23 +347,23 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
     " at once; multi select: check boxes, confirmed with OK
     IF multiselect = abap_true.
 
-      GET REFERENCE OF mv_search_value INTO temp33.
+      GET REFERENCE OF mv_search_value INTO temp35.
 /z2ui5/cl_layo_xml_builder=>xml_build_table( i_data             = mr_out
                                                   i_xml              = dialog
                                                   i_client           = client
                                                   i_layout           = mo_layout
-                                                  i_search_value     = temp33
+                                                  i_search_value     = temp35
                                                   i_growingthreshold = growing_threshold
                                                   i_sel_mode         = `MultiSelect`
                                                   i_sel_bind_to      = cv_sel_field ).
     ELSE.
 
-      GET REFERENCE OF mv_search_value INTO temp34.
+      GET REFERENCE OF mv_search_value INTO temp36.
 /z2ui5/cl_layo_xml_builder=>xml_build_table( i_data             = mr_out
                                                   i_xml              = dialog
                                                   i_client           = client
                                                   i_layout           = mo_layout
-                                                  i_search_value     = temp34
+                                                  i_search_value     = temp36
                                                   i_growingthreshold = growing_threshold
                                                   i_sel_mode         = `SingleSelectLeft`
                                                   i_sel_bind_to      = cv_sel_field
@@ -391,7 +394,9 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
 
     IF client->check_on_init( ) IS NOT INITIAL.
       set_output_table( ).
+      " after this the layout sorts mr_out - mr_tab is read by nothing more
       sort_output_table( ).
+      CLEAR mr_tab.
       render_main( ).
     ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
       on_after_layout( ).
@@ -438,16 +443,16 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD on_after_layout.
-        DATA temp35 TYPE REF TO /z2ui5/cl_layo_pop.
-        DATA app LIKE temp35.
+        DATA temp37 TYPE REF TO /z2ui5/cl_layo_pop.
+        DATA app LIKE temp37.
 
     " back from the layout popup: take its layout. Any other return (a
     " restored draft) still has to put the popup on screen again
     TRY.
 
-        temp35 ?= client->get_app_prev( ).
+        temp37 ?= client->get_app_prev( ).
 
-        app = temp35.
+        app = temp37.
         IF app IS BOUND.
           mo_layout = app->mo_layout.
         ENDIF.
@@ -632,13 +637,13 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
     DATA selkz TYPE abap_bool.
     DATA comp  TYPE abap_component_tab.
           DATA table_descr TYPE REF TO cl_abap_tabledescr.
-          DATA temp36 TYPE abap_component_tab.
-          DATA temp37 LIKE LINE OF temp36.
-        DATA temp38 LIKE sy-subrc.
-          DATA temp39 TYPE abap_componentdescr.
-          DATA temp3 TYPE REF TO cl_abap_datadescr.
+          DATA temp38 TYPE abap_component_tab.
+          DATA temp39 LIKE LINE OF temp38.
         DATA temp40 LIKE sy-subrc.
           DATA temp41 TYPE abap_componentdescr.
+          DATA temp3 TYPE REF TO cl_abap_datadescr.
+        DATA temp42 LIKE sy-subrc.
+          DATA temp43 TYPE abap_componentdescr.
           DATA temp4 TYPE REF TO cl_abap_datadescr.
 
     TRY.
@@ -647,40 +652,40 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
 
           table_descr = get_table_descr( ).
 
-          CLEAR temp36.
+          CLEAR temp38.
 
-          temp37-name = cv_tab_line.
-          temp37-type = table_descr->get_table_line_type( ).
-          INSERT temp37 INTO TABLE temp36.
-          comp = temp36.
+          temp39-name = cv_tab_line.
+          temp39-type = table_descr->get_table_line_type( ).
+          INSERT temp39 INTO TABLE temp38.
+          comp = temp38.
         ELSE.
           comp = /z2ui5/cl_layo_context=>rtti_get_t_attri_by_any( mr_tab ).
         ENDIF.
 
 
         READ TABLE comp WITH KEY name = cv_row_id_field TRANSPORTING NO FIELDS.
-        temp38 = sy-subrc.
-        IF NOT temp38 = 0.
-
-          CLEAR temp39.
-          temp39-name = cv_row_id_field.
-
-          temp3 ?= cl_abap_datadescr=>describe_by_data( index ).
-          temp39-type = temp3.
-          INSERT temp39 INTO TABLE result.
-        ENDIF.
-
-
-        READ TABLE comp WITH KEY name = cv_sel_field TRANSPORTING NO FIELDS.
         temp40 = sy-subrc.
         IF NOT temp40 = 0.
 
           CLEAR temp41.
-          temp41-name = cv_sel_field.
+          temp41-name = cv_row_id_field.
+
+          temp3 ?= cl_abap_datadescr=>describe_by_data( index ).
+          temp41-type = temp3.
+          INSERT temp41 INTO TABLE result.
+        ENDIF.
+
+
+        READ TABLE comp WITH KEY name = cv_sel_field TRANSPORTING NO FIELDS.
+        temp42 = sy-subrc.
+        IF NOT temp42 = 0.
+
+          CLEAR temp43.
+          temp43-name = cv_sel_field.
 
           temp4 ?= cl_abap_datadescr=>describe_by_data( selkz ).
-          temp41-type = temp4.
-          INSERT temp41 INTO TABLE result.
+          temp43-type = temp4.
+          INSERT temp43 INTO TABLE result.
         ENDIF.
 
         INSERT LINES OF comp INTO TABLE result.
@@ -690,6 +695,26 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD sort_output_table.
+
+    FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
+      DATA lv_name TYPE string.
+
+    " the order the caller asked for (i_sort_field, i_descending) - the
+    " sorting of the layout, when it has one, decides over it
+    IF sort_field IS NOT INITIAL.
+      ASSIGN mr_out->* TO <tab>.
+
+      lv_name = to_upper( sort_field ).
+      TRY.
+          IF descending = abap_true.
+            SORT <tab> BY (lv_name) DESCENDING.
+          ELSE.
+            SORT <tab> BY (lv_name) ASCENDING.
+          ENDIF.
+        CATCH cx_root ##NO_HANDLER.
+          " no column of that name: the caller's order stays
+      ENDTRY.
+    ENDIF.
 
     " the sorting of the layout - point it at the table again first: the
     " draft restores the layout's own reference as one to a copy
@@ -742,11 +767,11 @@ CLASS /z2ui5/cl_layo_pop_w_sel IMPLEMENTATION.
 
     " the columns of the layout - never the row id or the selection flag
     DATA layout LIKE LINE OF mo_layout->ms_layout-t_layout.
-      DATA temp42 LIKE LINE OF result.
+      DATA temp44 LIKE LINE OF result.
     LOOP AT mo_layout->ms_layout-t_layout INTO layout.
 
-      temp42 = |{ layout-fname }|.
-      INSERT temp42 INTO TABLE result.
+      temp44 = |{ layout-fname }|.
+      INSERT temp44 INTO TABLE result.
     ENDLOOP.
 
   ENDMETHOD.
