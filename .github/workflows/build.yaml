@@ -5,8 +5,8 @@ name: build
 # them under another name
 # (deliveries.json: every name in every variant, branch <name>-<variant>).
 #
-#   sources   takes src/ of abap2UI5's branches 702 and cloud and the rename
-#             tooling (build.mjs sync) and commits what changed
+#   sources   takes src/ of abap2UI5 and the addons (popups, layout,
+#             table-maintenance) and abap2UI5's rename tooling (build.mjs sync) and commits what changed
 #             to main. On a pull request nothing is synced: the head is built
 #   lint      per folder: abaplint and the abap2UI5-linter, each with the
 #             config that points at that folder only
@@ -17,7 +17,7 @@ name: build
 #             issues fail the job after the push. On a pull request the
 #             delivery is built and not pushed
 #
-# A scheduled run that finds abap2UI5 unchanged stops after sources.
+# A scheduled run that finds the sources unchanged stops after sources.
 
 on:
   schedule:
@@ -58,13 +58,12 @@ jobs:
           node build.mjs sync
           git add -A src upstream sources.json
           if git diff --cached --quiet; then
-            echo "abap2UI5 unchanged"
+            echo "sources unchanged"
             exit 0
           fi
-          short() { node -p "require('./sources.json').variants['$1'].commit.slice(0, 7)"; }
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git commit -q -m "sync: abap2UI5 702 $(short standard), cloud $(short cloud)"
+          git commit -q -m "sync" -m "$(node build.mjs sources)"
           git push origin "HEAD:${GITHUB_REF_NAME}"
           echo "SYNCED=true" >> "$GITHUB_ENV"
       - name: State
@@ -135,6 +134,7 @@ jobs:
         env:
           BRANCH: ${{ steps.build.outputs.branch }}
           OUT: ${{ steps.build.outputs.out }}
+          SOURCE: ${{ steps.build.outputs.source }}
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
@@ -149,8 +149,7 @@ jobs:
             echo "$BRANCH: no changes"
             exit 0
           fi
-          source=$(node -p "require('./sources.json').variants['$VARIANT'].commit.slice(0, 7)")
-          commit=$(git commit-tree "$tree" ${parent:+-p "$parent"} -m "build: $NAME $VARIANT (abap2UI5 $source)")
+          commit=$(git commit-tree "$tree" ${parent:+-p "$parent"} -m "build: $NAME $VARIANT" -m "$SOURCE")
           git push origin "$commit:refs/heads/$BRANCH"
           echo "$BRANCH: pushed $commit"
 

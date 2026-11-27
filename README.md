@@ -1,7 +1,7 @@
 # distributions
 
-[abap2UI5](https://github.com/abap2UI5/abap2UI5) in its two delivery variants
-on `main`, and from them **renamed installations** on delivery branches - each
+[abap2UI5](https://github.com/abap2UI5/abap2UI5) and its addons in two delivery
+variants on `main`, and from them **renamed installations** on delivery branches - each
 one an abapGit repository to pull, for a parallel installation next to an
 existing abap2UI5 or for a system that installs everything under a registered
 namespace.
@@ -18,15 +18,31 @@ namespace.
 Pull a branch with abapGit; its README has the install steps. `standard` is for
 every Standard ABAP system from 7.02, `cloud` for ABAP Cloud.
 
+**Not listed here? Want a distribution of your own?** Add your name to
+[`deliveries.json`](deliveries.json) and send a pull request - or fork this
+repository and run it yourself.
+
+## What is included
+
+Every delivery holds the framework and three addons, all under the one name:
+
+| Folder | Component | Repository |
+|---|---|---|
+| `src/01` | abap2UI5 - the framework | [abap2UI5/abap2UI5](https://github.com/abap2UI5/abap2UI5) |
+| `src/02` | popups | [abap2UI5-addons/popups](https://github.com/abap2UI5-addons/popups) |
+| `src/03` | layout | [abap2UI5-addons/layout-management](https://github.com/abap2UI5-addons/layout-management) |
+| `src/04` | table-maintenance | [abap2UI5-addons/table-maintenance](https://github.com/abap2UI5-addons/table-maintenance) |
+
 ## main
 
-| Folder | Source | For |
+| Folder | For | Sources |
 |---|---|---|
-| `src/standard` | `src/` of abap2UI5's branch `702` | every Standard ABAP system from 7.02: framework, ICF node, handler |
-| `src/cloud` | `src/` of the branch `cloud` | ABAP Cloud: an HTTP service in place of the ICF node |
+| `src/standard` | every Standard ABAP system from 7.02 | the branch `702` of each repository - the downported sources |
+| `src/cloud` | ABAP Cloud | abap2UI5's branch `cloud`, `main` of the addons |
 
-A delivery needs no new syntax, so the downported sources are the standard
-ones: one code line for every on-premise release.
+Below each, the four folders above (`01` .. `04`), holding `src/` of that
+repository. A delivery needs no new syntax, so the downported sources are the
+standard ones: one code line for every on-premise release.
 
 Nothing in `src/` or `upstream/` is edited here - `node build.mjs sync`
 replaces it, and `sources.json` names the commits it was taken from.
@@ -63,14 +79,17 @@ node build.mjs deliver /kro/ cloud            # src/cloud    -> out/#kro#-cloud
 
 What a delivery is made of:
 
-1. `src/00`..`src/02`, the framework: `abaplint --rename` with abap2UI5's
-   rename config turns every `z2ui5_*` class, interface and table into
-   `<prefix>*` and rewrites every reference; abap2UI5's `rename-literal-gate`
-   proves no string literal still names an object by its old name. Two kinds
-   of literal that gate leaves alone are rewritten here: in the test classes
-   every literal naming an abap2UI5 object, and in the start app every class
-   name (config class and sample apps are expected under the same prefix).
-2. `src/03`, the service package:
+1. The framework (`src/00`..`src/02` of abap2UI5) and the addons, in one run:
+   `abaplint --rename` with abap2UI5's rename config turns every `z2ui5_*`
+   class, interface and table into `<prefix>*` and rewrites every reference,
+   also those from an addon into the framework. abap2UI5's
+   `rename-literal-gate` proves no string literal of the framework still
+   names an object by its old name, the same check runs over the addons, and
+   the length of every renamed object is checked. Two kinds of literal are
+   rewritten here: in the test classes every literal naming a renamed object,
+   and in the start app every class name (config class and sample apps are
+   expected under the same prefix).
+2. `src/03` of abap2UI5, the service package:
    - **standard**: abap2UI5's `tools/bsp_rename` - the ICF node becomes
      `/sap/bc/<name>` (`/sap/bc/<ns>/ui5` for a namespace, with its namespace
      node), and the handler calls the renamed framework. The branch `702`
@@ -78,9 +97,9 @@ What a delivery is made of:
    - **cloud**: the HTTP service becomes `<NAME>` (`/NS/UI5`), with its
      inbound service, communication scenario and handler. Not carried: the
      SUSH of the HTTP service (its object name is a hash the system derives,
-     the system creates it with the service) and `src/03/02`, the launchpad
-     integration (IAM app, business catalog), which names that hash and the
-     deployed Fiori app of the original.
+     the system creates it with the service) and the launchpad integration
+     (IAM app, business catalog), which names that hash and the deployed
+     Fiori app of the original.
 3. abaplint over the result, with the configuration of its variant.
 
 Rules for a name are abap2UI5's: a customer name has at most 10 characters, a
@@ -94,6 +113,6 @@ Install one or the other in a system.
 ## Workflow
 
 [`build`](.github/workflows/build.yaml) runs daily, on a push to `main` and by
-hand: it syncs `main` from abap2UI5, lints the two folders and pushes every
+hand: it syncs `main` from the four repositories, lints the two folders and pushes every
 delivery branch that changed. On a pull request it lints and builds, and pushes
 nothing. To add a delivery, add its name to `deliveries.json`.

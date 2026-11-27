@@ -1,17 +1,64 @@
 {
-  "repository": "abap2UI5/abap2UI5",
   "variants": {
     "standard": {
-      "branch": "702",
-      "commit": "3d103e8cba6ca09701cf02c5929e87da2e67804a",
-      "tree": "d6efba813820621f6be08c02a636132af478a1fd",
-      "date": "2026-11-27T09:54:41+00:00"
+      "abap2UI5": {
+        "repository": "abap2UI5/abap2UI5",
+        "branch": "702",
+        "commit": "3d103e8cba6ca09701cf02c5929e87da2e67804a",
+        "tree": "d6efba813820621f6be08c02a636132af478a1fd",
+        "date": "2026-11-27T09:54:41+00:00"
+      },
+      "popups": {
+        "repository": "abap2UI5-addons/popups",
+        "branch": "702",
+        "commit": "5aeb6e675f04cd9e3cc0c33d67c02e33d142a1ab",
+        "tree": "b5f0c931ffc6aaa0f2b4314c46c96db7472b60ef",
+        "date": "2026-11-27T08:55:38+00:00"
+      },
+      "layout": {
+        "repository": "abap2UI5-addons/layout-management",
+        "branch": "702",
+        "commit": "f00ab9d3e24db6adb711602b47d9ae666cb5ca56",
+        "tree": "488f012ab6e8aaf4391d82b3806a1e833741b162",
+        "date": "2026-11-26T13:29:21+00:00"
+      },
+      "table-maintenance": {
+        "repository": "abap2UI5-addons/table-maintenance",
+        "branch": "702",
+        "commit": "048917c84c2138dc6b44b9b93fff0c98ad1c766c",
+        "tree": "523296bd2e44c797fb4c6157e33393c6058b92a9",
+        "date": "2026-11-26T13:29:12+00:00"
+      }
     },
     "cloud": {
-      "branch": "cloud",
-      "commit": "22a8cf8df513c610adde2d3bc15614d448212cbf",
-      "tree": "7eef38567e4a70dc942768f5f02298f50daa9943",
-      "date": "2026-11-27T09:53:17+00:00"
+      "abap2UI5": {
+        "repository": "abap2UI5/abap2UI5",
+        "branch": "cloud",
+        "commit": "657759cc35deb95301f9e814f10c5e641977a667",
+        "tree": "7eef38567e4a70dc942768f5f02298f50daa9943",
+        "date": "2026-11-27T10:12:05+00:00"
+      },
+      "popups": {
+        "repository": "abap2UI5-addons/popups",
+        "branch": "main",
+        "commit": "c1bac82f9173f7a424704308abf4512038c24ae4",
+        "tree": "13327e2f58f417a99a3bb33627b17e280cc05eb8",
+        "date": "2026-11-27T09:53:46+01:00"
+      },
+      "layout": {
+        "repository": "abap2UI5-addons/layout-management",
+        "branch": "main",
+        "commit": "d3ad4326bc3d123a1882127d2def1346a5aec0ac",
+        "tree": "a5a785ae230000a740a549f50d6e2f97dae11f06",
+        "date": "2026-11-26T14:28:21+01:00"
+      },
+      "table-maintenance": {
+        "repository": "abap2UI5-addons/table-maintenance",
+        "branch": "main",
+        "commit": "e4ee4f184cda83e765352a7e807e910e961c2c63",
+        "tree": "e737084a24e3dd6f1b37ed699caedb8116445f78",
+        "date": "2026-11-26T14:28:17+01:00"
+      }
     }
   }
 }

@@ -34,7 +34,7 @@ test("the lint configs of main point at their folder only", () => {
     assert.equal(abaplint.syntax.errorNamespace, ".");
     const linter = strip(readFileSync(join(root, `abap2ui5lint.${variant}.jsonc`), "utf8"));
     assert.deepEqual(linter.paths, [`src/${variant}`]);
-    assert.ok(linter.ignore.every((p) => p.startsWith(`/src/${variant}/`)));
+    assert.ok(linter.ignore.every((p) => p.startsWith(`/src/${variant}/01/`)));
   }
 });
 
@@ -56,7 +56,7 @@ test("the badge", () => {
 
 // the cloud service package of main, renamed: every object under the new
 // name, nothing of the old one, and without what cannot be renamed
-test("the cloud service renamed", { skip: !existsSync(join(root, "src/cloud/03")) }, () => {
+test("the cloud service renamed", { skip: !existsSync(join(root, "src/cloud/01/03")) }, () => {
   const dir = mkdtempSync(join(tmpdir(), "build-"));
   const log = console.log;
   console.log = () => {};
@@ -67,7 +67,7 @@ test("the cloud service renamed", { skip: !existsSync(join(root, "src/cloud/03")
     ]) {
       const N = deriveNames(name);
       const target = join(dir, N.input.replace(/\//g, ""));
-      renameCloudService(N, join(root, "src/cloud/03"), target);
+      renameCloudService(N, join(root, "src/cloud/01/03"), target);
       assert.deepEqual(readdirSync(target).sort(), ["01", "package.devc.xml"]);
       assert.deepEqual(readdirSync(join(target, "01")).sort(), files);
       const http = readFileSync(join(target, "01", files.find((f) => f.endsWith(".http.xml"))), "utf8");
