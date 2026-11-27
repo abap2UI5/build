@@ -1,0 +1,201 @@
+CLASS ltcl_test DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PRIVATE SECTION.
+    METHODS test_number_initial       FOR TESTING RAISING cx_static_check.
+    METHODS test_escape_controls      FOR TESTING RAISING cx_static_check.
+    METHODS test_mapper_upper         FOR TESTING RAISING cx_static_check.
+    METHODS test_mapper_upper_output  FOR TESTING RAISING cx_static_check.
+
+ENDCLASS.
+
+
+CLASS ltcl_test IMPLEMENTATION.
+
+  METHOD test_number_initial.
+
+    " every spelling of zero is initial, anything with a non-zero digit is
+    " not - the predicate the client's local filters share
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = /kro/cl_ui5_util_json_fl=>check_number_initial( `0` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = /kro/cl_ui5_util_json_fl=>check_number_initial( `0.00` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = /kro/cl_ui5_util_json_fl=>check_number_initial( `0.0E+00` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = /kro/cl_ui5_util_json_fl=>check_number_initial( `-0` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_json_fl=>check_number_initial( `0.01` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_json_fl=>check_number_initial( `-1` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_json_fl=>check_number_initial( `1.0E+02` ) ).
+
+  ENDMETHOD.
+
+  METHOD test_mapper_upper.
+
+    " the three answers of the mapping, side by side with the ajson mapping
+    " it replaced (create_upper_case) - the same for every name shape the
+    " serializer hands in: lower-cased component names, a numeric array
+    " index, an already upper-cased leaf, an empty name
+    DATA lv_name_act TYPE /kro/if_ajson_types=>ty_node-name.
+    DATA lv_name_exp TYPE /kro/if_ajson_types=>ty_node-name.
+
+    DATA li_act TYPE REF TO /kro/if_ajson_mapping.
+    DATA li_exp TYPE REF TO /kro/if_ajson_mapping.
+    DATA temp1 TYPE string_table.
+    DATA lt_names LIKE temp1.
+    DATA lv_name LIKE LINE OF lt_names.
+      DATA temp3 TYPE /kro/if_ajson_types=>ty_node.
+      DATA temp4 TYPE /kro/if_ajson_types=>ty_node.
+    DATA li_again TYPE REF TO /kro/if_ajson_mapping.
+    DATA temp2 TYPE xsdboolean.
+    li_act = /kro/cl_ui5_util_json_fl=>mapper_upper( ).
+
+    li_exp = /kro/cl_ajson_mapping=>create_upper_case( ).
+
+    CLEAR temp1.
+    INSERT `name` INTO TABLE temp1.
+    INSERT `price_net` INTO TABLE temp1.
+    INSERT `1` INTO TABLE temp1.
+    INSERT `ALREADY` INTO TABLE temp1.
+    INSERT `` INTO TABLE temp1.
+    INSERT `MiXeD_09` INTO TABLE temp1.
+
+    lt_names = temp1.
+
+
+    LOOP AT lt_names INTO lv_name.
+      cl_abap_unit_assert=>assert_equals( exp = li_exp->to_json( iv_path = `/T/1/`
+                                                                iv_name  = lv_name )
+                                          act = li_act->to_json( iv_path = `/T/1/`
+                                                                iv_name  = lv_name )
+                                          msg = lv_name ).
+      " the reader upper-cases the answer and takes the node name for an
+      " empty one - so the two are the same mapping there as well
+      cl_abap_unit_assert=>assert_equals( exp = to_upper( lv_name )
+                                          act = to_upper( li_act->to_abap( iv_path = `/`
+                                                                           iv_name = lv_name ) ) ).
+      cl_abap_unit_assert=>assert_initial( li_exp->to_abap( iv_path = `/`
+                                                            iv_name = lv_name ) ).
+      lv_name_act = lv_name.
+      lv_name_exp = lv_name.
+
+      CLEAR temp3.
+      li_act->rename_node( EXPORTING is_node = temp3
+                           CHANGING  cv_name = lv_name_act ).
+
+      CLEAR temp4.
+      li_exp->rename_node( EXPORTING is_node = temp4
+                           CHANGING  cv_name = lv_name_exp ).
+      cl_abap_unit_assert=>assert_equals( exp = lv_name_exp
+                                          act = lv_name_act ).
+    ENDLOOP.
+
+    " one shared instance, as before
+    cl_abap_unit_assert=>assert_bound( li_act ).
+
+    li_again = /kro/cl_ui5_util_json_fl=>mapper_upper( ).
+
+    temp2 = boolc( li_again = li_act ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp2 ).
+
+  ENDMETHOD.
+
+  METHOD test_mapper_upper_output.
+
+    " a model-shaped value - a table of flat rows next to a structure and a
+    " scalar - serialized through both mappings is the same text
+    TYPES: BEGIN OF ty_s_row,
+             id        TYPE i,
+             name      TYPE string,
+             price_net TYPE p LENGTH 9 DECIMALS 2,
+             active    TYPE abap_bool,
+           END OF ty_s_row.
+    TYPES: BEGIN OF ty_s_model,
+             t_rows  TYPE STANDARD TABLE OF ty_s_row WITH DEFAULT KEY,
+             s_head  TYPE ty_s_row,
+             v_title TYPE string,
+           END OF ty_s_model.
+
+    DATA temp5 TYPE ty_s_model.
+    DATA temp1 TYPE ty_s_model-t_rows.
+    DATA temp2 LIKE LINE OF temp1.
+    DATA ls_model LIKE temp5.
+    DATA lv_act TYPE string.
+    DATA lv_exp TYPE string.
+    DATA temp3 TYPE xsdboolean.
+    DATA temp4 TYPE xsdboolean.
+    CLEAR temp5.
+
+    CLEAR temp1.
+
+    CLEAR temp2.
+    temp2-id = 1.
+    temp2-name = `a`.
+    temp2-price_net = '1.50'.
+    temp2-active = abap_true.
+    INSERT temp2 INTO TABLE temp1.
+    CLEAR temp2.
+    temp2-id = 2.
+    temp2-name = `b`.
+    INSERT temp2 INTO TABLE temp1.
+    temp5-t_rows = temp1.
+    CLEAR temp5-s_head.
+    temp5-s_head-id = 3.
+    temp5-s_head-name = `h`.
+    temp5-v_title = `t`.
+
+    ls_model = temp5.
+
+
+    lv_act = /kro/cl_ajson=>create_empty( ii_custom_mapping = /kro/cl_ui5_util_json_fl=>mapper_upper( )
+                     )->set( iv_path = `/`
+                             iv_val  = ls_model )->stringify( ).
+
+    lv_exp = /kro/cl_ajson=>create_empty( ii_custom_mapping = /kro/cl_ajson_mapping=>create_upper_case( )
+                     )->set( iv_path = `/`
+                             iv_val  = ls_model )->stringify( ).
+
+    cl_abap_unit_assert=>assert_equals( exp = lv_exp
+                                        act = lv_act ).
+
+    temp3 = boolc( lv_act CS `"PRICE_NET":1.50` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp3 ).
+
+    temp4 = boolc( lv_act CS `"V_TITLE":"t"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp4 ).
+
+  ENDMETHOD.
+
+  METHOD test_escape_controls.
+
+    " a JSON text carrying U+0001, a form feed and U+001F raw, which
+    " JSON.parse refuses. Built by hand, not through ajson: ajson escapes
+    " control characters itself since the 2026-11 mirror update, and this
+    " method is the guard for every serializer that does not
+    DATA temp6 TYPE xstring.
+    DATA lv_ctrl TYPE string.
+    DATA lv_json TYPE string.
+    DATA lv_act TYPE string.
+    DATA temp5 TYPE xsdboolean.
+    temp6 = `010C1F`.
+
+    lv_ctrl = /kro/cl_ui5_util_context=>conv_get_string_by_xstring( temp6 ).
+
+    lv_json = `{"NAME":"a` && lv_ctrl && `b"}`.
+
+
+    lv_act = /kro/cl_ui5_util_json_fl=>escape_controls( lv_json ).
+
+    cl_abap_unit_assert=>assert_equals( exp = `{"NAME":"a\u0001\u000C\u001Fb"}`
+                                        act = lv_act ).
+
+    temp5 = boolc( lv_act CA lv_ctrl ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp5 ).
+
+    " tab, LF, CR and an escaped backslash are ajson's own and stay as they are
+    lv_json = /kro/cl_ajson=>create_empty( )->set(
+        iv_path = `/NAME`
+        iv_val  = `x\u0001` && /kro/cl_ui5_util_context=>cv_char_util_horizontal_tab
+                  && /kro/cl_ui5_util_context=>cv_char_util_newline )->stringify( ).
+    cl_abap_unit_assert=>assert_equals( exp = lv_json
+                                        act = /kro/cl_ui5_util_json_fl=>escape_controls( lv_json ) ).
+
+  ENDMETHOD.
+
+ENDCLASS.
