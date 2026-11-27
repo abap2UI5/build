@@ -55,6 +55,25 @@ CLASS /kro/cl_ui5_srv_window DEFINITION PUBLIC FINAL CREATE PUBLIC.
       RETURNING
         VALUE(result) TYPE i.
 
+    "! a sorter's or a condition's path that can name a component of a row:
+    "! not empty, and nothing but A-Z, 0-9, _ and / (a namespace, a
+    "! sub-component). The app puts it into an ORDER BY or a WHERE - often a
+    "! dynamic one - so a path that could not be a component is dropped here
+    "! instead of reaching it as written by the browser
+    CLASS-METHODS path_valid
+      IMPORTING
+        val           TYPE string
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+
+    "! an operator of the documented list (ty_s_bind_tab_filter) - the
+    "! sap.ui.model.FilterOperator values; anything else is dropped
+    CLASS-METHODS operator_valid
+      IMPORTING
+        val           TYPE string
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+
 ENDCLASS.
 
 
@@ -88,16 +107,16 @@ CLASS /kro/cl_ui5_srv_window IMPLEMENTATION.
 
   METHOD count_of.
 
-    DATA(lv_val) = condense( val ).
-    IF lv_val IS NOT INITIAL AND lv_val CO `0123456789` AND strlen( lv_val ) <= 9.
-      result = lv_val.
+    IF /kro/cl_ui5_util_context=>check_int_digits( val ) = abap_true.
+      result = condense( val ).
     ENDIF.
 
   ENDMETHOD.
 
   METHOD parse_sort.
 
-    DATA lv_json TYPE string.
+    DATA lv_json  TYPE string.
+    DATA lv_index TYPE i.
     lv_json = condense( val ).
     IF lv_json IS INITIAL.
       RETURN.
@@ -105,15 +124,19 @@ CLASS /kro/cl_ui5_srv_window IMPLEMENTATION.
 
     TRY.
         DATA(li_json) = /kro/cl_ajson=>parse( lv_json ).
-        LOOP AT li_json->members( `/` ) INTO DATA(lv_member).
-          DATA(lv_sorter) = |/{ lv_member }|.
+        " by index, not over members( ): ajson sorts the member names as
+        " text, so an eleventh sorter (`10`) came before the third (`2`)
+        DATA(lv_count) = lines( li_json->members( `/` ) ).
+        WHILE lv_index < lv_count.
+          lv_index = lv_index + 1.
+          DATA(lv_sorter) = |/{ lv_index }|.
           DATA(lv_name) = to_upper( li_json->get_string( |{ lv_sorter }/PATH| ) ).
-          IF lv_name IS INITIAL.
+          IF path_valid( lv_name ) = abap_false.
             CONTINUE.
           ENDIF.
           INSERT VALUE #( path       = lv_name
                           descending = li_json->get_boolean( |{ lv_sorter }/DESCENDING| ) ) INTO TABLE result.
-        ENDLOOP.
+        ENDWHILE.
       CATCH cx_root.
         " a sort that cannot be read is no sort - the app's own order
         CLEAR result.
@@ -136,9 +159,17 @@ CLASS /kro/cl_ui5_srv_window IMPLEMENTATION.
           lv_group = lv_group + 1.
           LOOP AT li_json->members( |/{ lv_g }| ) INTO DATA(lv_c).
             DATA(lv_cond) = |/{ lv_g }/{ lv_c }|.
+            DATA(lv_path) = to_upper( li_json->get_string( |{ lv_cond }/1| ) ).
+            DATA(lv_operator) = li_json->get_string( |{ lv_cond }/2| ).
+            " path and operator are the browser's, and the app builds its
+            " WHERE from them: a condition that names no component or no
+            " documented operator is no condition
+            IF path_valid( lv_path ) = abap_false OR operator_valid( lv_operator ) = abap_false.
+              CONTINUE.
+            ENDIF.
             INSERT VALUE #( group    = lv_group
-                            path     = to_upper( li_json->get_string( |{ lv_cond }/1| ) )
-                            operator = li_json->get_string( |{ lv_cond }/2| )
+                            path     = lv_path
+                            operator = lv_operator
                             value1   = li_json->get( |{ lv_cond }/3| )
                             value2   = li_json->get( |{ lv_cond }/4| ) ) INTO TABLE result.
           ENDLOOP.
@@ -147,6 +178,26 @@ CLASS /kro/cl_ui5_srv_window IMPLEMENTATION.
         " a filter that cannot be read is no filter - every row
         CLEAR result.
     ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD path_valid.
+
+    IF val IS INITIAL.
+      RETURN.
+    ENDIF.
+    result = xsdbool( val CO `ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/` ).
+
+  ENDMETHOD.
+
+  METHOD operator_valid.
+
+    CASE val.
+      WHEN `EQ` OR `NE` OR `LT` OR `LE` OR `GT` OR `GE` OR `BT` OR `NB`
+          OR `Contains` OR `NotContains` OR `StartsWith` OR `NotStartsWith`
+          OR `EndsWith` OR `NotEndsWith`.
+        result = abap_true.
+    ENDCASE.
 
   ENDMETHOD.
 
