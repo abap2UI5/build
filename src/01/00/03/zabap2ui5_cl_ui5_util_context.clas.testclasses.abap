@@ -3695,6 +3695,7 @@ CLASS ltcl_edge DEFINITION FINAL
     METHODS test_class_exists_lower     FOR TESTING RAISING cx_static_check.
     METHODS test_bool_to_json           FOR TESTING RAISING cx_static_check.
     METHODS test_token_excluding_bt     FOR TESTING RAISING cx_static_check.
+    METHODS test_token_pattern          FOR TESTING RAISING cx_static_check.
     METHODS test_uuid_shape             FOR TESTING RAISING cx_static_check.
     METHODS test_subtract_leap_day      FOR TESTING RAISING cx_static_check.
     METHODS test_subtract_year_end      FOR TESTING RAISING cx_static_check.
@@ -4077,6 +4078,74 @@ CLASS ltcl_edge IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD test_token_pattern.
+
+    " a CP / NP row whose LOW is a pattern already renders as that pattern -
+    " the template's asterisks around it turned `abc*` into `*abc**`. A row
+    " without an asterisk keeps the rendering it always had
+    DATA temp204 TYPE zabap2ui5_cl_ui5_util_context=>ty_t_range.
+    DATA temp205 LIKE LINE OF temp204.
+    DATA lt_range LIKE temp204.
+    DATA lt_token TYPE zabap2ui5_cl_ui5_util_context=>ty_t_token.
+    FIELD-SYMBOLS <temp206> LIKE LINE OF lt_token.
+    DATA temp207 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp208> LIKE LINE OF lt_token.
+    DATA temp209 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp210> LIKE LINE OF lt_token.
+    DATA temp211 LIKE sy-tabix.
+    CLEAR temp204.
+
+    temp205-sign = `I`.
+    temp205-option = `CP`.
+    temp205-low = `abc*`.
+    INSERT temp205 INTO TABLE temp204.
+    temp205-sign = `I`.
+    temp205-option = `NP`.
+    temp205-low = `*x`.
+    INSERT temp205 INTO TABLE temp204.
+    temp205-sign = `I`.
+    temp205-option = `CP`.
+    temp205-low = `xyz`.
+    INSERT temp205 INTO TABLE temp204.
+
+    lt_range = temp204.
+
+
+    lt_token = zabap2ui5_cl_ui5_util_context=>filter_get_token_t_by_range_t( lt_range ).
+
+
+
+    temp207 = sy-tabix.
+    READ TABLE lt_token INDEX 1 ASSIGNING <temp206>.
+    sy-tabix = temp207.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `abc*`
+                                        act = <temp206>-key ).
+
+
+    temp209 = sy-tabix.
+    READ TABLE lt_token INDEX 2 ASSIGNING <temp208>.
+    sy-tabix = temp209.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `!(*x)`
+                                        act = <temp208>-key ).
+
+
+    temp211 = sy-tabix.
+    READ TABLE lt_token INDEX 3 ASSIGNING <temp210>.
+    sy-tabix = temp211.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `*xyz*`
+                                        act = <temp210>-key ).
+
+  ENDMETHOD.
+
   METHOD test_uuid_shape.
 
     DATA lv_first TYPE string.
@@ -4251,17 +4320,17 @@ CLASS ltcl_coverage IMPLEMENTATION.
     DATA lt_sorted TYPE ty_t_sorted.
     DATA ls_flat TYPE ty_s_flat.
 
-    DATA temp204 LIKE REF TO lt_std.
-    DATA temp205 LIKE REF TO lt_sorted.
-    DATA temp206 LIKE REF TO ls_flat.
-    GET REFERENCE OF lt_std INTO temp204.
-cl_abap_unit_assert=>assert_equals( exp = abap_true act = zabap2ui5_cl_ui5_util_context=>rtti_check_table_standard( temp204 ) ).
+    DATA temp212 LIKE REF TO lt_std.
+    DATA temp213 LIKE REF TO lt_sorted.
+    DATA temp214 LIKE REF TO ls_flat.
+    GET REFERENCE OF lt_std INTO temp212.
+cl_abap_unit_assert=>assert_equals( exp = abap_true act = zabap2ui5_cl_ui5_util_context=>rtti_check_table_standard( temp212 ) ).
 
-    GET REFERENCE OF lt_sorted INTO temp205.
-cl_abap_unit_assert=>assert_equals( exp = abap_false act = zabap2ui5_cl_ui5_util_context=>rtti_check_table_standard( temp205 ) ).
+    GET REFERENCE OF lt_sorted INTO temp213.
+cl_abap_unit_assert=>assert_equals( exp = abap_false act = zabap2ui5_cl_ui5_util_context=>rtti_check_table_standard( temp213 ) ).
 
-    GET REFERENCE OF ls_flat INTO temp206.
-cl_abap_unit_assert=>assert_equals( exp = abap_false act = zabap2ui5_cl_ui5_util_context=>rtti_check_table_standard( temp206 ) ).
+    GET REFERENCE OF ls_flat INTO temp214.
+cl_abap_unit_assert=>assert_equals( exp = abap_false act = zabap2ui5_cl_ui5_util_context=>rtti_check_table_standard( temp214 ) ).
 
   ENDMETHOD.
 
@@ -4282,86 +4351,86 @@ cl_abap_unit_assert=>assert_equals( exp = abap_false act = zabap2ui5_cl_ui5_util
     DATA lt_flat TYPE ty_t_flat.
 
     " the line of a standard table, every component with its json_kind
-    DATA temp207 LIKE REF TO lt_flat.
+    DATA temp215 LIKE REF TO lt_flat.
 DATA lt_comp TYPE zabap2ui5_cl_ui5_util_context=>ty_t_flat_comp.
-    FIELD-SYMBOLS <temp208> LIKE LINE OF lt_comp.
-    DATA temp209 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp210> LIKE LINE OF lt_comp.
-    DATA temp211 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp212> LIKE LINE OF lt_comp.
-    DATA temp213 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp214> LIKE LINE OF lt_comp.
-    DATA temp215 LIKE sy-tabix.
     FIELD-SYMBOLS <temp216> LIKE LINE OF lt_comp.
     DATA temp217 LIKE sy-tabix.
     FIELD-SYMBOLS <temp218> LIKE LINE OF lt_comp.
     DATA temp219 LIKE sy-tabix.
-    GET REFERENCE OF lt_flat INTO temp207.
+    FIELD-SYMBOLS <temp220> LIKE LINE OF lt_comp.
+    DATA temp221 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp222> LIKE LINE OF lt_comp.
+    DATA temp223 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp224> LIKE LINE OF lt_comp.
+    DATA temp225 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp226> LIKE LINE OF lt_comp.
+    DATA temp227 LIKE sy-tabix.
+    GET REFERENCE OF lt_flat INTO temp215.
 
-lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp207 ).
+lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp215 ).
 
     cl_abap_unit_assert=>assert_equals( exp = 5
                                         act = lines( lt_comp ) ).
 
 
-    temp209 = sy-tabix.
-    READ TABLE lt_comp INDEX 1 ASSIGNING <temp208>.
-    sy-tabix = temp209.
-    IF sy-subrc <> 0.
-      ASSERT 1 = 0.
-    ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `TEXT`
-                                        act = <temp208>-name ).
-
-
-    temp211 = sy-tabix.
-    READ TABLE lt_comp INDEX 1 ASSIGNING <temp210>.
-    sy-tabix = temp211.
-    IF sy-subrc <> 0.
-      ASSERT 1 = 0.
-    ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `S`
-                                        act = <temp210>-json_kind ).
-
-
-    temp213 = sy-tabix.
-    READ TABLE lt_comp INDEX 2 ASSIGNING <temp212>.
-    sy-tabix = temp213.
-    IF sy-subrc <> 0.
-      ASSERT 1 = 0.
-    ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `D`
-                                        act = <temp212>-json_kind ).
-
-
-    temp215 = sy-tabix.
-    READ TABLE lt_comp INDEX 3 ASSIGNING <temp214>.
-    sy-tabix = temp215.
-    IF sy-subrc <> 0.
-      ASSERT 1 = 0.
-    ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `T`
-                                        act = <temp214>-json_kind ).
-
-
     temp217 = sy-tabix.
-    READ TABLE lt_comp INDEX 4 ASSIGNING <temp216>.
+    READ TABLE lt_comp INDEX 1 ASSIGNING <temp216>.
     sy-tabix = temp217.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `B`
-                                        act = <temp216>-json_kind ).
+    cl_abap_unit_assert=>assert_equals( exp = `TEXT`
+                                        act = <temp216>-name ).
 
 
     temp219 = sy-tabix.
-    READ TABLE lt_comp INDEX 5 ASSIGNING <temp218>.
+    READ TABLE lt_comp INDEX 1 ASSIGNING <temp218>.
     sy-tabix = temp219.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `N`
+    cl_abap_unit_assert=>assert_equals( exp = `S`
                                         act = <temp218>-json_kind ).
+
+
+    temp221 = sy-tabix.
+    READ TABLE lt_comp INDEX 2 ASSIGNING <temp220>.
+    sy-tabix = temp221.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `D`
+                                        act = <temp220>-json_kind ).
+
+
+    temp223 = sy-tabix.
+    READ TABLE lt_comp INDEX 3 ASSIGNING <temp222>.
+    sy-tabix = temp223.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `T`
+                                        act = <temp222>-json_kind ).
+
+
+    temp225 = sy-tabix.
+    READ TABLE lt_comp INDEX 4 ASSIGNING <temp224>.
+    sy-tabix = temp225.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `B`
+                                        act = <temp224>-json_kind ).
+
+
+    temp227 = sy-tabix.
+    READ TABLE lt_comp INDEX 5 ASSIGNING <temp226>.
+    sy-tabix = temp227.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `N`
+                                        act = <temp226>-json_kind ).
 
   ENDMETHOD.
 
@@ -4372,17 +4441,17 @@ lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp207 ).
     DATA lv_text TYPE string.
 
     " a sorted table, a nested structure, a scalar: none is flat
-    DATA temp220 LIKE REF TO lt_sorted.
-    DATA temp221 LIKE REF TO ls_nested.
-    DATA temp222 LIKE REF TO lv_text.
-    GET REFERENCE OF lt_sorted INTO temp220.
-cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp220 ) ).
+    DATA temp228 LIKE REF TO lt_sorted.
+    DATA temp229 LIKE REF TO ls_nested.
+    DATA temp230 LIKE REF TO lv_text.
+    GET REFERENCE OF lt_sorted INTO temp228.
+cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp228 ) ).
 
-    GET REFERENCE OF ls_nested INTO temp221.
-cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp221 ) ).
+    GET REFERENCE OF ls_nested INTO temp229.
+cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp229 ) ).
 
-    GET REFERENCE OF lv_text INTO temp222.
-cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp222 ) ).
+    GET REFERENCE OF lv_text INTO temp230.
+cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp230 ) ).
 
   ENDMETHOD.
 
@@ -4394,7 +4463,7 @@ cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_fla
 
     " the fields of an include in its place, under the names the structure
     " addresses them by - the name of the include itself is none of them
-    DATA temp223 LIKE REF TO ls_incl.
+    DATA temp231 LIKE REF TO ls_incl.
 DATA lt_comp TYPE zabap2ui5_cl_ui5_util_context=>ty_t_flat_comp.
     DATA temp12 TYPE xsdboolean.
     DATA temp2 LIKE sy-subrc.
@@ -4404,25 +4473,25 @@ DATA lt_comp TYPE zabap2ui5_cl_ui5_util_context=>ty_t_flat_comp.
     DATA temp5 LIKE sy-subrc.
     DATA temp6 LIKE sy-subrc.
     DATA temp7 LIKE sy-tabix.
-    DATA temp224 LIKE REF TO ls_suffix.
-    FIELD-SYMBOLS <temp225> LIKE LINE OF lt_comp.
-    DATA temp226 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp227> LIKE LINE OF lt_comp.
-    DATA temp228 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp229> LIKE LINE OF lt_comp.
-    DATA temp230 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp231> LIKE LINE OF lt_comp.
-    DATA temp232 LIKE sy-tabix.
+    DATA temp232 LIKE REF TO ls_suffix.
+    FIELD-SYMBOLS <temp233> LIKE LINE OF lt_comp.
+    DATA temp234 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp235> LIKE LINE OF lt_comp.
+    DATA temp236 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp237> LIKE LINE OF lt_comp.
+    DATA temp238 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp239> LIKE LINE OF lt_comp.
+    DATA temp240 LIKE sy-tabix.
     DATA temp14 TYPE xsdboolean.
     DATA temp8 LIKE sy-subrc.
     FIELD-SYMBOLS <cell> TYPE any.
-    DATA temp233 LIKE LINE OF lt_comp.
-    DATA lr_comp LIKE REF TO temp233.
+    DATA temp241 LIKE LINE OF lt_comp.
+    DATA lr_comp LIKE REF TO temp241.
       DATA temp15 TYPE xsdboolean.
-    DATA temp234 LIKE REF TO ls_deep.
-    GET REFERENCE OF ls_incl INTO temp223.
+    DATA temp242 LIKE REF TO ls_deep.
+    GET REFERENCE OF ls_incl INTO temp231.
 
-lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp223 ).
+lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp231 ).
     cl_abap_unit_assert=>assert_equals( exp = 2
                                         act = lines( lt_comp ) ).
 
@@ -4451,50 +4520,50 @@ lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp223 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp13 ).
 
 
-    GET REFERENCE OF ls_suffix INTO temp224.
-lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp224 ).
+    GET REFERENCE OF ls_suffix INTO temp232.
+lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp232 ).
     cl_abap_unit_assert=>assert_equals( exp = 6
                                         act = lines( lt_comp ) ).
 
 
-    temp226 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `TEXT_X` ASSIGNING <temp225>.
-    sy-tabix = temp226.
+    temp234 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `TEXT_X` ASSIGNING <temp233>.
+    sy-tabix = temp234.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `S`
-                                        act = <temp225>-json_kind ).
+                                        act = <temp233>-json_kind ).
 
 
-    temp228 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `DATE_X` ASSIGNING <temp227>.
-    sy-tabix = temp228.
+    temp236 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `DATE_X` ASSIGNING <temp235>.
+    sy-tabix = temp236.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `D`
-                                        act = <temp227>-json_kind ).
+                                        act = <temp235>-json_kind ).
 
 
-    temp230 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `FLAG_X` ASSIGNING <temp229>.
-    sy-tabix = temp230.
+    temp238 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `FLAG_X` ASSIGNING <temp237>.
+    sy-tabix = temp238.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `B`
-                                        act = <temp229>-json_kind ).
+                                        act = <temp237>-json_kind ).
 
 
-    temp232 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `NUM_X` ASSIGNING <temp231>.
-    sy-tabix = temp232.
+    temp240 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `NUM_X` ASSIGNING <temp239>.
+    sy-tabix = temp240.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `N`
-                                        act = <temp231>-json_kind ).
+                                        act = <temp239>-json_kind ).
 
 
     READ TABLE lt_comp WITH KEY name = `S_FLAT` TRANSPORTING NO FIELDS.
@@ -4516,8 +4585,8 @@ lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp224 ).
 
     " an include that brings a nested structure: not flat
 
-    GET REFERENCE OF ls_deep INTO temp234.
-cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp234 ) ).
+    GET REFERENCE OF ls_deep INTO temp242.
+cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp242 ) ).
 
   ENDMETHOD.
 
@@ -4525,36 +4594,36 @@ cl_abap_unit_assert=>assert_initial( zabap2ui5_cl_ui5_util_context=>rtti_get_fla
 
     DATA ls_stamps TYPE ty_s_stamps.
 
-    DATA temp235 LIKE REF TO ls_stamps.
+    DATA temp243 LIKE REF TO ls_stamps.
 DATA lt_comp TYPE zabap2ui5_cl_ui5_util_context=>ty_t_flat_comp.
-    FIELD-SYMBOLS <temp236> LIKE LINE OF lt_comp.
-    DATA temp237 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp238> LIKE LINE OF lt_comp.
-    DATA temp239 LIKE sy-tabix.
-    GET REFERENCE OF ls_stamps INTO temp235.
+    FIELD-SYMBOLS <temp244> LIKE LINE OF lt_comp.
+    DATA temp245 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp246> LIKE LINE OF lt_comp.
+    DATA temp247 LIKE sy-tabix.
+    GET REFERENCE OF ls_stamps INTO temp243.
 
-lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp235 ).
+lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp243 ).
 
 
 
-    temp237 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `TS` ASSIGNING <temp236>.
-    sy-tabix = temp237.
+    temp245 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `TS` ASSIGNING <temp244>.
+    sy-tabix = temp245.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `U`
-                                        act = <temp236>-json_kind ).
+                                        act = <temp244>-json_kind ).
 
 
-    temp239 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `TSL` ASSIGNING <temp238>.
-    sy-tabix = temp239.
+    temp247 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `TSL` ASSIGNING <temp246>.
+    sy-tabix = temp247.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `L`
-                                        act = <temp238>-json_kind ).
+                                        act = <temp246>-json_kind ).
 
   ENDMETHOD.
 
@@ -4590,46 +4659,46 @@ lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp235 ).
     DATA ls_with_incl TYPE ty_s_with_incl.
     DATA lv_text TYPE string.
 
-    DATA temp240 TYPE REF TO cl_abap_datadescr.
+    DATA temp248 TYPE REF TO cl_abap_datadescr.
     DATA lt_comp TYPE abap_component_tab.
-    FIELD-SYMBOLS <temp241> LIKE LINE OF lt_comp.
-    DATA temp242 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp243> LIKE LINE OF lt_comp.
-    DATA temp244 LIKE sy-tabix.
-        DATA temp245 TYPE REF TO cl_abap_datadescr.
-    temp240 ?= cl_abap_typedescr=>describe_by_data( ls_with_incl ).
+    FIELD-SYMBOLS <temp249> LIKE LINE OF lt_comp.
+    DATA temp250 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp251> LIKE LINE OF lt_comp.
+    DATA temp252 LIKE sy-tabix.
+        DATA temp253 TYPE REF TO cl_abap_datadescr.
+    temp248 ?= cl_abap_typedescr=>describe_by_data( ls_with_incl ).
 
     lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_t_attri_by_include(
-        temp240 ).
+        temp248 ).
     cl_abap_unit_assert=>assert_equals( exp = 2
                                         act = lines( lt_comp ) ).
 
 
-    temp242 = sy-tabix.
-    READ TABLE lt_comp INDEX 1 ASSIGNING <temp241>.
-    sy-tabix = temp242.
+    temp250 = sy-tabix.
+    READ TABLE lt_comp INDEX 1 ASSIGNING <temp249>.
+    sy-tabix = temp250.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `NAME`
-                                        act = <temp241>-name ).
+                                        act = <temp249>-name ).
 
 
-    temp244 = sy-tabix.
-    READ TABLE lt_comp INDEX 2 ASSIGNING <temp243>.
-    sy-tabix = temp244.
+    temp252 = sy-tabix.
+    READ TABLE lt_comp INDEX 2 ASSIGNING <temp251>.
+    sy-tabix = temp252.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `ZIP`
-                                        act = <temp243>-name ).
+                                        act = <temp251>-name ).
 
     " no structure: the error names it, it is no dump
     TRY.
 
-        temp245 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
+        temp253 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
         zabap2ui5_cl_ui5_util_context=>rtti_get_t_attri_by_include(
-            temp245 ).
+            temp253 ).
         cl_abap_unit_assert=>fail( `a non-structure include must raise` ).
       CATCH zabap2ui5_cx_ui5_util_error ##NO_HANDLER.
     ENDTRY.
@@ -4640,14 +4709,14 @@ lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp235 ).
 
     DATA ls_with_incl TYPE ty_s_with_incl.
 
-    DATA temp246 TYPE REF TO cl_abap_structdescr.
+    DATA temp254 TYPE REF TO cl_abap_structdescr.
     DATA lt_raw TYPE abap_component_tab.
     DATA lt_comp TYPE abap_component_tab.
     DATA temp16 TYPE xsdboolean.
     DATA temp9 LIKE sy-subrc.
-    temp246 ?= cl_abap_typedescr=>describe_by_data( ls_with_incl ).
+    temp254 ?= cl_abap_typedescr=>describe_by_data( ls_with_incl ).
 
-    lt_raw = temp246->get_components( ).
+    lt_raw = temp254->get_components( ).
 
     lt_comp = zabap2ui5_cl_ui5_util_context=>expand_components( lt_raw ).
 
@@ -4675,16 +4744,16 @@ lt_comp = zabap2ui5_cl_ui5_util_context=>rtti_get_flat_components( temp235 ).
     DATA lv_empty TYPE string.
     DATA lv_full TYPE string VALUE `x`.
     DATA lr_none TYPE REF TO data.
-    DATA temp247 LIKE REF TO lv_empty.
-    DATA temp248 LIKE REF TO lv_full.
+    DATA temp255 LIKE REF TO lv_empty.
+    DATA temp256 LIKE REF TO lv_full.
 
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = zabap2ui5_cl_ui5_util_context=>check_unassign_initial( lr_none ) ).
 
-    GET REFERENCE OF lv_empty INTO temp247.
-cl_abap_unit_assert=>assert_equals( exp = abap_true act = zabap2ui5_cl_ui5_util_context=>check_unassign_initial( temp247 ) ).
+    GET REFERENCE OF lv_empty INTO temp255.
+cl_abap_unit_assert=>assert_equals( exp = abap_true act = zabap2ui5_cl_ui5_util_context=>check_unassign_initial( temp255 ) ).
 
-    GET REFERENCE OF lv_full INTO temp248.
-cl_abap_unit_assert=>assert_equals( exp = abap_false act = zabap2ui5_cl_ui5_util_context=>check_unassign_initial( temp248 ) ).
+    GET REFERENCE OF lv_full INTO temp256.
+cl_abap_unit_assert=>assert_equals( exp = abap_false act = zabap2ui5_cl_ui5_util_context=>check_unassign_initial( temp256 ) ).
 
   ENDMETHOD.
 

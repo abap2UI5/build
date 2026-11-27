@@ -14,7 +14,13 @@
     "errorNamespace": "."
   },
   "rules": {
-    "downport": true,
+    "downport": {
+      "exclude": [
+        "cl_layo_sample_0[3567]\\.clas\\.xml$",
+        "cl_layo_xml_builder\\.clas\\.xml$",
+        "cl_tm_001\\.clas\\.abap$"
+      ]
+    },
     "begin_end_names": true,
     "check_ddic": true,
     "check_include": true,
