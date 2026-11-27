@@ -83,6 +83,9 @@ CLASS zabap2ui5_cl_ui5_llm_claude DEFINITION
 
   PRIVATE SECTION.
 
+    " the endpoint as the texts of an exception name it
+    CONSTANTS cv_api_name TYPE string VALUE `the Messages API`.
+
     DATA mv_model TYPE string.
     DATA mv_api_key TYPE string.
     DATA mv_url TYPE string.
@@ -112,8 +115,8 @@ ENDCLASS.
 CLASS zabap2ui5_cl_ui5_llm_claude IMPLEMENTATION.
 
   METHOD constructor.
-    DATA temp14 TYPE i.
-      DATA temp15 TYPE string.
+    DATA temp20 TYPE i.
+      DATA temp21 TYPE string.
 
     mv_model       = model.
     mv_api_key     = api_key.
@@ -121,19 +124,19 @@ CLASS zabap2ui5_cl_ui5_llm_claude IMPLEMENTATION.
     mv_destination = destination.
 
     IF timeout > 0.
-      temp14 = timeout.
+      temp20 = timeout.
     ELSE.
-      temp14 = cv_default_timeout.
+      temp20 = cv_default_timeout.
     ENDIF.
-    mv_timeout     = temp14.
+    mv_timeout     = temp20.
     IF mv_url IS INITIAL.
 
       IF mv_destination IS INITIAL.
-        temp15 = cv_default_url.
+        temp21 = cv_default_url.
       ELSE.
-        temp15 = cv_default_path.
+        temp21 = cv_default_path.
       ENDIF.
-      mv_url = temp15.
+      mv_url = temp21.
     ENDIF.
     IF io_http IS BOUND.
       mi_http = io_http.
@@ -157,25 +160,10 @@ CLASS zabap2ui5_cl_ui5_llm_claude IMPLEMENTATION.
     IF lv_model IS INITIAL.
       lv_model = mv_model.
     ENDIF.
-    IF lv_model IS INITIAL.
-      RAISE EXCEPTION TYPE zabap2ui5_cx_ui5_llm
-        EXPORTING
-          text = `no model is configured - the Messages API needs a model id`.
-    ENDIF.
-    IF lines( t_message ) = 0.
-      RAISE EXCEPTION TYPE zabap2ui5_cx_ui5_llm
-        EXPORTING
-          text = `a chat call needs at least one message`.
-    ENDIF.
-    IF s_options-temperature IS NOT INITIAL
-        AND ( s_options-temperature CN `0123456789.` OR count( val = s_options-temperature
-                                                               sub = `.` ) > 1
-              " JSON wants a digit on both sides of the point - `.7` and `1.` are no number there
-              OR s_options-temperature CP `.*` OR s_options-temperature CP `*.` ).
-      RAISE EXCEPTION TYPE zabap2ui5_cx_ui5_llm
-        EXPORTING
-          text = |the temperature { s_options-temperature } is no number|.
-    ENDIF.
+    zabap2ui5_cl_ui5_llm_http=>check_call( iv_model       = lv_model
+                                       it_message     = t_message
+                                       iv_temperature = s_options-temperature
+                                       iv_api         = cv_api_name ).
 
     lv_max_tokens = s_options-max_tokens.
     IF lv_max_tokens <= 0.
@@ -205,11 +193,6 @@ CLASS zabap2ui5_cl_ui5_llm_claude IMPLEMENTATION.
         lo_body->touch_array( `/messages` ).
 
         LOOP AT t_message INTO ls_message.
-          IF ls_message-content IS INITIAL.
-            RAISE EXCEPTION TYPE zabap2ui5_cx_ui5_llm
-              EXPORTING
-                text = |message { sy-tabix } has no content - the Messages API refuses an empty message|.
-          ENDIF.
 
           lo_item = zabap2ui5_cl_ajson=>create_empty( ).
           lo_item->set( iv_path = `/role`
@@ -231,9 +214,9 @@ CLASS zabap2ui5_cl_ui5_llm_claude IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD build_request.
-    DATA temp16 TYPE zabap2ui5_if_ui5_llm_http=>ty_s_header.
-    DATA temp17 TYPE zabap2ui5_if_ui5_llm_http=>ty_s_header.
-      DATA temp18 TYPE zabap2ui5_if_ui5_llm_http=>ty_s_header.
+    DATA temp22 TYPE zabap2ui5_if_ui5_llm_http=>ty_s_header.
+    DATA temp23 TYPE zabap2ui5_if_ui5_llm_http=>ty_s_header.
+      DATA temp24 TYPE zabap2ui5_if_ui5_llm_http=>ty_s_header.
 
     result-body        = build_body( system    = system
                                      t_message = t_message
@@ -243,21 +226,21 @@ CLASS zabap2ui5_cl_ui5_llm_claude IMPLEMENTATION.
     result-timeout     = mv_timeout.
 
 
-    CLEAR temp16.
-    temp16-name = `content-type`.
-    temp16-value = `application/json; charset=utf-8`.
-    INSERT temp16 INTO TABLE result-t_header.
+    CLEAR temp22.
+    temp22-name = `content-type`.
+    temp22-value = `application/json; charset=utf-8`.
+    INSERT temp22 INTO TABLE result-t_header.
 
-    CLEAR temp17.
-    temp17-name = `anthropic-version`.
-    temp17-value = cv_api_version.
-    INSERT temp17 INTO TABLE result-t_header.
+    CLEAR temp23.
+    temp23-name = `anthropic-version`.
+    temp23-value = cv_api_version.
+    INSERT temp23 INTO TABLE result-t_header.
     IF mv_api_key IS NOT INITIAL.
 
-      CLEAR temp18.
-      temp18-name = `x-api-key`.
-      temp18-value = mv_api_key.
-      INSERT temp18 INTO TABLE result-t_header.
+      CLEAR temp24.
+      temp24-name = `x-api-key`.
+      temp24-value = mv_api_key.
+      INSERT temp24 INTO TABLE result-t_header.
     ENDIF.
 
   ENDMETHOD.
@@ -285,38 +268,8 @@ CLASS zabap2ui5_cl_ui5_llm_claude IMPLEMENTATION.
   METHOD parse_response.
 
     DATA lo_json TYPE REF TO zabap2ui5_if_ajson.
-    DATA lv_message TYPE string.
-      DATA temp1 TYPE xsdboolean.
-
-    TRY.
-        lo_json = zabap2ui5_cl_ajson=>parse( is_response-body ).
-      CATCH cx_root.
-        CLEAR lo_json.
-    ENDTRY.
-
-    IF is_response-status <> 200.
-      IF lo_json IS BOUND.
-        lv_message = lo_json->get_string( `/error/message` ).
-      ENDIF.
-      IF lv_message IS INITIAL.
-        lv_message = zabap2ui5_cl_ui5_util_context=>c_truncate( val = is_response-body
-                                                           max  = 200 ).
-      ENDIF.
-
-      temp1 = boolc( is_response-status = 408 OR is_response-status = 429 OR is_response-status >= 500 ).
-      RAISE EXCEPTION TYPE zabap2ui5_cx_ui5_llm
-        EXPORTING
-          text        = |the Messages API answered HTTP { is_response-status } { is_response-reason } - { lv_message }|
-          http_status = is_response-status
-          retryable   = temp1.
-    ENDIF.
-
-    IF lo_json IS NOT BOUND.
-      RAISE EXCEPTION TYPE zabap2ui5_cx_ui5_llm
-        EXPORTING
-          text        = `the Messages API answered with no JSON`
-          http_status = is_response-status.
-    ENDIF.
+    lo_json = zabap2ui5_cl_ui5_llm_http=>parse_answer( is_response = is_response
+                                                         iv_api      = cv_api_name ).
 
     result-model                 = lo_json->get_string( `/model` ).
     result-stop_reason           = lo_json->get_string( `/stop_reason` ).

@@ -281,6 +281,15 @@ CLASS zabap2ui5_cl_ui5_http_handler DEFINITION PUBLIC.
       RETURNING
         VALUE(result) TYPE ty_s_http_res.
 
+    " the bodyless 304 for a request whose If-None-Match (sv_if_none_match,
+    " consumed here) holds iv_etag - initial when it does not, and the GET
+    " assembles its body
+    CLASS-METHODS _http_not_modified
+      IMPORTING
+        iv_etag       TYPE string
+      RETURNING
+        VALUE(result) TYPE ty_s_http_res.
+
     " the validator of a bundle response: the frontend bundle's, the
     " devtools bundle's, which changes with the devtools files alone, or
     " the custom controls bundle's, which changes with the controls alone
@@ -326,6 +335,16 @@ CLASS zabap2ui5_cl_ui5_http_handler DEFINITION PUBLIC.
         !method       TYPE clike
       RETURNING
         VALUE(result) TYPE ty_s_http_res.
+
+    " Whether an exception chain carries the draft store's 'not found'
+    " (NO_DRAFT_ENTRY_OF_PREVIOUS_REQUEST_FOUND, z2ui5_cl_ui5_srv_draft=>read)
+    " - the draft a request continued from expired, was cleaned up, or is
+    " another user's. Answered as a 410 (_error_response)
+    CLASS-METHODS _check_draft_gone
+      IMPORTING
+        !val          TYPE REF TO cx_root
+      RETURNING
+        VALUE(result) TYPE abap_bool.
 
     "! the extra attributes of the bootstrap script tag from the exit's
     "! t_add_config - a row whose name is no attribute name is left out
@@ -977,7 +996,6 @@ MOVE-CORRESPONDING mo_server->get_req_info( ) TO ms_req.
     DATA temp75 LIKE LINE OF ls_config-t_add_config.
     DATA lr_config_key LIKE REF TO temp75.
       DATA lv_etag LIKE sv_get_etag.
-    DATA lv_if_none_match LIKE sv_if_none_match.
     DATA lv_style_exit TYPE string.
     DATA lv_settings TYPE string.
     DATA lv_preconnect TYPE string.
@@ -1032,14 +1050,8 @@ MOVE-CORRESPONDING mo_server->get_req_info( ) TO ms_req.
     sv_get_etag     = lv_etag.
     sv_get_etag_key = lv_cache_key.
 
-    " consumed once - see sv_if_none_match
-
-    lv_if_none_match = sv_if_none_match.
-    CLEAR sv_if_none_match.
-    IF zabap2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
-                                                         etag          = lv_etag ) = abap_true.
-      result-status_code   = 304.
-      result-status_reason = `Not Modified`.
+    result = _http_not_modified( lv_etag ).
+    IF result IS NOT INITIAL.
       RETURN.
     ENDIF.
 
@@ -1265,6 +1277,20 @@ MOVE-CORRESPONDING mo_server->get_req_info( ) TO ms_req.
 
   ENDMETHOD.
 
+  METHOD _http_not_modified.
+
+    " consumed once - see sv_if_none_match
+    DATA lv_if_none_match LIKE sv_if_none_match.
+    lv_if_none_match = sv_if_none_match.
+    CLEAR sv_if_none_match.
+    IF zabap2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
+                                                         etag          = iv_etag ) = abap_true.
+      result-status_code   = 304.
+      result-status_reason = `Not Modified`.
+    ENDIF.
+
+  ENDMETHOD.
+
   METHOD _http_get_devtools.
 
     " GET <node>?z2ui5-bundle=devtools - the developer tools as a script of
@@ -1282,17 +1308,10 @@ MOVE-CORRESPONDING mo_server->get_req_info( ) TO ms_req.
     " 'self' allows - the page's CSP hash covers the inline script alone,
     " and this is a file. No user or app data, the same for everybody.
     DATA lv_etag TYPE string.
-    DATA lv_if_none_match LIKE sv_if_none_match.
     lv_etag = _bundle_etag( abap_true ).
 
-    " consumed once - see sv_if_none_match
-
-    lv_if_none_match = sv_if_none_match.
-    CLEAR sv_if_none_match.
-    IF zabap2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
-                                                         etag          = lv_etag ) = abap_true.
-      result-status_code   = 304.
-      result-status_reason = `Not Modified`.
+    result = _http_not_modified( lv_etag ).
+    IF result IS NOT INITIAL.
       RETURN.
     ENDIF.
 
@@ -1317,18 +1336,11 @@ MOVE-CORRESPONDING mo_server->get_req_info( ) TO ms_req.
     " (set_response). A <script> element of the page's origin, which
     " script-src 'self' allows. No user or app data, the same for everybody.
     DATA lv_etag TYPE string.
-    DATA lv_if_none_match LIKE sv_if_none_match.
     lv_etag = _bundle_etag( iv_devtools = abap_false
                                   iv_cc       = abap_true ).
 
-    " consumed once - see sv_if_none_match
-
-    lv_if_none_match = sv_if_none_match.
-    CLEAR sv_if_none_match.
-    IF zabap2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
-                                                         etag          = lv_etag ) = abap_true.
-      result-status_code   = 304.
-      result-status_reason = `Not Modified`.
+    result = _http_not_modified( lv_etag ).
+    IF result IS NOT INITIAL.
       RETURN.
     ENDIF.
 
@@ -1384,17 +1396,10 @@ MOVE-CORRESPONDING mo_server->get_req_info( ) TO ms_req.
     " of one node path never answers for another, and the tag stays the
     " bundle's own.
     DATA lv_etag TYPE string.
-    DATA lv_if_none_match LIKE sv_if_none_match.
     lv_etag = _get_etag( c_bundle_param ).
 
-    " consumed once - see sv_if_none_match
-
-    lv_if_none_match = sv_if_none_match.
-    CLEAR sv_if_none_match.
-    IF zabap2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
-                                                         etag          = lv_etag ) = abap_true.
-      result-status_code   = 304.
-      result-status_reason = `Not Modified`.
+    result = _http_not_modified( lv_etag ).
+    IF result IS NOT INITIAL.
       RETURN.
     ENDIF.
 
@@ -1509,6 +1514,11 @@ MOVE-CORRESPONDING mo_server->get_req_info( ) TO ms_req.
     " text/html from rendering a reflected app name / exception text as markup
     " (reflected-XSS). Success bodies are HTML for the GET shell, JavaScript
     " for the bundles and JSON for the POST roundtrip.
+    " nosniff is set here, not left to the exit's security headers alone: an
+    " exit that ASSIGNS its own t_security_header instead of appending to it
+    " (or one that raises, which costs its headers) dropped it from every
+    " response, the 500 bodies with exception text included. It is never
+    " wrong for any of these bodies; the exit's headers below still follow.
 
     IF ms_res-status_code >= 400.
       temp82 = `text/plain; charset=UTF-8`.
@@ -1523,6 +1533,8 @@ MOVE-CORRESPONDING mo_server->get_req_info( ) TO ms_req.
     lv_content_type = temp82.
     mo_server->set_header_field( n = `content-type`
                                  v = lv_content_type ).
+    mo_server->set_header_field( n = `X-Content-Type-Options`
+                                 v = `nosniff` ).
 
     " Ask the ICF runtime to gzip the response when the client accepts it.
     " Every body this handler sends is text (the frontend bundle, about
@@ -1779,6 +1791,25 @@ MOVE-CORRESPONDING lo_post->main( ) TO result.
   ENDMETHOD.
 
   METHOD _error_response.
+    DATA temp83 TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
+    DATA ls_config_post LIKE temp83.
+    DATA lv_body TYPE string.
+
+    " The draft is gone: the routine end of every session left idle past
+    " the expiry (draft_exp_time_in_hours), or one whose user changed. Not
+    " a defect, so not the dump of one - a 410 the frontend recognizes and
+    " answers with "session expired - restart" instead of the fatal
+    " overlay with its source positions (core/Server.js, SESSION_EXPIRED).
+    " The body is a fixed text, the same with or without hidden error
+    " details: it names nothing of the system
+    IF _check_draft_gone( val ) = abap_true.
+      CLEAR result.
+      result-body = `NO_DRAFT_ENTRY_OF_PREVIOUS_REQUEST_FOUND - the session expired: ` &&
+`the state of the previous request is no longer on the server. Restart the app`.
+      result-status_code = 410.
+      result-status_reason = `Gone`.
+      RETURN.
+    ENDIF.
 
     " In hardened installations the exit sets check_hide_error_details, so the
     " raw exception text (RTTI/class/DDIC names, dynamic-call failures, and the
@@ -1788,9 +1819,7 @@ MOVE-CORRESPONDING lo_post->main( ) TO result.
     " The request's POST config, which the exit has usually answered
     " already (the CSRF gate) - then this is no call into customer code at
     " all. An exit that raised was not remembered and is asked again here.
-    DATA temp83 TYPE zabap2ui5_if_ui5_exit=>ty_s_http_config_post.
-    DATA ls_config_post LIKE temp83.
-    DATA lv_body TYPE string.
+
     CLEAR temp83.
 
     ls_config_post = temp83.
@@ -1831,6 +1860,30 @@ MOVE-CORRESPONDING lo_post->main( ) TO result.
     result-body = lv_body.
     result-status_code = 500.
     result-status_reason = `Internal Server Error`.
+
+  ENDMETHOD.
+
+  METHOD _check_draft_gone.
+
+    " the whole chain: the store's error arrives wrapped by whoever re-raised
+    " it on the way up (the handler's request context among them). Guarded
+    " like everything this runs for - it runs inside a CATCH block
+    DATA lx LIKE val.
+    lx = val.
+    DO 20 TIMES.
+      IF lx IS NOT BOUND.
+        RETURN.
+      ENDIF.
+      TRY.
+          IF lx->get_text( ) = `NO_DRAFT_ENTRY_OF_PREVIOUS_REQUEST_FOUND`.
+            result = abap_true.
+            RETURN.
+          ENDIF.
+        CATCH cx_root.
+          RETURN.
+      ENDTRY.
+      lx = lx->previous.
+    ENDDO.
 
   ENDMETHOD.
 

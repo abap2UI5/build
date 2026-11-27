@@ -12,9 +12,6 @@ CLASS zabap2ui5_cl_popup_sample_20 DEFINITION
   PROTECTED SECTION.
     DATA client TYPE REF TO zabap2ui5_if_client.
 
-    " the field the open search help returns its value to
-    DATA mv_target TYPE string.
-
     METHODS on_init.
     METHODS on_event.
     METHODS render_main.
@@ -32,10 +29,19 @@ CLASS zabap2ui5_cl_popup_sample_20 IMPLEMENTATION.
 
     IF client->check_on_init( ) IS NOT INITIAL.
       on_init( ).
-    ENDIF.
 
-    on_event( ).
-    on_after_search( ).
+    ELSEIF client->check_on_nav_back( ) IS NOT INITIAL.
+      " back from a search help: read its result, then show the view again
+      on_after_search( ).
+      render_main( ).
+
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft - the view is shown again
+      render_main( ).
+
+    ELSE.
+      on_event( ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -56,25 +62,26 @@ CLASS zabap2ui5_cl_popup_sample_20 IMPLEMENTATION.
         client->nav_app_leave( ).
 
       WHEN `CALL_SHLP_BY_NAME`.
-        " search help H_T002 (languages), returning its parameter SPRAS
-        mv_target = `LANGUAGE`.
-        client->nav_app_call( zabap2ui5_cl_popup_shlp=>factory_by_searchhelp( i_searchhelp = `H_T002`
-                                                                          i_fname      = `SPRAS` ) ).
+        " search help H_T002 (languages), returning its parameter SPRAS - the
+        " tag names the field the value goes to, get_nav_tag( ) returns it
+        client->nav_app_call( app = zabap2ui5_cl_popup_shlp=>factory_by_searchhelp( i_searchhelp = `H_T002`
+                                                                                i_fname      = `SPRAS` )
+                              tag = `LANGUAGE` ).
 
       WHEN `CALL_SHLP_PREFILLED`.
         " search help of field USR01-BNAME, its user field prefilled
-        mv_target = `USER`.
 
         CLEAR temp1.
 
         temp2-name = `BNAME`.
         temp2-value = mv_prefill.
         INSERT temp2 INTO TABLE temp1.
-        client->nav_app_call( zabap2ui5_cl_popup_shlp=>factory(
-                                  i_table = `USR01`
-                                  i_fname = `BNAME`
-                                  i_value = mv_user
-                                  it_init = temp1 ) ).
+        client->nav_app_call( app = zabap2ui5_cl_popup_shlp=>factory(
+                                        i_table = `USR01`
+                                        i_fname = `BNAME`
+                                        i_value = mv_user
+                                        it_init = temp1 )
+                              tag = `USER` ).
 
       WHEN OTHERS.
 
@@ -86,7 +93,6 @@ CLASS zabap2ui5_cl_popup_sample_20 IMPLEMENTATION.
 
     DATA view TYPE REF TO zabap2ui5_cl_ui5_view_builder.
     DATA page TYPE REF TO zabap2ui5_cl_ui5_view_builder.
-    DATA temp1 TYPE xsdboolean.
     view = zabap2ui5_cl_ui5_view_builder=>factory(
                      )->ele( n = `View` ns = `mvc`
                      )->a( n = `xmlns` v = `sap.m`
@@ -95,13 +101,11 @@ CLASS zabap2ui5_cl_popup_sample_20 IMPLEMENTATION.
                      )->a( n = `displayBlock` v = `true`
                      )->a( n = `height` v = `100%` ).
 
-
-    temp1 = boolc( client->get( )-s_draft-id_prev_app_stack IS NOT INITIAL ).
     page = view->ele( `Shell`
                      )->ele( `Page`
                      )->a( n = `title` v = `Search-Help by Name and Prefill`
                      )->a( n = `navButtonPress` v = client->_event( `BACK` )
-                     )->a( n = `showNavButton` b = temp1
+                     )->a( n = `showNavButton` b = client->check_app_prev_stack( )
                      )->a( n = `class` v = `sapUiContentPadding` ).
 
     page->ele( n = `SimpleForm` ns = `form`
@@ -139,32 +143,23 @@ CLASS zabap2ui5_cl_popup_sample_20 IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD on_after_search.
-        DATA temp3 TYPE REF TO zabap2ui5_if_popup_result.
-        DATA popup LIKE temp3.
 
-    IF client->get( )-check_on_navigated = abap_false.
+    " every popup hands its result over through z2ui5_if_popup_result
+    DATA temp3 TYPE REF TO zabap2ui5_if_popup_result.
+    DATA popup LIKE temp3.
+    temp3 ?= client->get_app_prev( ).
+
+    popup = temp3.
+    IF popup->check_confirmed( ) = abap_false.
       RETURN.
     ENDIF.
 
-    TRY.
-
-        temp3 ?= client->get_app_prev( ).
-
-        popup = temp3.
-
-        IF popup->check_confirmed( ) = abap_false.
-          RETURN.
-        ENDIF.
-
-        CASE mv_target.
-          WHEN `LANGUAGE`.
-            mv_language = popup->value_string( ).
-          WHEN `USER`.
-            mv_user = popup->value_string( ).
-        ENDCASE.
-
-      CATCH cx_root ##NO_HANDLER.
-    ENDTRY.
+    CASE client->get_nav_tag( ).
+      WHEN `LANGUAGE`.
+        mv_language = popup->value_string( ).
+      WHEN `USER`.
+        mv_user = popup->value_string( ).
+    ENDCASE.
 
   ENDMETHOD.
 

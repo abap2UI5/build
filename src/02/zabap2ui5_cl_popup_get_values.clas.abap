@@ -106,6 +106,11 @@ CLASS zabap2ui5_cl_popup_get_values DEFINITION PUBLIC.
     DATA ms_result           TYPE ty_s_result.
     "! the message of a required field left empty
     DATA mv_error            TYPE string.
+    "! the fields as the caller defined them - the server's own copy of
+    "! mt_field, taken at the start: mt_field is bound to the browser, which
+    "! can rewrite any of its cells, so a field's definition (name, kind,
+    "! required, read-only) and the value of a read-only field come from here
+    DATA mt_field_def        TYPE ty_t_field.
 
     METHODS view_display.
 
@@ -118,6 +123,11 @@ CLASS zabap2ui5_cl_popup_get_values DEFINITION PUBLIC.
       RETURNING
         VALUE(result) TYPE abap_bool.
 
+    "! mt_field rebuilt from mt_field_def with only what the user may change
+    "! taken from the browser: the value of an editable field, of the kind
+    "! its control binds, and for a listbox only one of its keys
+    METHODS restore_field_definitions.
+
   PRIVATE SECTION.
 ENDCLASS.
 
@@ -125,10 +135,10 @@ ENDCLASS.
 CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
 
   METHOD factory.
-    DATA temp29 LIKE LINE OF r_result->mt_field.
-    DATA lr_field LIKE REF TO temp29.
-    DATA temp30 LIKE LINE OF r_result->listbox.
-    DATA lr_listbox LIKE REF TO temp30.
+    DATA temp45 LIKE LINE OF r_result->mt_field.
+    DATA lr_field LIKE REF TO temp45.
+    DATA temp46 LIKE LINE OF r_result->listbox.
+    DATA lr_listbox LIKE REF TO temp46.
 
     CREATE OBJECT r_result.
 
@@ -154,6 +164,7 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
     LOOP AT r_result->listbox REFERENCE INTO lr_listbox.
       lr_listbox->name = to_upper( lr_listbox->name ).
     ENDLOOP.
+    r_result->mt_field_def = r_result->mt_field.
 
   ENDMETHOD.
 
@@ -167,7 +178,7 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
 
     DATA lv_name TYPE string.
     FIELD-SYMBOLS <ls_field> TYPE zabap2ui5_cl_popup_get_values=>ty_s_field.
-    DATA temp31 TYPE string.
+    DATA temp47 TYPE string.
     lv_name = to_upper( name ).
 
     READ TABLE ms_result-fields WITH KEY name = lv_name ASSIGNING <ls_field>.
@@ -176,17 +187,17 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
     ENDIF.
 
     IF <ls_field>-kind = cs_kind-checkbox.
-      temp31 = <ls_field>-flag.
+      temp47 = <ls_field>-flag.
     ELSE.
-      temp31 = <ls_field>-value.
+      temp47 = <ls_field>-value.
     ENDIF.
-    result = temp31.
+    result = temp47.
 
   ENDMETHOD.
 
   METHOD check_required.
-    DATA temp32 LIKE LINE OF mt_field.
-    DATA lr_field LIKE REF TO temp32.
+    DATA temp48 LIKE LINE OF mt_field.
+    DATA lr_field LIKE REF TO temp48.
 
     result = abap_true.
 
@@ -201,6 +212,74 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
         result = abap_false.
         RETURN.
       ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD restore_field_definitions.
+
+    FIELD-SYMBOLS <ls_input> TYPE ty_s_field.
+
+    DATA lt_input LIKE mt_field.
+    DATA temp49 LIKE LINE OF mt_field.
+    DATA lr_field LIKE REF TO temp49.
+      DATA lv_index LIKE sy-tabix.
+          DATA temp1 TYPE xsdboolean.
+          DATA lv_key LIKE LINE OF <ls_input>-keys.
+            DATA temp50 LIKE sy-subrc.
+            DATA temp51 LIKE sy-tabix.
+          DATA temp52 LIKE sy-subrc.
+          DATA temp53 LIKE sy-tabix.
+    lt_input = mt_field.
+    mt_field = mt_field_def.
+
+
+
+    LOOP AT mt_field REFERENCE INTO lr_field WHERE read_only = abap_false.
+
+      lv_index = sy-tabix.
+      UNASSIGN <ls_input>.
+      READ TABLE lt_input INDEX lv_index ASSIGNING <ls_input>.
+      IF <ls_input> IS NOT ASSIGNED.
+        CONTINUE.
+      ENDIF.
+
+      CASE lr_field->kind.
+        WHEN cs_kind-checkbox.
+
+          temp1 = boolc( <ls_input>-flag IS NOT INITIAL ).
+          lr_field->flag = temp1.
+
+        WHEN cs_kind-multi.
+          CLEAR lr_field->keys.
+
+          LOOP AT <ls_input>-keys INTO lv_key.
+
+
+            temp51 = sy-tabix.
+            READ TABLE listbox WITH KEY name = lr_field->name key = lv_key TRANSPORTING NO FIELDS.
+            temp50 = sy-subrc.
+            sy-tabix = temp51.
+            IF temp50 = 0.
+              INSERT lv_key INTO TABLE lr_field->keys.
+            ENDIF.
+          ENDLOOP.
+
+        WHEN cs_kind-listbox.
+
+
+          temp53 = sy-tabix.
+          READ TABLE listbox WITH KEY name = lr_field->name key = <ls_input>-value TRANSPORTING NO FIELDS.
+          temp52 = sy-subrc.
+          sy-tabix = temp53.
+          IF <ls_input>-value IS INITIAL
+             OR temp52 = 0.
+            lr_field->value = <ls_input>-value.
+          ENDIF.
+
+        WHEN OTHERS.
+          lr_field->value = <ls_input>-value.
+      ENDCASE.
     ENDLOOP.
 
   ENDMETHOD.
@@ -250,20 +329,20 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
   METHOD render_fields.
 
     DATA form TYPE REF TO zabap2ui5_cl_ui5_view_builder.
-    DATA temp33 LIKE LINE OF mt_field.
-    DATA lr_field LIKE REF TO temp33.
+    DATA temp54 LIKE LINE OF mt_field.
+    DATA lr_field LIKE REF TO temp54.
       DATA lv_index LIKE sy-tabix.
-          DATA temp1 TYPE xsdboolean.
           DATA temp2 TYPE xsdboolean.
-          DATA multi TYPE REF TO zabap2ui5_cl_ui5_view_builder.
           DATA temp3 TYPE xsdboolean.
-          DATA temp34 LIKE LINE OF listbox.
-          DATA lr_multi LIKE REF TO temp34.
-          DATA items TYPE REF TO zabap2ui5_cl_ui5_view_builder.
+          DATA multi TYPE REF TO zabap2ui5_cl_ui5_view_builder.
           DATA temp4 TYPE xsdboolean.
-          DATA temp35 LIKE LINE OF listbox.
-          DATA lr_value LIKE REF TO temp35.
+          DATA temp55 LIKE LINE OF listbox.
+          DATA lr_multi LIKE REF TO temp55.
+          DATA items TYPE REF TO zabap2ui5_cl_ui5_view_builder.
           DATA temp5 TYPE xsdboolean.
+          DATA temp56 LIKE LINE OF listbox.
+          DATA lr_value LIKE REF TO temp56.
+          DATA temp6 TYPE xsdboolean.
     form = node->ele( n = `SimpleForm` ns = `form`
         )->a( n = `xmlns:form` v = `sap.ui.layout.form`
         )->a( n = `editable` b = abap_true
@@ -284,32 +363,32 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
       CASE lr_field->kind.
         WHEN cs_kind-checkbox.
 
-          temp1 = boolc( lr_field->read_only = abap_false ).
+          temp2 = boolc( lr_field->read_only = abap_false ).
           form->tag( `CheckBox`
               )->a( n = `selected` v = client->_bind( val       = lr_field->flag
                                                      tab       = mt_field
                                                      tab_index = lv_index )
-              )->a( n = `editable` b = temp1 ).
+              )->a( n = `editable` b = temp2 ).
 
         WHEN cs_kind-date.
 
-          temp2 = boolc( lr_field->read_only = abap_false ).
+          temp3 = boolc( lr_field->read_only = abap_false ).
           form->tag( `DatePicker`
               )->a( n = `value` v = client->_bind( val       = lr_field->value
                                                   tab       = mt_field
                                                   tab_index = lv_index )
               )->a( n = `valueFormat` v = `yyyyMMdd`
-              )->a( n = `editable` b = temp2 ).
+              )->a( n = `editable` b = temp3 ).
 
         WHEN cs_kind-multi.
 
 
-          temp3 = boolc( lr_field->read_only = abap_false ).
+          temp4 = boolc( lr_field->read_only = abap_false ).
           multi = form->ele( `MultiComboBox`
               )->a( n = `selectedKeys` v = client->_bind( val       = lr_field->keys
                                                          tab       = mt_field
                                                          tab_index = lv_index )
-              )->a( n = `editable` b = temp3
+              )->a( n = `editable` b = temp4
               )->ele( `items` ).
 
 
@@ -322,13 +401,13 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
         WHEN cs_kind-listbox.
 
 
-          temp4 = boolc( lr_field->read_only = abap_false ).
+          temp5 = boolc( lr_field->read_only = abap_false ).
           items = form->ele( `Select`
               )->a( n = `selectedKey` v = client->_bind( val       = lr_field->value
                                                         tab       = mt_field
                                                         tab_index = lv_index )
               )->a( n = `forceSelection` b = abap_false
-              )->a( n = `editable` b = temp4
+              )->a( n = `editable` b = temp5
               )->ele( `items` ).
           items->tag( n = `Item` ns = `core`
               )->a( n = `key` v = ``
@@ -343,12 +422,12 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
 
         WHEN OTHERS.
 
-          temp5 = boolc( lr_field->read_only = abap_false ).
+          temp6 = boolc( lr_field->read_only = abap_false ).
           form->tag( `Input`
               )->a( n = `value` v = client->_bind( val       = lr_field->value
                                                   tab       = mt_field
                                                   tab_index = lv_index )
-              )->a( n = `editable` b = temp5 ).
+              )->a( n = `editable` b = temp6 ).
       ENDCASE.
     ENDLOOP.
 
@@ -359,11 +438,19 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
     me->client = client.
 
     IF client->check_on_init( ) IS NOT INITIAL.
+      " the caller may have changed the public mt_field after factory( )
+      mt_field_def = mt_field.
+      view_display( ).
+      RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft (browser Forward, a reload): the popup went with
+      " the page - show it again
       view_display( ).
       RETURN.
     ENDIF.
 
     CLEAR mv_error.
+    restore_field_definitions( ).
     CASE client->get( )-event.
       WHEN `BUTTON_CONFIRM`.
         IF check_required( ) = abap_false.
@@ -373,15 +460,13 @@ CLASS zabap2ui5_cl_popup_get_values IMPLEMENTATION.
         ms_result-check_confirmed = abap_true.
         ms_result-fields = mt_field.
         client->popup_destroy( ).
-        client->nav_app_leave( app   = client->get_app_prev( )
-                               event = event_confirm ).
+        client->nav_app_leave( event = event_confirm ).
 
       WHEN `BUTTON_CANCEL`.
         ms_result-check_confirmed = abap_false.
         ms_result-fields = mt_field.
         client->popup_destroy( ).
-        client->nav_app_leave( app   = client->get_app_prev( )
-                               event = event_canceled ).
+        client->nav_app_leave( event = event_canceled ).
     ENDCASE.
 
   ENDMETHOD.

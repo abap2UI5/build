@@ -25,9 +25,12 @@ CLASS zabap2ui5_cl_popup_shlp DEFINITION
     DATA mv_table        TYPE string.
     DATA mv_fname        TYPE string.
     DATA mv_shlpfield    TYPE string.
+    " deprecated: the value of factory( i_value ) - the popup does not use
+    " it; a prefill goes into it_init (name and value)
     DATA mv_value        TYPE string.
     DATA mv_return_value TYPE string.
-    DATA mv_rows         TYPE int1 VALUE '50' ##NEEDED.
+    " the most rows F4IF_SELECT_VALUES reads (0 reads all)
+    DATA mv_rows         TYPE int1 VALUE '50'.
     DATA mt_data         TYPE REF TO data.
     DATA ms_data_row     TYPE REF TO data.
     DATA mo_layout       TYPE REF TO zabap2ui5_cl_layo_manager.
@@ -126,17 +129,31 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
 
     DATA class TYPE string.
     DATA app TYPE string.
+    DATA temp10 TYPE string.
+    DATA searchhelp LIKE temp10.
     class = zabap2ui5_cl_popup_context=>rtti_get_classname_by_ref( me ).
 
     app = zabap2ui5_cl_popup_context=>url_param_get( val = 'app'
                                               url = client->get( )-s_config-search ).
+
+    " opened by table and field, mv_searchhelp is empty - the layout is the
+    " one of the search help determined for the field, not one shared by
+    " every search help with a parameter of that name
+
+    IF mv_searchhelp IS NOT INITIAL.
+      temp10 = mv_searchhelp.
+    ELSE.
+      temp10 = ms_shlp-shlpname.
+    ENDIF.
+
+    searchhelp = temp10.
 
     mo_layout = zabap2ui5_cl_layo_manager=>factory( control  = zabap2ui5_cl_layo_manager=>m_table
                                                 data     = mt_data
                                                 handle01 = class
                                                 handle02 = mv_shlpfield
                                                 handle03 = app
-                                                handle04 = mv_searchhelp ).
+                                                handle04 = searchhelp ).
 
   ENDMETHOD.
 
@@ -146,21 +163,16 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
     DATA dialog TYPE REF TO zabap2ui5_cl_ui5_view_builder.
     DATA simple_form TYPE REF TO zabap2ui5_cl_ui5_view_builder.
     FIELD-SYMBOLS <data_row> TYPE data.
-    DATA temp10 LIKE LINE OF mt_result_desc.
-    DATA dfies LIKE REF TO temp10.
-      DATA temp11 TYPE zabap2ui5_cl_popup_context=>ty_ddshiface-value.
-      DATA temp12 TYPE zabap2ui5_cl_popup_context=>ty_ddshiface.
+    DATA temp11 LIKE LINE OF mt_result_desc.
+    DATA dfies LIKE REF TO temp11.
+      DATA temp12 TYPE zabap2ui5_cl_popup_context=>ty_ddshiface-value.
+      DATA temp13 TYPE zabap2ui5_cl_popup_context=>ty_ddshiface.
       DATA enabled TYPE abap_bool.
       DATA temp1 TYPE xsdboolean.
       FIELD-SYMBOLS <val> TYPE any.
     FIELD-SYMBOLS <mt_data> TYPE data.
     DATA table TYPE REF TO zabap2ui5_cl_ui5_view_builder.
     DATA header TYPE REF TO zabap2ui5_cl_ui5_view_builder.
-    DATA columns TYPE REF TO zabap2ui5_cl_ui5_view_builder.
-    DATA temp13 LIKE LINE OF mo_layout->ms_layout-t_layout.
-    DATA layout LIKE REF TO temp13.
-      DATA lv_index LIKE sy-tabix.
-    DATA cells TYPE REF TO zabap2ui5_cl_ui5_view_builder.
     popup = zabap2ui5_cl_ui5_view_builder=>factory(
                       )->ele( n = `FragmentDefinition` ns = `core`
                       )->a( n = `xmlns` v = `sap.m`
@@ -189,15 +201,15 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
 
       " fixed values of the search help are not editable
 
-      CLEAR temp11.
+      CLEAR temp12.
 
-      READ TABLE ms_shlp-interface INTO temp12 WITH KEY shlpfield = dfies->fieldname.
+      READ TABLE ms_shlp-interface INTO temp13 WITH KEY shlpfield = dfies->fieldname.
       IF sy-subrc = 0.
-        temp11 = temp12-value.
+        temp12 = temp13-value.
       ENDIF.
 
 
-      temp1 = boolc( temp11 IS INITIAL ).
+      temp1 = boolc( temp12 IS INITIAL ).
       enabled = temp1.
 
       " the row carries the list fields of the search help only, the record
@@ -242,46 +254,11 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
                                                         client = client
                                                         layout = mo_layout ).
 
-
-    columns = table->ele( `columns` ).
-
-
-
-    LOOP AT mo_layout->ms_layout-t_layout REFERENCE INTO layout.
-
-      lv_index = sy-tabix.
-
-      columns->ele( `Column`
-          )->a( n = `visible` v = client->_bind( val       = layout->visible
-                                                        tab       = mo_layout->ms_layout-t_layout
-                                                        tab_index = lv_index )
-          )->a( n = `mergeDuplicates` v = client->_bind( val       = layout->merge
-                                                        tab       = mo_layout->ms_layout-t_layout
-                                                        tab_index = lv_index )
-          )->a( n = `minScreenWidth` v = client->_bind( val       = layout->width
-                                                        tab       = mo_layout->ms_layout-t_layout
-                                                        tab_index = lv_index )
-          )->tag( `Text`
-          )->a( n = `text` v = zabap2ui5_cl_popup_context=>rtti_get_data_element_text_l( layout->rollname ) ).
-
-    ENDLOOP.
-
-
-    cells = columns->end(
-                      )->ele( `items`
-                      )->ele( `ColumnListItem`
-                      )->a( n = `vAlign` v = `Middle`
-                      )->a( n = `type` v = `Navigation`
-                      )->a( n = `press` v = client->_event( val   = 'SHLP_ROW_SELECT'
-                                                                    arg   = `${ROW_ID}` )
-                      )->ele( `cells` ).
-
-    LOOP AT mo_layout->ms_layout-t_layout REFERENCE INTO layout.
-
-      cells->ele( `ObjectIdentifier`
-          )->a( n = `text` v = |\{{ zabap2ui5_cl_ui5_view_builder=>component_path( layout->fname ) }\}| ).
-
-    ENDLOOP.
+    zabap2ui5_cl_popup_value_help=>render_columns( table             = table
+                                               client            = client
+                                               layout            = mo_layout
+                                               event             = `SHLP_ROW_SELECT`
+                                               label_by_rollname = abap_true ).
 
     client->popup_display( popup->stringify( ) ).
 
@@ -289,12 +266,8 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
 
   METHOD on_event.
 
-    FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
-        DATA lt_arg TYPE string_table.
-        FIELD-SYMBOLS <row> TYPE any.
-        FIELD-SYMBOLS <temp1> LIKE LINE OF lt_arg.
-        DATA temp2 LIKE sy-tabix.
-        FIELD-SYMBOLS <value> TYPE any.
+    DATA lv_value TYPE string.
+    DATA lv_found TYPE abap_bool.
 
     CASE client->get( )-event.
 
@@ -302,47 +275,25 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
 
         client->popup_destroy( ).
 
-        client->nav_app_leave( client->get_app( client->get( )-s_draft-id_prev_app_stack ) ).
+        client->nav_app_leave( ).
 
       WHEN `SHLP_ROW_SELECT`.
 
-
-        lt_arg = client->get( )-t_event_arg.
-        " an event without the row index raised CX_SY_ITAB_LINE_NOT_FOUND
-        IF lt_arg IS INITIAL.
+        zabap2ui5_cl_popup_value_help=>read_row_value( EXPORTING data  = mt_data
+                                                             t_arg = client->get( )-t_event_arg
+                                                             fname = mv_shlpfield
+                                                   IMPORTING value = lv_value
+                                                             found = lv_found ).
+        IF lv_found = abap_false.
           RETURN.
         ENDIF.
 
-        ASSIGN mt_data->* TO <tab>.
-
-
-
-
-        temp2 = sy-tabix.
-        READ TABLE lt_arg INDEX 1 ASSIGNING <temp1>.
-        sy-tabix = temp2.
-        IF sy-subrc <> 0.
-          ASSERT 1 = 0.
-        ENDIF.
-        READ TABLE <tab> INDEX <temp1> ASSIGNING <row>.
-        " the index comes from the client - a row that is not there must not
-        " reach ASSIGN COMPONENT on an unassigned field symbol
-        IF <row> IS NOT ASSIGNED.
-          RETURN.
-        ENDIF.
-
-
-        ASSIGN COMPONENT mv_shlpfield OF STRUCTURE <row> TO <value>.
-        IF sy-subrc <> 0.
-          RETURN.
-        ENDIF.
-
-        mv_return_value = <value>.
+        mv_return_value = lv_value.
         mv_check_confirmed = abap_true.
 
         client->popup_destroy( ).
 
-        client->nav_app_leave( client->get_app( client->get( )-s_draft-id_prev_app_stack ) ).
+        client->nav_app_leave( ).
 
       WHEN 'SHLP_INPUT_DONE'.
 
@@ -402,22 +353,21 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD on_after_layout.
-          DATA temp14 TYPE REF TO zabap2ui5_cl_layo_pop.
-          DATA app LIKE temp14.
+    DATA layout TYPE REF TO zabap2ui5_cl_layo_manager.
 
     " only relevant when returning from another app
-    IF client->check_on_navigated( ) IS NOT INITIAL.
-      TRY.
-
-          temp14 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
-
-          app = temp14.
-          mo_layout = app->mo_layout.
-          render_view( ).
-
-        CATCH cx_root ##NO_HANDLER.
-      ENDTRY.
+    IF client->check_on_navigated( ) = abap_false.
+      RETURN.
     ENDIF.
+
+
+    layout = zabap2ui5_cl_popup_value_help=>get_layout_back( client ).
+    IF layout IS BOUND.
+      mo_layout = layout.
+    ENDIF.
+    " back from the layout popup, or a restored draft (browser Forward, a
+    " reload) whose popup went with the page - show it (again)
+    render_view( ).
 
   ENDMETHOD.
 
@@ -425,8 +375,8 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
     FIELD-SYMBOLS <data_row> TYPE data.
     DATA dfies LIKE LINE OF mt_result_desc.
       FIELD-SYMBOLS <value> TYPE any.
-      DATA temp15 TYPE zabap2ui5_cl_popup_context=>ty_shlp_descr-selopt.
-      DATA temp16 LIKE LINE OF temp15.
+      DATA temp14 TYPE zabap2ui5_cl_popup_context=>ty_shlp_descr-selopt.
+      DATA temp15 LIKE LINE OF temp14.
 
     CLEAR ms_shlp-selopt.
 
@@ -447,16 +397,16 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
       ENDIF.
 
 
-      CLEAR temp15.
-      temp15 = ms_shlp-selopt.
+      CLEAR temp14.
+      temp14 = ms_shlp-selopt.
 
-      temp16-shlpfield = dfies-fieldname.
-      temp16-shlpname = ''.
-      temp16-sign = 'I'.
-      temp16-option = 'CP'.
-      temp16-low = |*{ <value> }*|.
-      INSERT temp16 INTO TABLE temp15.
-      ms_shlp-selopt = temp15.
+      temp15-shlpfield = dfies-fieldname.
+      temp15-shlpname = ''.
+      temp15-sign = 'I'.
+      temp15-option = 'CP'.
+      temp15-low = |*{ <value> }*|.
+      INSERT temp15 INTO TABLE temp14.
+      ms_shlp-selopt = temp14.
 
     ENDLOOP.
 
@@ -467,14 +417,15 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
 
   METHOD read_search_help.
 
-    zabap2ui5_cl_popup_context=>bus_search_help_read( CHANGING ms_shlp        = ms_shlp
-                                                      mv_fname       = mv_fname
-                                                      mv_table       = mv_table
-                                                      mr_data        = mr_data
-                                                      mt_result_desc = mt_result_desc
-                                                      mv_shlpfield   = mv_shlpfield
-                                                      mt_data        = mt_data
-                                                      ms_data_row    = ms_data_row ).
+    zabap2ui5_cl_popup_context=>bus_search_help_read( EXPORTING iv_max_rows    = mv_rows
+                                                  CHANGING  ms_shlp        = ms_shlp
+                                                            mv_fname       = mv_fname
+                                                            mv_table       = mv_table
+                                                            mr_data        = mr_data
+                                                            mt_result_desc = mt_result_desc
+                                                            mv_shlpfield   = mv_shlpfield
+                                                            mt_data        = mt_data
+                                                            ms_data_row    = ms_data_row ).
 
   ENDMETHOD.
 
@@ -492,9 +443,9 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
     DATA lv_fm TYPE string.
     DATA lv_type_t TYPE string.
     FIELD-SYMBOLS <elementary> TYPE any.
-    DATA temp17 TYPE zabap2ui5_cl_popup_context=>ty_ddshiface-shlpfield.
-    DATA temp18 TYPE zabap2ui5_cl_popup_context=>ty_ddshiface.
-    DATA lv_shlpfield LIKE temp17.
+    DATA temp16 TYPE zabap2ui5_cl_popup_context=>ty_ddshiface-shlpfield.
+    DATA temp17 TYPE zabap2ui5_cl_popup_context=>ty_ddshiface.
+    DATA lv_shlpfield LIKE temp16.
 
     lv_shlpname = mv_searchhelp.
 
@@ -548,14 +499,14 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
     MOVE-CORRESPONDING <elementary> TO ms_shlp.
 
 
-    CLEAR temp17.
+    CLEAR temp16.
 
-    READ TABLE ms_shlp-interface INTO temp18 WITH KEY topshlpfld = mv_fname.
+    READ TABLE ms_shlp-interface INTO temp17 WITH KEY topshlpfld = mv_fname.
     IF sy-subrc = 0.
-      temp17 = temp18-shlpfield.
+      temp16 = temp17-shlpfield.
     ENDIF.
 
-    lv_shlpfield = temp17.
+    lv_shlpfield = temp16.
     IF lv_shlpfield IS NOT INITIAL.
       mv_shlpfield = lv_shlpfield.
     ENDIF.
@@ -566,7 +517,7 @@ CLASS zabap2ui5_cl_popup_shlp IMPLEMENTATION.
 
     FIELD-SYMBOLS <data_row> TYPE data.
     DATA init LIKE LINE OF mt_init.
-      DATA temp19 TYPE string.
+      DATA temp18 TYPE string.
 FIELD-SYMBOLS <value> TYPE any.
     ASSIGN ms_data_row->* TO <data_row>.
 
@@ -574,9 +525,9 @@ FIELD-SYMBOLS <value> TYPE any.
     LOOP AT mt_init INTO init WHERE value IS NOT INITIAL.
 
 
-      temp19 = to_upper( init-name ).
+      temp18 = to_upper( init-name ).
 
-ASSIGN COMPONENT temp19 OF STRUCTURE <data_row> TO <value>.
+ASSIGN COMPONENT temp18 OF STRUCTURE <data_row> TO <value>.
       IF sy-subrc <> 0.
         CONTINUE.
       ENDIF.
@@ -595,10 +546,10 @@ ASSIGN COMPONENT temp19 OF STRUCTURE <data_row> TO <value>.
     DATA init LIKE LINE OF mt_init.
       DATA lv_name TYPE string.
       DATA range LIKE LINE OF init-t_range.
-        DATA temp20 TYPE zabap2ui5_cl_popup_context=>ty_shlp_descr-selopt.
-        DATA temp21 LIKE LINE OF temp20.
-      DATA temp22 TYPE zabap2ui5_cl_popup_context=>ty_shlp_descr-selopt.
-      DATA temp23 LIKE LINE OF temp22.
+        DATA temp19 TYPE zabap2ui5_cl_popup_context=>ty_shlp_descr-selopt.
+        DATA temp20 LIKE LINE OF temp19.
+      DATA temp21 TYPE zabap2ui5_cl_popup_context=>ty_shlp_descr-selopt.
+      DATA temp22 LIKE LINE OF temp21.
       DATA temp3 TYPE zabap2ui5_cl_popup_context=>ty_ddshselopt-option.
     ASSIGN ms_data_row->* TO <data_row>.
 
@@ -611,16 +562,16 @@ ASSIGN COMPONENT temp19 OF STRUCTURE <data_row> TO <value>.
 
       LOOP AT init-t_range INTO range.
 
-        CLEAR temp20.
-        temp20 = result.
+        CLEAR temp19.
+        temp19 = result.
 
-        temp21-shlpfield = lv_name.
-        temp21-sign = range-sign.
-        temp21-option = range-option.
-        temp21-low = range-low.
-        temp21-high = range-high.
-        INSERT temp21 INTO TABLE temp20.
-        result = temp20.
+        temp20-shlpfield = lv_name.
+        temp20-sign = range-sign.
+        temp20-option = range-option.
+        temp20-low = range-low.
+        temp20-high = range-high.
+        INSERT temp20 INTO TABLE temp19.
+        result = temp19.
       ENDLOOP.
 
       IF init-value IS INITIAL.
@@ -635,28 +586,28 @@ ASSIGN COMPONENT temp19 OF STRUCTURE <data_row> TO <value>.
       ENDIF.
 
 
-      CLEAR temp22.
-      temp22 = result.
+      CLEAR temp21.
+      temp21 = result.
 
-      temp23-shlpfield = lv_name.
-      temp23-sign = `I`.
+      temp22-shlpfield = lv_name.
+      temp22-sign = `I`.
 
       IF init-value CA `*+`.
         temp3 = `CP`.
       ELSE.
         temp3 = `EQ`.
       ENDIF.
-      temp23-option = temp3.
-      temp23-low = init-value.
-      INSERT temp23 INTO TABLE temp22.
-      result = temp22.
+      temp22-option = temp3.
+      temp22-low = init-value.
+      INSERT temp22 INTO TABLE temp21.
+      result = temp21.
 
     ENDLOOP.
 
   ENDMETHOD.
 
   METHOD get_title.
-    DATA temp24 TYPE string.
+    DATA temp23 TYPE string.
 
     IF mv_table IS NOT INITIAL.
       result = zabap2ui5_cl_popup_context=>rtti_get_table_desrc( mv_table ).
@@ -665,11 +616,11 @@ ASSIGN COMPONENT temp19 OF STRUCTURE <data_row> TO <value>.
 
 
     IF ms_shlp-intdescr-ddtext IS NOT INITIAL.
-      temp24 = ms_shlp-intdescr-ddtext.
+      temp23 = ms_shlp-intdescr-ddtext.
     ELSE.
-      temp24 = mv_searchhelp.
+      temp23 = mv_searchhelp.
     ENDIF.
-    result = temp24.
+    result = temp23.
 
   ENDMETHOD.
 

@@ -31,7 +31,9 @@ CLASS zabap2ui5_cl_popup_file_ul DEFINITION PUBLIC.
       "! value is the last file as UTF-8 text (empty when it is no text),
       "! name and content its name and bytes - binary files too; files every
       "! file picked (with i_multiple
-      "! all of them, else the last one)
+      "! all of them, else the last one). In ms_result, value, name and
+      "! content are filled when the popup closes; result( ) has them at
+      "! any time
       BEGIN OF ty_s_result,
         value           TYPE string,
         check_confirmed TYPE abap_bool,
@@ -70,6 +72,13 @@ CLASS zabap2ui5_cl_popup_file_ul DEFINITION PUBLIC.
 
     METHODS on_upload.
 
+    "! name, content and value of cs_result from the last of its files -
+    "! derived when the result is read, not kept beside files[] in the
+    "! draft, which every roundtrip writes (an upload sat there three times)
+    METHODS set_last_file
+      CHANGING
+        cs_result TYPE ty_s_result.
+
   PRIVATE SECTION.
 ENDCLASS.
 
@@ -93,6 +102,7 @@ CLASS zabap2ui5_cl_popup_file_ul IMPLEMENTATION.
   METHOD result.
 
     result = ms_result.
+    set_last_file( CHANGING cs_result = result ).
 
   ENDMETHOD.
 
@@ -161,14 +171,6 @@ CLASS zabap2ui5_cl_popup_file_ul IMPLEMENTATION.
       ls_file-name = substring( val = ls_file-name off = lv_slash + 1 ).
     ENDIF.
 
-    " the text of a UTF-8 file - a binary one has its bytes only
-    TRY.
-        ms_result-value = zabap2ui5_cl_popup_context=>conv_get_string_by_xstring( ls_file-content ).
-      CATCH cx_root.
-        CLEAR ms_result-value.
-    ENDTRY.
-    ms_result-name = ls_file-name.
-    ms_result-content = ls_file-content.
     IF multiple = abap_false.
       CLEAR: ms_result-files, mt_name.
     ENDIF.
@@ -195,6 +197,11 @@ CLASS zabap2ui5_cl_popup_file_ul IMPLEMENTATION.
     IF client->check_on_init( ) IS NOT INITIAL.
       view_display( ).
       RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft (browser Forward, a reload): the popup went with
+      " the page - show it again
+      view_display( ).
+      RETURN.
     ENDIF.
 
 
@@ -208,9 +215,42 @@ CLASS zabap2ui5_cl_popup_file_ul IMPLEMENTATION.
 
         temp1 = boolc( lv_event = `BUTTON_CONFIRM` ).
         ms_result-check_confirmed = temp1.
+        set_last_file( CHANGING cs_result = ms_result ).
         client->popup_destroy( ).
         client->nav_app_leave( ).
     ENDCASE.
+
+  ENDMETHOD.
+
+  METHOD set_last_file.
+
+    DATA lv_lines TYPE i.
+    DATA ls_file TYPE zabap2ui5_cl_popup_file_ul=>ty_s_file.
+    FIELD-SYMBOLS <temp3> LIKE LINE OF cs_result-files.
+    DATA temp4 LIKE sy-tabix.
+    lv_lines = lines( cs_result-files ).
+    IF lv_lines = 0.
+      RETURN.
+    ENDIF.
+
+
+
+
+    temp4 = sy-tabix.
+    READ TABLE cs_result-files INDEX lv_lines ASSIGNING <temp3>.
+    sy-tabix = temp4.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    ls_file = <temp3>.
+    cs_result-name    = ls_file-name.
+    cs_result-content = ls_file-content.
+    " the text of a UTF-8 file - a binary one has its bytes only
+    TRY.
+        cs_result-value = zabap2ui5_cl_popup_context=>conv_get_string_by_xstring( ls_file-content ).
+      CATCH cx_root.
+        CLEAR cs_result-value.
+    ENDTRY.
 
   ENDMETHOD.
 

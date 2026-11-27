@@ -181,28 +181,15 @@ mo_layout = zabap2ui5_cl_layo_manager=>factory( control  = zabap2ui5_cl_layo_man
   ENDMETHOD.
 
   METHOD on_after_navigation.
-        DATA temp4 TYPE REF TO zabap2ui5_cl_layo_pop.
-        DATA app LIKE temp4.
 
-    TRY.
-
-
-        temp4 ?= client->get_app_prev( ).
-
-        app = temp4.
-        mo_layout = app->mo_layout.
-
-        IF app->mv_rerender = abap_true.
-          " subcolumns need rerendering to work ..
-          render_main( ).
-        ENDIF.
-        " for all other changes the changed model is enough - the framework
-        " sends it by itself
-      CATCH cx_root.
-        " not back from the layout popup (e.g. a restored draft) - the
-        " view still has to be displayed
-        render_main( ).
-    ENDTRY.
+    " back from the layout popup: take over the layout chosen there. Render
+    " again only when the popup changed what the view is built from (e.g.
+    " subcolumns) - for all other changes the changed model is enough, the
+    " framework sends it by itself. Not back from the layout popup (e.g. a
+    " restored draft): take_over( ) asks for the view to be displayed too
+    IF zabap2ui5_cl_layo_pop=>take_over( client = client layout = mo_layout ) = abap_true.
+      render_main( ).
+    ENDIF.
 
   ENDMETHOD.
 

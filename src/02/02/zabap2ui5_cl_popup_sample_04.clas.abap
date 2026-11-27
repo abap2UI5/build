@@ -17,20 +17,9 @@ ENDCLASS.
 CLASS zabap2ui5_cl_popup_sample_04 IMPLEMENTATION.
 
   METHOD on_navigation.
-        DATA lo_prev TYPE REF TO zabap2ui5_if_app.
-        DATA temp1 TYPE REF TO zabap2ui5_cl_popup_to_inform.
-        DATA lo_dummy LIKE temp1.
 
-    TRY.
-
-        lo_prev = client->get_app( client->get( )-s_draft-id_prev_app ).
-
-        temp1 ?= lo_prev.
-
-        lo_dummy = temp1.
-        client->message_box_display( `callback after popup to inform` ).
-      CATCH cx_root ##NO_HANDLER.
-    ENDTRY.
+    " the HTML popup only shows something - it has no value to read
+    client->message_box_display( `callback after popup HTML` ).
 
   ENDMETHOD.
 
@@ -77,10 +66,13 @@ CLASS zabap2ui5_cl_popup_sample_04 IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->get( )-check_on_navigated = abap_true.
-
+    IF client->check_on_navigated( ) IS NOT INITIAL.
       view_display( ).
-      on_navigation( ).
+      " true only on the way back from the popup - not on the first start
+      " or on a restore, where get_app_prev( ) is no popup
+      IF client->check_on_nav_back( ) IS NOT INITIAL.
+        on_navigation( ).
+      ENDIF.
       RETURN.
     ENDIF.
 

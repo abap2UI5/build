@@ -86,6 +86,7 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
     DATA lo_pop TYPE REF TO zabap2ui5_cl_popup_image_edit.
     DATA lv_xml TYPE string.
     DATA temp1 TYPE xsdboolean.
+    DATA temp2 TYPE xsdboolean.
     lo_pop = zabap2ui5_cl_popup_image_edit=>factory( iv_image = `data:image/png;base64,OLD`
                                                        iv_title = `Image Title` ).
     client_create( lo_pop ).
@@ -97,6 +98,10 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
     temp1 = boolc( lv_xml CS `Image Title` ).
     cl_abap_unit_assert=>assert_true( temp1 ).
+    " Esc closes the dialog - it has to raise CANCEL as the button does
+
+    temp2 = boolc( lv_xml CS `afterClose` ).
+    cl_abap_unit_assert=>assert_true( temp2 ).
 
   ENDMETHOD.
 
@@ -151,12 +156,12 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
   METHOD popup_destroyed.
 
     DATA temp3 LIKE sy-subrc.
-    DATA temp2 TYPE xsdboolean.
+    DATA temp4 TYPE xsdboolean.
     READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = zabap2ui5_if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
     temp3 = sy-subrc.
 
-    temp2 = boolc( temp3 = 0 ).
-    result = temp2.
+    temp4 = boolc( temp3 = 0 ).
+    result = temp4.
 
   ENDMETHOD.
 

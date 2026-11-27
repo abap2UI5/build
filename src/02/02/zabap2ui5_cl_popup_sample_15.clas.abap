@@ -159,8 +159,6 @@ CLASS zabap2ui5_cl_popup_sample_15 IMPLEMENTATION.
 
 
   METHOD zabap2ui5_if_app~main.
-          DATA temp3 TYPE REF TO zabap2ui5_cl_popup_table.
-          DATA lo_popup_table LIKE temp3.
 
     me->client = client.
 
@@ -168,22 +166,18 @@ CLASS zabap2ui5_cl_popup_sample_15 IMPLEMENTATION.
 
       set_data( ).
       view_display( ).
-      RETURN.
-    ENDIF.
 
-    IF client->get( )-check_on_navigated = abap_true.
-      TRY.
+    ELSEIF client->check_on_nav_back( ) IS NOT INITIAL.
 
-          temp3 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+      " back from the table popup, which only shows the rows
+      set_data( ).
+      view_display( ).
 
-          lo_popup_table = temp3.
-          set_data( ).
-        CATCH cx_root ##NO_HANDLER.
-      ENDTRY.
-      RETURN.
-    ENDIF.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft - the view is shown again
+      view_display( ).
 
-    IF client->get( )-event IS NOT INITIAL.
+    ELSEIF client->get( )-event IS NOT INITIAL.
       on_event( ).
     ENDIF.
 

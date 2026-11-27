@@ -9,6 +9,8 @@ CLASS zabap2ui5_cl_popup_get_range DEFINITION PUBLIC.
 
     TYPES:
       BEGIN OF ty_s_filter_pop,
+        " I include, E exclude - as the sign of a range row
+        sign   TYPE string,
         option TYPE string,
         low    TYPE string,
         high   TYPE string,
@@ -43,13 +45,32 @@ CLASS zabap2ui5_cl_popup_get_range DEFINITION PUBLIC.
     METHODS view_display.
 
   PRIVATE SECTION.
+    " entries of filter_get_token_range_mapping( ) that are no option of a
+    " range: the empty value, EQ or NE an empty LOW
+    CONSTANTS cv_option_empty     TYPE string VALUE `<leer>`.
+    CONSTANTS cv_option_not_empty TYPE string VALUE `!<leer>`.
+
+    METHODS filter_of_range
+      IMPORTING
+        range         TYPE zabap2ui5_cl_popup_context=>ty_s_range
+      RETURNING
+        VALUE(result) TYPE ty_s_filter_pop.
+
+    "! the range row of a condition of the popup - initial for a condition
+    "! without a value
+    METHODS range_of_filter
+      IMPORTING
+        filter        TYPE ty_s_filter_pop
+      RETURNING
+        VALUE(result) TYPE zabap2ui5_cl_popup_context=>ty_s_range.
+
 ENDCLASS.
 
 
 CLASS zabap2ui5_cl_popup_get_range IMPLEMENTATION.
 
   METHOD factory.
-    DATA temp29 TYPE zabap2ui5_cl_popup_context=>ty_s_range.
+    DATA temp39 TYPE zabap2ui5_cl_popup_context=>ty_s_range.
 
     CREATE OBJECT r_result.
 
@@ -57,8 +78,8 @@ CLASS zabap2ui5_cl_popup_get_range IMPLEMENTATION.
                                        CHANGING  tab             = r_result->ms_result-t_range ).
 
 
-    CLEAR temp29.
-    INSERT temp29 INTO TABLE r_result->ms_result-t_range.
+    CLEAR temp39.
+    INSERT temp39 INTO TABLE r_result->ms_result-t_range.
 
   ENDMETHOD.
 
@@ -98,9 +119,19 @@ CLASS zabap2ui5_cl_popup_get_range IMPLEMENTATION.
                      )->ele( `CustomListItem` ).
 
 
-    grid = item->ele( n = `Grid` ns = `layout` ).
+    grid = item->ele( n = `Grid` ns = `layout`
+                     )->a( n = `defaultSpan` v = `L2 M4 S12` ).
 
-    grid->ele( `ComboBox`
+    grid->ele( `Select`
+        )->a( n = `selectedKey` v = `{SIGN}`
+        )->tag( n = `Item` ns = `core`
+        )->a( n = `key` v = `I`
+        )->a( n = `text` v = `Include`
+        )->tag( n = `Item` ns = `core`
+        )->a( n = `key` v = `E`
+        )->a( n = `text` v = `Exclude`
+        )->end(
+        )->ele( `ComboBox`
         )->a( n = `selectedKey` v = `{OPTION}`
         )->a( n = `items` v = client->_bind( mt_mapping )
         )->tag( n = `Item` ns = `core`
@@ -112,7 +143,7 @@ CLASS zabap2ui5_cl_popup_get_range IMPLEMENTATION.
         )->a( n = `submit` v = client->_event( `BUTTON_CONFIRM` )
         )->tag( `Input`
         )->a( n = `value` v = `{HIGH}`
-        )->a( n = `visible` v = `{= ${OPTION} === 'BT' }`
+        )->a( n = `visible` v = `{= ${OPTION} === 'BT' || ${OPTION} === 'NB' }`
         )->a( n = `submit` v = client->_event( `BUTTON_CONFIRM` )
         )->tag( `Button`
         )->a( n = `icon` v = `sap-icon://decline`
@@ -144,13 +175,12 @@ CLASS zabap2ui5_cl_popup_get_range IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD zabap2ui5_if_app~main.
-      DATA temp30 LIKE LINE OF ms_result-t_range.
-      DATA lr_range LIKE REF TO temp30.
-        DATA temp31 TYPE zabap2ui5_cl_popup_get_range=>ty_s_filter_pop.
-        DATA temp32 LIKE LINE OF mt_filter.
-        DATA lr_filter LIKE REF TO temp32.
-          DATA temp33 TYPE zabap2ui5_cl_popup_context=>ty_s_range.
-        DATA temp34 TYPE zabap2ui5_cl_popup_get_range=>ty_s_filter_pop.
+      DATA temp40 LIKE LINE OF ms_result-t_range.
+      DATA lr_range LIKE REF TO temp40.
+        DATA temp41 LIKE LINE OF mt_filter.
+        DATA lr_filter LIKE REF TO temp41.
+          DATA ls_range TYPE zabap2ui5_cl_popup_context=>ty_s_range.
+        DATA temp42 TYPE zabap2ui5_cl_popup_get_range=>ty_s_filter_pop.
 
     me->client = client.
 
@@ -161,15 +191,14 @@ CLASS zabap2ui5_cl_popup_get_range IMPLEMENTATION.
 
 
       LOOP AT ms_result-t_range REFERENCE INTO lr_range.
-
-        CLEAR temp31.
-        temp31-low = lr_range->low.
-        temp31-high = lr_range->high.
-        temp31-option = lr_range->option.
-        temp31-key = zabap2ui5_cl_popup_context=>uuid_get_c32( ).
-        INSERT temp31 INTO TABLE mt_filter.
+        INSERT filter_of_range( lr_range->* ) INTO TABLE mt_filter.
       ENDLOOP.
 
+      view_display( ).
+      RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft (browser Forward, a reload): the popup went with
+      " the page - show it again
       view_display( ).
       RETURN.
     ENDIF.
@@ -182,16 +211,11 @@ CLASS zabap2ui5_cl_popup_get_range IMPLEMENTATION.
 
 
         LOOP AT mt_filter REFERENCE INTO lr_filter.
-          IF lr_filter->low IS INITIAL AND lr_filter->high IS INITIAL.
-            CONTINUE.
-          ENDIF.
 
-          CLEAR temp33.
-          temp33-sign = `I`.
-          temp33-option = lr_filter->option.
-          temp33-low = lr_filter->low.
-          temp33-high = lr_filter->high.
-          INSERT temp33 INTO TABLE ms_result-t_range.
+          ls_range = range_of_filter( lr_filter->* ).
+          IF ls_range IS NOT INITIAL.
+            INSERT ls_range INTO TABLE ms_result-t_range.
+          ENDIF.
         ENDLOOP.
 
         ms_result-check_confirmed = abap_true.
@@ -204,9 +228,9 @@ CLASS zabap2ui5_cl_popup_get_range IMPLEMENTATION.
 
       WHEN `POPUP_ADD`.
 
-        CLEAR temp34.
-        temp34-key = zabap2ui5_cl_popup_context=>uuid_get_c32( ).
-        INSERT temp34 INTO TABLE mt_filter.
+        CLEAR temp42.
+        temp42-key = zabap2ui5_cl_popup_context=>uuid_get_c32( ).
+        INSERT temp42 INTO TABLE mt_filter.
 
       WHEN `POPUP_DELETE`.
         DELETE mt_filter WHERE key = client->get_event_arg( ).
@@ -215,6 +239,78 @@ CLASS zabap2ui5_cl_popup_get_range IMPLEMENTATION.
         CLEAR mt_filter.
 
     ENDCASE.
+
+  ENDMETHOD.
+
+  METHOD filter_of_range.
+    DATA temp5 TYPE zabap2ui5_cl_popup_get_range=>ty_s_filter_pop-sign.
+
+    CLEAR result.
+
+    IF range-sign = `E`.
+      temp5 = `E`.
+    ELSE.
+      temp5 = `I`.
+    ENDIF.
+    result-sign = temp5.
+    result-option = range-option.
+    result-low = range-low.
+    result-high = range-high.
+    result-key = zabap2ui5_cl_popup_context=>uuid_get_c32( ).
+
+    IF range-low IS INITIAL AND range-high IS INITIAL.
+      CASE range-option.
+        WHEN `EQ`.
+          result-option = cv_option_empty.
+        WHEN `NE`.
+          result-option = cv_option_not_empty.
+      ENDCASE.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD range_of_filter.
+        DATA temp43 TYPE zabap2ui5_cl_popup_context=>ty_s_range-option.
+    DATA temp44 TYPE zabap2ui5_cl_popup_context=>ty_s_range-sign.
+
+    CASE filter-option.
+
+      WHEN cv_option_empty.
+        result-option = `EQ`.
+
+      WHEN cv_option_not_empty.
+        result-option = `NE`.
+
+      WHEN OTHERS.
+        IF filter-low IS INITIAL AND filter-high IS INITIAL.
+          RETURN.
+        ENDIF.
+        " a condition without an option compares like the token it shows
+
+        IF filter-option IS INITIAL.
+          temp43 = `EQ`.
+        ELSE.
+          temp43 = filter-option.
+        ENDIF.
+        result-option = temp43.
+        result-low    = filter-low.
+        " HIGH only where the option has one - it stays in the row when the
+        " user switches from BT to another option
+        IF result-option = `BT` OR result-option = `NB`.
+          result-high = filter-high.
+        ENDIF.
+
+    ENDCASE.
+
+    " the sign as chosen - a confirmed popup turned every excluding row into
+    " an including one
+
+    IF filter-sign = `E`.
+      temp44 = `E`.
+    ELSE.
+      temp44 = `I`.
+    ENDIF.
+    result-sign = temp44.
 
   ENDMETHOD.
 

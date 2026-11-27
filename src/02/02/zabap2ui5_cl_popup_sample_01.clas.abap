@@ -27,7 +27,7 @@ CLASS zabap2ui5_cl_popup_sample_01 IMPLEMENTATION.
     CASE client->get( )-event.
 
       WHEN 'BACK'.
-        client->nav_app_leave( client->get_app( client->get( )-s_draft-id_prev_app_stack ) ).
+        client->nav_app_leave( ).
 
       WHEN `CALL_POPUP_F4`.
         call_f4( ).
@@ -48,7 +48,6 @@ CLASS zabap2ui5_cl_popup_sample_01 IMPLEMENTATION.
 
     DATA view TYPE REF TO zabap2ui5_cl_ui5_view_builder.
     DATA page TYPE REF TO zabap2ui5_cl_ui5_view_builder.
-    DATA temp2 TYPE xsdboolean.
     DATA temp1 TYPE string_table.
     view = zabap2ui5_cl_ui5_view_builder=>factory(
                      )->ele( n = `View` ns = `mvc`
@@ -58,13 +57,11 @@ CLASS zabap2ui5_cl_popup_sample_01 IMPLEMENTATION.
                      )->a( n = `displayBlock` v = `true`
                      )->a( n = `height` v = `100%` ).
 
-
-    temp2 = boolc( client->get( )-s_draft-id_prev_app_stack IS NOT INITIAL ).
     page = view->ele( `Shell`
                      )->ele( `Page`
                      )->a( n = `title` v = `Value-Help`
                      )->a( n = `navButtonPress` v = client->_event( 'BACK' )
-                     )->a( n = `showNavButton` b = temp2
+                     )->a( n = `showNavButton` b = client->check_app_prev_stack( )
                      )->a( n = `class` v = `sapUiContentPadding` ).
 
 
@@ -94,10 +91,19 @@ CLASS zabap2ui5_cl_popup_sample_01 IMPLEMENTATION.
 
     IF client->check_on_init( ) IS NOT INITIAL.
       on_init( ).
-    ENDIF.
 
-    on_event( ).
-    on_after_f4( ).
+    ELSEIF client->check_on_nav_back( ) IS NOT INITIAL.
+      " back from the value help: read its result, then show the view again
+      on_after_f4( ).
+      render_main( ).
+
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft - the view is shown again
+      render_main( ).
+
+    ELSE.
+      on_event( ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -140,40 +146,34 @@ CLASS zabap2ui5_cl_popup_sample_01 IMPLEMENTATION.
 
     f4_table = temp4.
 
-    client->nav_app_call( zabap2ui5_cl_popup_value_help=>factory( i_table = f4_table
-                                                            i_fname = f4_field
-                                                            i_value = mv_arbgb ) ).
+    " the tag names the field the value help is for - get_nav_tag( ) returns
+    " it when the popup has left
+    client->nav_app_call( app = zabap2ui5_cl_popup_value_help=>factory( i_table = f4_table
+                                                                  i_fname = f4_field
+                                                                  i_value = mv_arbgb )
+                          tag = f4_field ).
 
   ENDMETHOD.
 
   METHOD on_after_f4.
-        DATA temp5 TYPE REF TO zabap2ui5_cl_popup_value_help.
-        DATA app LIKE temp5.
 
-    IF client->get( )-check_on_navigated = abap_false.
+    " every popup hands its result over through z2ui5_if_popup_result
+    DATA temp5 TYPE REF TO zabap2ui5_if_popup_result.
+    DATA popup LIKE temp5.
+    temp5 ?= client->get_app_prev( ).
+
+    popup = temp5.
+    IF popup->check_confirmed( ) = abap_false.
       RETURN.
     ENDIF.
 
-    TRY.
+    CASE client->get_nav_tag( ).
+      WHEN `ARBGB`.
+        mv_arbgb = popup->value_string( ).
 
-        temp5 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+      WHEN OTHERS.
 
-        app = temp5.
-
-        IF app->mv_return_value IS NOT INITIAL.
-
-          CASE app->mv_field.
-            WHEN `ARBGB`.
-              mv_arbgb = app->mv_return_value.
-
-            WHEN OTHERS.
-
-          ENDCASE.
-
-        ENDIF.
-
-      CATCH cx_root ##NO_HANDLER.
-    ENDTRY.
+    ENDCASE.
 
   ENDMETHOD.
 

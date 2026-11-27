@@ -76,7 +76,10 @@ CLASS zabap2ui5_cl_popup_sample_07 IMPLEMENTATION.
                            i_tab         = mt_tab
                            i_multiselect = mv_multiselect
                            i_title       = temp3 ).
-        client->nav_app_call( lo_app ).
+        " the tag tells the return of this popup from the return of the
+        " table popup below, which has none
+        client->nav_app_call( app = lo_app
+                              tag = `SELECT` ).
 
       WHEN `MULTISELECT_TOGGLE`.
 
@@ -136,18 +139,13 @@ CLASS zabap2ui5_cl_popup_sample_07 IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->get( )-check_on_navigated = abap_true.
-
-      IF client->check_on_init( ) IS NOT INITIAL.
-        view_display( ).
-
-      ELSE.
-        on_navigation( ).
-      ENDIF.
-      RETURN.
+    IF client->check_on_nav_back( ) IS NOT INITIAL.
+      on_navigation( ).
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      view_display( ).
+    ELSE.
+      on_event( ).
     ENDIF.
-
-    on_event( ).
 
   ENDMETHOD.
 
@@ -155,42 +153,42 @@ CLASS zabap2ui5_cl_popup_sample_07 IMPLEMENTATION.
   METHOD on_navigation.
 
     FIELD-SYMBOLS <row> TYPE ty_s_row.
-        DATA lo_prev TYPE REF TO zabap2ui5_if_app.
-        DATA temp5 TYPE REF TO zabap2ui5_cl_popup_to_select.
-        DATA ls_result TYPE zabap2ui5_cl_popup_to_select=>ty_s_result.
-          FIELD-SYMBOLS <table> TYPE data.
+    FIELD-SYMBOLS <table> TYPE STANDARD TABLE.
+    DATA temp5 TYPE REF TO zabap2ui5_if_popup_result.
+    DATA popup LIKE temp5.
+    DATA lr_value TYPE REF TO data.
 
-    TRY.
+    " back from the table of the selected rows - nothing to read
+    IF client->get_nav_tag( ) <> `SELECT`.
+      RETURN.
+    ENDIF.
 
-        lo_prev = client->get_app( client->get( )-s_draft-id_prev_app ).
+    " every popup hands its result over through z2ui5_if_popup_result
 
-        temp5 ?= lo_prev.
+    temp5 ?= client->get_app_prev( ).
 
-        ls_result = temp5->result( ).
+    popup = temp5.
+    IF popup->check_confirmed( ) = abap_false.
+      client->message_box_display( `Popup was cancelled` ).
+      RETURN.
+    ENDIF.
 
-        IF ls_result-check_confirmed = abap_false.
+    " value( ) is the chosen row, with multiselect the chosen rows
 
-          client->message_box_display( `Popup was cancelled` ).
-          RETURN.
-        ENDIF.
+    lr_value = popup->value( ).
+    IF mv_multiselect = abap_false.
 
-        IF mv_multiselect = abap_false.
+      ASSIGN lr_value->* TO <row>.
+      client->message_box_display( |callback after popup to select: { <row>-title }| ).
 
-          ASSIGN ls_result-row->* TO <row>.
-          client->message_box_display( |callback after popup to select: { <row>-title }| ).
+    ELSE.
 
-        ELSE.
+      ASSIGN lr_value->* TO <table>.
+      client->nav_app_call( zabap2ui5_cl_popup_table=>factory(
+                                i_tab   = <table>
+                                i_title = `Selected rows` ) ).
 
-
-          ASSIGN ls_result-table->* TO <table>.
-          client->nav_app_call( zabap2ui5_cl_popup_table=>factory(
-                                    i_tab   = <table>
-                                    i_title = `Selected rows` ) ).
-
-        ENDIF.
-
-      CATCH cx_root ##NO_HANDLER.
-    ENDTRY.
+    ENDIF.
 
   ENDMETHOD.
 
