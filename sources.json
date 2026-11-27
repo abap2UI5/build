@@ -4,16 +4,16 @@
       "abap2UI5": {
         "repository": "abap2UI5/abap2UI5",
         "branch": "702",
-        "commit": "3d103e8cba6ca09701cf02c5929e87da2e67804a",
-        "tree": "d6efba813820621f6be08c02a636132af478a1fd",
-        "date": "2026-11-27T09:54:41+00:00"
+        "commit": "8ca15d79d878982fbadca513d6cfb2affc8e0b45",
+        "tree": "a8d36b8b45fad48e94a0e13a411f1a2a3d735e9a",
+        "date": "2026-11-27T10:32:23Z"
       },
       "popups": {
         "repository": "abap2UI5-addons/popups",
         "branch": "702",
-        "commit": "5aeb6e675f04cd9e3cc0c33d67c02e33d142a1ab",
-        "tree": "b5f0c931ffc6aaa0f2b4314c46c96db7472b60ef",
-        "date": "2026-11-27T08:55:38+00:00"
+        "commit": "4219bb9a9536917b5b708298e2a7500f8169b88f",
+        "tree": "fd208d67cf948d60b37e646e42c6725df96fb38e",
+        "date": "2026-11-27T10:36:50Z"
       },
       "layout": {
         "repository": "abap2UI5-addons/layout-management",
@@ -34,16 +34,16 @@
       "abap2UI5": {
         "repository": "abap2UI5/abap2UI5",
         "branch": "cloud",
-        "commit": "657759cc35deb95301f9e814f10c5e641977a667",
-        "tree": "7eef38567e4a70dc942768f5f02298f50daa9943",
-        "date": "2026-11-27T10:12:05+00:00"
+        "commit": "5908166ac5327f3ab64dd548ded526f5acd92507",
+        "tree": "a3e08b7d3ed39bc29e878cfe5972af534d639b27",
+        "date": "2026-11-27T10:31:06Z"
       },
       "popups": {
         "repository": "abap2UI5-addons/popups",
         "branch": "main",
-        "commit": "c1bac82f9173f7a424704308abf4512038c24ae4",
-        "tree": "13327e2f58f417a99a3bb33627b17e280cc05eb8",
-        "date": "2026-11-27T09:53:46+01:00"
+        "commit": "6d61cca7e70d34a798f1b1ccba8ab2ea7d442944",
+        "tree": "7d51d9294f0e0034bfd9c271f03d1d12d1d1289e",
+        "date": "2026-11-27T11:35:39+01:00"
       },
       "layout": {
         "repository": "abap2UI5-addons/layout-management",
