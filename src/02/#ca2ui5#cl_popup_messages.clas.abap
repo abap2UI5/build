@@ -45,23 +45,25 @@ ENDCLASS.
 CLASS /ca2ui5/cl_popup_messages IMPLEMENTATION.
 
   METHOD factory.
-    DATA temp20 TYPE /ca2ui5/cl_popup_context=>ty_t_msg.
-    DATA temp2 LIKE LINE OF temp20.
+    DATA temp22 TYPE /ca2ui5/cl_popup_msgpopover=>ty_t_msg.
+    DATA temp2 LIKE LINE OF temp22.
     DATA lr_row LIKE REF TO temp2.
-      DATA temp21 TYPE ty_s_msg.
+      DATA temp23 TYPE ty_s_msg.
 
     CREATE OBJECT r_result.
+    " the items of the message popover - a message without a message class
+    " has no subtitle there, here it showed ` 000`
 
-    temp20 = /ca2ui5/cl_popup_context=>msg_get_t( i_messages ).
+    temp22 = /ca2ui5/cl_popup_msgpopover=>msg_get_t( i_messages ).
 
 
-    LOOP AT temp20 REFERENCE INTO lr_row.
+    LOOP AT temp22 REFERENCE INTO lr_row.
 
-      CLEAR temp21.
-      temp21-type = /ca2ui5/cl_popup_context=>ui5_get_msg_type( lr_row->type ).
-      temp21-title = lr_row->text.
-      temp21-subtitle = |{ lr_row->id } { lr_row->no }|.
-      INSERT temp21 INTO TABLE r_result->mt_msg.
+      CLEAR temp23.
+      temp23-type = lr_row->type.
+      temp23-title = lr_row->title.
+      temp23-subtitle = lr_row->subtitle.
+      INSERT temp23 INTO TABLE r_result->mt_msg.
     ENDLOOP.
 
     r_result->title = i_title.

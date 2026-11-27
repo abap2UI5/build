@@ -49,7 +49,6 @@ CLASS /ca2ui5/cl_popup_sample_02 IMPLEMENTATION.
 
     DATA view TYPE REF TO /ca2ui5/cl_ui5_view_builder.
     DATA page TYPE REF TO /ca2ui5/cl_ui5_view_builder.
-    DATA temp2 TYPE xsdboolean.
     DATA temp1 TYPE string_table.
     view = /ca2ui5/cl_ui5_view_builder=>factory(
                      )->ele( n = `View` ns = `mvc`
@@ -59,13 +58,11 @@ CLASS /ca2ui5/cl_popup_sample_02 IMPLEMENTATION.
                      )->a( n = `displayBlock` v = `true`
                      )->a( n = `height` v = `100%` ).
 
-
-    temp2 = boolc( client->get( )-s_draft-id_prev_app_stack IS NOT INITIAL ).
     page = view->ele( `Shell`
                      )->ele( `Page`
                      )->a( n = `title` v = `Search-Help`
                      )->a( n = `navButtonPress` v = client->_event( 'BACK' )
-                     )->a( n = `showNavButton` b = temp2
+                     )->a( n = `showNavButton` b = client->check_app_prev_stack( )
                      )->a( n = `class` v = `sapUiContentPadding` ).
 
 
@@ -95,10 +92,19 @@ CLASS /ca2ui5/cl_popup_sample_02 IMPLEMENTATION.
 
     IF client->check_on_init( ) IS NOT INITIAL.
       on_init( ).
-    ENDIF.
 
-    on_event( ).
-    on_after_search( ).
+    ELSEIF client->check_on_nav_back( ) IS NOT INITIAL.
+      " back from the search help: read its result, then show the view again
+      on_after_search( ).
+      render_main( ).
+
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft - the view is shown again
+      render_main( ).
+
+    ELSE.
+      on_event( ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -155,27 +161,16 @@ client->nav_app_call( /ca2ui5/cl_popup_shlp=>factory( i_table = search_table
   ENDMETHOD.
 
   METHOD on_after_search.
-        DATA temp6 TYPE REF TO /ca2ui5/cl_popup_shlp.
-        DATA app LIKE temp6.
 
-    IF client->get( )-check_on_navigated = abap_false.
-      RETURN.
+    " every popup hands its result over through z2ui5_if_popup_result
+    DATA temp6 TYPE REF TO /ca2ui5/if_popup_result.
+    DATA popup LIKE temp6.
+    temp6 ?= client->get_app_prev( ).
+
+    popup = temp6.
+    IF popup->check_confirmed( ) = abap_true.
+      ms_usr01-spld = popup->value_string( ).
     ENDIF.
-
-    TRY.
-
-        temp6 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
-
-        app = temp6.
-
-        IF app->mv_return_value IS NOT INITIAL.
-
-          ms_usr01-spld = app->mv_return_value.
-
-        ENDIF.
-
-      CATCH cx_root ##NO_HANDLER.
-    ENDTRY.
 
   ENDMETHOD.
 

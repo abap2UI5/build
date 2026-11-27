@@ -219,6 +219,13 @@ CLASS ltcl_test IMPLEMENTATION.
     DATA lt_sort TYPE /ca2ui5/if_client=>ty_t_bind_tab_sort.
     DATA temp24 TYPE /ca2ui5/if_client=>ty_t_bind_tab_sort.
     DATA temp25 LIKE LINE OF temp24.
+    DATA lv_json TYPE string.
+    FIELD-SYMBOLS <temp26> LIKE LINE OF lt_sort.
+    DATA temp27 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp28> LIKE LINE OF lt_sort.
+    DATA temp29 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp30> LIKE LINE OF lt_sort.
+    DATA temp31 LIKE sy-tabix.
     lt_sort = /ca2ui5/cl_ui5_srv_window=>parse_sort( `[{"PATH":"name","DESCENDING":true},{"PATH":"ID"},{"PATH":""}]` ).
 
     CLEAR temp24.
@@ -233,40 +240,123 @@ CLASS ltcl_test IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = temp24
                                         act = lt_sort ).
 
+    " eleven sorters keep the order they came in - ajson names the array
+    " members as text, and `10` sorts before `2` there
+
+    lv_json = `[`.
+    DO 11 TIMES.
+      IF sy-index > 1.
+        lv_json = lv_json && `,`.
+      ENDIF.
+      lv_json = lv_json && |\{"PATH":"C{ sy-index }"\}|.
+    ENDDO.
+    lv_json = lv_json && `]`.
+    lt_sort = /ca2ui5/cl_ui5_srv_window=>parse_sort( lv_json ).
+    cl_abap_unit_assert=>assert_equals( exp = 11
+                                        act = lines( lt_sort ) ).
+
+
+    temp27 = sy-tabix.
+    READ TABLE lt_sort INDEX 2 ASSIGNING <temp26>.
+    sy-tabix = temp27.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `C2`
+                                        act = <temp26>-path ).
+
+
+    temp29 = sy-tabix.
+    READ TABLE lt_sort INDEX 10 ASSIGNING <temp28>.
+    sy-tabix = temp29.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `C10`
+                                        act = <temp28>-path ).
+
+
+    temp31 = sy-tabix.
+    READ TABLE lt_sort INDEX 11 ASSIGNING <temp30>.
+    sy-tabix = temp31.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `C11`
+                                        act = <temp30>-path ).
+
   ENDMETHOD.
 
   METHOD parse_filter.
 
     DATA lt_filter TYPE /ca2ui5/if_client=>ty_t_bind_tab_filter.
-    DATA temp26 TYPE /ca2ui5/if_client=>ty_t_bind_tab_filter.
-    DATA temp27 LIKE LINE OF temp26.
+    DATA temp32 TYPE /ca2ui5/if_client=>ty_t_bind_tab_filter.
+    DATA temp33 LIKE LINE OF temp32.
+    DATA temp34 TYPE /ca2ui5/if_client=>ty_t_bind_tab_filter.
+    DATA temp35 LIKE LINE OF temp34.
+    DATA lt_sort TYPE /ca2ui5/if_client=>ty_t_bind_tab_sort.
+    DATA temp36 TYPE /ca2ui5/if_client=>ty_t_bind_tab_sort.
+    DATA temp37 LIKE LINE OF temp36.
     lt_filter = /ca2ui5/cl_ui5_srv_window=>parse_filter(
         `[[["NAME","Contains","ab"],["NAME","EQ","x"]],[["PRICE","BT",1,9.5]]]` ).
 
-    CLEAR temp26.
+    CLEAR temp32.
 
-    CLEAR temp27.
-    temp27-group = 1.
-    temp27-path = `NAME`.
-    temp27-operator = `Contains`.
-    temp27-value1 = `ab`.
-    INSERT temp27 INTO TABLE temp26.
-    CLEAR temp27.
-    temp27-group = 1.
-    temp27-path = `NAME`.
-    temp27-operator = `EQ`.
-    temp27-value1 = `x`.
-    INSERT temp27 INTO TABLE temp26.
-    CLEAR temp27.
-    temp27-group = 2.
-    temp27-path = `PRICE`.
-    temp27-operator = `BT`.
-    temp27-value1 = `1`.
-    temp27-value2 = `9.5`.
-    INSERT temp27 INTO TABLE temp26.
+    CLEAR temp33.
+    temp33-group = 1.
+    temp33-path = `NAME`.
+    temp33-operator = `Contains`.
+    temp33-value1 = `ab`.
+    INSERT temp33 INTO TABLE temp32.
+    CLEAR temp33.
+    temp33-group = 1.
+    temp33-path = `NAME`.
+    temp33-operator = `EQ`.
+    temp33-value1 = `x`.
+    INSERT temp33 INTO TABLE temp32.
+    CLEAR temp33.
+    temp33-group = 2.
+    temp33-path = `PRICE`.
+    temp33-operator = `BT`.
+    temp33-value1 = `1`.
+    temp33-value2 = `9.5`.
+    INSERT temp33 INTO TABLE temp32.
     cl_abap_unit_assert=>assert_equals(
-        exp = temp26
+        exp = temp32
         act = lt_filter ).
+
+    " path and operator are the browser's and end up in the app's WHERE:
+    " a path that cannot name a component and an operator off the list are
+    " dropped, the rest of the filter stays
+    lt_filter = /ca2ui5/cl_ui5_srv_window=>parse_filter(
+        `[[["NAME) OR (1 = 1","EQ","x"],["NAME","EQ' OR 'x","y"],["NAME","EQ","z"]],` &&
+        `[["","GT",1],["/NS/F","GE",2]]]` ).
+
+    CLEAR temp34.
+
+    temp35-group = 1.
+    temp35-path = `NAME`.
+    temp35-operator = `EQ`.
+    temp35-value1 = `z`.
+    INSERT temp35 INTO TABLE temp34.
+    temp35-group = 2.
+    temp35-path = `/NS/F`.
+    temp35-operator = `GE`.
+    temp35-value1 = `2`.
+    INSERT temp35 INTO TABLE temp34.
+    cl_abap_unit_assert=>assert_equals(
+        exp = temp34
+        act = lt_filter ).
+
+
+    lt_sort = /ca2ui5/cl_ui5_srv_window=>parse_sort( `[{"PATH":"NAME DESCENDING, (SELECT"},{"PATH":"id"}]` ).
+
+    CLEAR temp36.
+
+    temp37-path = `ID`.
+    INSERT temp37 INTO TABLE temp36.
+    cl_abap_unit_assert=>assert_equals( exp = temp36
+                                        act = lt_sort ).
 
   ENDMETHOD.
 

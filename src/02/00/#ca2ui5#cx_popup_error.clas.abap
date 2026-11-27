@@ -313,6 +313,7 @@ CLASS /ca2ui5/cx_popup_error IMPLEMENTATION.
   METHOD get_text_full_context.
 
     DATA lv_nl LIKE /ca2ui5/cl_popup_context=>cv_char_util_newline.
+    DATA ls_sy TYPE /ca2ui5/cl_popup_context=>ty_s_sy.
     lv_nl = /ca2ui5/cl_popup_context=>cv_char_util_newline.
 
     " the runtime context of the failing request - what an issue report
@@ -323,9 +324,12 @@ CLASS /ca2ui5/cx_popup_error IMPLEMENTATION.
     " installations - while what a report actually needs is the release and
     " the time. A caller that legitimately wants the rest reads sy-* itself;
     " the server-side logs carry it anyway
+    " the system fields through the one reader of the context class
+
+    ls_sy = /ca2ui5/cl_popup_context=>sy_get( ).
     result = `--- context ---` && lv_nl &&
-             |    system   : { sy-sysid } / release { sy-saprl }| && lv_nl &&
-             |    time     : { sy-datum } { sy-uzeit }|.
+             |    system   : { ls_sy-sysid } / release { ls_sy-saprl }| && lv_nl &&
+             |    time     : { ls_sy-datum } { ls_sy-uzeit }|.
 
   ENDMETHOD.
 ENDCLASS.

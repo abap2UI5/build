@@ -96,7 +96,7 @@ CLASS /ca2ui5/cl_popup_to_decide IMPLEMENTATION.
     DATA buttons TYPE REF TO /ca2ui5/cl_ui5_view_builder.
     DATA lv_option LIKE LINE OF options.
       DATA lv_number LIKE sy-tabix.
-      DATA temp21 TYPE string.
+      DATA temp23 TYPE string.
     popup = /ca2ui5/cl_ui5_view_builder=>factory(
                       )->ele( n = `FragmentDefinition` ns = `core`
                       )->a( n = `xmlns` v = `sap.m`
@@ -121,13 +121,13 @@ CLASS /ca2ui5/cl_popup_to_decide IMPLEMENTATION.
       lv_number = sy-tabix.
 
       IF lv_number = 1.
-        temp21 = `Emphasized`.
+        temp23 = `Emphasized`.
       ELSE.
-        temp21 = `Default`.
+        temp23 = `Default`.
       ENDIF.
       buttons->tag( `Button`
           )->a( n = `text` t = lv_option
-          )->a( n = `type` v = temp21
+          )->a( n = `type` v = temp23
           )->a( n = `press` v = client->_event( |{ cv_event_option }{ lv_number }| ) ).
     ENDLOOP.
     IF check_cancel = abap_true.
@@ -143,12 +143,17 @@ CLASS /ca2ui5/cl_popup_to_decide IMPLEMENTATION.
   METHOD /ca2ui5/if_app~main.
     DATA lv_event TYPE /ca2ui5/if_client=>ty_s_get-event.
         DATA lv_number TYPE string.
-        DATA temp22 TYPE i.
+        DATA temp24 TYPE i.
         DATA temp3 TYPE i.
 
     me->client = client.
 
     IF client->check_on_init( ) IS NOT INITIAL.
+      view_display( ).
+      RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft (browser Forward, a reload): the popup went with
+      " the page - show it again
       view_display( ).
       RETURN.
     ENDIF.
@@ -157,10 +162,16 @@ CLASS /ca2ui5/cl_popup_to_decide IMPLEMENTATION.
     lv_event = client->get( )-event.
     CASE lv_event.
       WHEN `BUTTON_CANCEL`.
+        IF check_cancel = abap_false.
+          " the caller asked for a decision: no Cancel button - but the
+          " dialog still closes on Escape (afterClose), and a request can
+          " send the event as well; open the question again
+          view_display( ).
+          RETURN.
+        ENDIF.
         answer = cs_answer-cancel.
         client->popup_destroy( ).
-        client->nav_app_leave( app   = client->get_app_prev( )
-                               event = event_canceled ).
+        client->nav_app_leave( event = event_canceled ).
 
       WHEN OTHERS.
         IF strlen( lv_event ) <= strlen( cv_event_option ) OR lv_event NP |{ cv_event_option }*|.
@@ -169,18 +180,21 @@ CLASS /ca2ui5/cl_popup_to_decide IMPLEMENTATION.
 
         lv_number = substring( val = lv_event
                                      off = strlen( cv_event_option ) ).
-        " only a button of the popup - the event comes from the browser
+        " only a button of the popup - the event comes from the browser; a
+        " number of more than four digits is none and overflowed CONV i
 
-        temp22 = lv_number.
+        temp24 = lv_number.
 
         temp3 = lv_number.
-        IF lv_number CN `0123456789` OR temp22 < 1 OR temp3 > lines( options ).
+        IF    lv_number CN `0123456789`
+           OR strlen( lv_number ) > 4
+           OR temp24 < 1
+           OR temp3 > lines( options ).
           RETURN.
         ENDIF.
         answer = lv_number.
         client->popup_destroy( ).
-        client->nav_app_leave( app   = client->get_app_prev( )
-                               event = event_decided ).
+        client->nav_app_leave( event = event_decided ).
     ENDCASE.
 
   ENDMETHOD.

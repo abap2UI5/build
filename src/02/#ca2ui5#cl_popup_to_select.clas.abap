@@ -18,6 +18,9 @@ CLASS /ca2ui5/cl_popup_to_select DEFINITION PUBLIC.
       END OF ty_s_result.
 
     DATA ms_result           TYPE ty_s_result.
+    "! the caller's table - until the popup has started: it is cleared once
+    "! mr_tab_popup and its backup are built from it, since every attribute
+    "! is written to the draft on every roundtrip and nothing reads it later
     DATA mr_tab              TYPE REF TO data.
     DATA mr_tab_popup        TYPE REF TO data.
     DATA mr_tab_popup_backup TYPE REF TO data.
@@ -61,25 +64,36 @@ CLASS /ca2ui5/cl_popup_to_select DEFINITION PUBLIC.
     METHODS on_event_confirm.
     METHODS on_event_search.
 
+    "! the index in mr_tab_popup_backup of every row of mr_tab_popup - a
+    "! search leaves a part of the rows on screen. Protected, not private:
+    "! the draft of the app reaches no private attribute
+    DATA mt_visible TYPE STANDARD TABLE OF i WITH DEFAULT KEY.
+
   PRIVATE SECTION.
+    "! mt_visible for the rows on screen, after mr_tab_popup was set anew
+    METHODS set_visible.
+
+    "! the selection of the rows on screen into mr_tab_popup_backup
+    METHODS sync_selection.
+
 ENDCLASS.
 
 
 CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
 
   METHOD factory.
-    DATA temp36 TYPE string.
+    DATA temp42 TYPE string.
 
     CREATE OBJECT r_result.
 
     IF i_title IS NOT INITIAL.
-      temp36 = i_title.
+      temp42 = i_title.
     ELSEIF i_multiselect = abap_true.
-      temp36 = `Multi Select`.
+      temp42 = `Multi Select`.
     ELSE.
-      temp36 = `Single Select`.
+      temp42 = `Single Select`.
     ENDIF.
-    r_result->title = temp36.
+    r_result->title = temp42.
 
     r_result->sort_field        = i_sort_field.
     r_result->descending        = i_descending.
@@ -100,17 +114,17 @@ CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
 
     FIELD-SYMBOLS <tab_out> TYPE STANDARD TABLE.
     DATA popup TYPE REF TO /ca2ui5/cl_ui5_view_builder.
-    DATA temp37 TYPE string_table.
+    DATA temp43 TYPE string_table.
     DATA tab TYPE REF TO /ca2ui5/cl_ui5_view_builder.
     DATA lt_comp TYPE abap_component_tab.
     DATA list TYPE REF TO /ca2ui5/cl_ui5_view_builder.
     DATA cells TYPE REF TO /ca2ui5/cl_ui5_view_builder.
     DATA ls_comp LIKE LINE OF lt_comp.
     DATA columns TYPE REF TO /ca2ui5/cl_ui5_view_builder.
-      DATA temp39 TYPE /ca2ui5/cl_popup_context=>ty_s_data_element_text-medium.
+      DATA temp45 TYPE /ca2ui5/cl_popup_context=>ty_s_data_element_text-medium.
       DATA data_element_name TYPE string.
       DATA medium_label TYPE /ca2ui5/cl_popup_context=>ty_s_data_element_text-medium.
-      DATA text LIKE temp39.
+      DATA text LIKE temp45.
 
     ASSIGN mr_tab_popup->* TO <tab_out>.
 
@@ -120,9 +134,9 @@ CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
                       )->a( n = `xmlns` v = `sap.m`
                       )->a( n = `xmlns:core` v = `sap.ui.core` ).
 
-    CLEAR temp37.
-    INSERT `${$parameters>/value}` INTO TABLE temp37.
-    INSERT `${$parameters>/clearButtonPressed}` INTO TABLE temp37.
+    CLEAR temp43.
+    INSERT `${$parameters>/value}` INTO TABLE temp43.
+    INSERT `${$parameters>/clearButtonPressed}` INTO TABLE temp43.
 
     tab = popup->ele( `TableSelectDialog`
                     )->a( n = `items` v = |\{path:'|
@@ -133,9 +147,9 @@ CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
                     )->a( n = `cancel` v = client->_event( `CANCEL` )
                     )->a( n = `search` v = client->_event(
                                val   = `SEARCH`
-                               t_arg = temp37 )
-                    )->a( n = `confirm` v = client->_event( val   = `CONFIRM`
-                                           arg   = `${$parameters>/selectedContexts[0]/sPath}` )
+                               t_arg = temp43 )
+                    " the selection comes with the model (ZZSELKZ), not as an argument
+                    )->a( n = `confirm` v = client->_event( `CONFIRM` )
                     )->a( n = `growing` b = abap_true
                     )->a( n = `contentWidth` v = content_width
                     )->a( n = `contentHeight` v = content_height
@@ -169,12 +183,12 @@ CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
 
       medium_label = /ca2ui5/cl_popup_context=>rtti_get_data_element_texts( data_element_name )-medium.
       IF medium_label IS NOT INITIAL.
-        temp39 = medium_label.
+        temp45 = medium_label.
       ELSE.
-        temp39 = ls_comp-name.
+        temp45 = ls_comp-name.
       ENDIF.
 
-      text = temp39.
+      text = temp45.
       columns->ele( `Column`
           )->a( n = `width` v = `8rem`
           )->ele( `header`
@@ -192,6 +206,12 @@ CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
 
     IF client->check_on_init( ) IS NOT INITIAL.
       set_output_table( ).
+      CLEAR mr_tab.
+      display( ).
+      RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft (browser Forward, a reload): the popup went with
+      " the page - show it again
       display( ).
       RETURN.
     ENDIF.
@@ -266,6 +286,7 @@ CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
     ENDLOOP.
 
     <tab_out2> = <tab_out>.
+    set_visible( ).
 
   ENDMETHOD.
 
@@ -278,7 +299,11 @@ CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
     FIELD-SYMBOLS <row_result>          TYPE any.
     FIELD-SYMBOLS <table_line_selected> TYPE any.
 
-    ASSIGN mr_tab_popup->* TO <tab>.
+    " the rows of the backup - a selection made before a search hid its
+    " row counts as well
+    sync_selection( ).
+
+    ASSIGN mr_tab_popup_backup->* TO <tab>.
     ASSIGN ms_result-table->* TO <table_result>.
     ASSIGN ms_result-row->* TO <row_result>.
 
@@ -320,6 +345,10 @@ CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
     FIELD-SYMBOLS <tab_out>        TYPE STANDARD TABLE.
     FIELD-SYMBOLS <tab_out_backup> TYPE STANDARD TABLE.
 
+    " keep what was selected before the rows are filtered anew - the
+    " backup had the selection of the start, every search lost the ticks
+    sync_selection( ).
+
     ASSIGN mr_tab_popup->* TO <tab_out>.
     ASSIGN mr_tab_popup_backup->* TO <tab_out_backup>.
 
@@ -328,6 +357,90 @@ CLASS /ca2ui5/cl_popup_to_select IMPLEMENTATION.
     /ca2ui5/cl_popup_context=>itab_filter_by_val( EXPORTING val = client->get_event_arg( )
                                                  ignore_case     = abap_true
                                        CHANGING  tab             = <tab_out> ).
+
+    set_visible( ).
+
+  ENDMETHOD.
+
+  METHOD set_visible.
+
+    FIELD-SYMBOLS <tab_out>    TYPE STANDARD TABLE.
+    FIELD-SYMBOLS <tab_backup> TYPE STANDARD TABLE.
+    FIELD-SYMBOLS <row>        TYPE any.
+    FIELD-SYMBOLS <row_backup> TYPE any.
+    DATA lv_from TYPE i.
+        DATA lv_index LIKE sy-tabix.
+
+    ASSIGN mr_tab_popup->* TO <tab_out>.
+    ASSIGN mr_tab_popup_backup->* TO <tab_backup>.
+
+    " the rows on screen are the rows of the backup the search left, in the
+    " order of the backup - each one is the next equal row there
+    CLEAR mt_visible.
+
+    lv_from = 1.
+    LOOP AT <tab_out> ASSIGNING <row>.
+      LOOP AT <tab_backup> ASSIGNING <row_backup> FROM lv_from.
+
+        lv_index = sy-tabix.
+        lv_from = lv_index + 1.
+        IF <row_backup> = <row>.
+          INSERT lv_index INTO TABLE mt_visible.
+          EXIT.
+        ENDIF.
+      ENDLOOP.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD sync_selection.
+
+    FIELD-SYMBOLS <tab_out>      TYPE STANDARD TABLE.
+    FIELD-SYMBOLS <tab_backup>   TYPE STANDARD TABLE.
+    FIELD-SYMBOLS <row>          TYPE any.
+    FIELD-SYMBOLS <row_backup>   TYPE any.
+    FIELD-SYMBOLS <selkz>        TYPE any.
+    FIELD-SYMBOLS <selkz_backup> TYPE any.
+      DATA temp46 TYPE i.
+      DATA temp47 TYPE i.
+      DATA lv_index LIKE temp46.
+
+    ASSIGN mr_tab_popup->* TO <tab_out>.
+    ASSIGN mr_tab_popup_backup->* TO <tab_backup>.
+
+    " a single selection replaces one hidden by a search
+    IF multiselect = abap_false.
+      LOOP AT <tab_backup> ASSIGNING <row_backup>.
+        ASSIGN COMPONENT `ZZSELKZ` OF STRUCTURE <row_backup> TO <selkz_backup>.
+        ASSERT sy-subrc = 0.
+        CLEAR <selkz_backup>.
+      ENDLOOP.
+    ENDIF.
+
+    LOOP AT <tab_out> ASSIGNING <row>.
+
+      CLEAR temp46.
+
+      READ TABLE mt_visible INTO temp47 INDEX sy-tabix.
+      IF sy-subrc = 0.
+        temp46 = temp47.
+      ENDIF.
+
+      lv_index = temp46.
+      IF lv_index <= 0.
+        CONTINUE.
+      ENDIF.
+      UNASSIGN <row_backup>.
+      READ TABLE <tab_backup> INDEX lv_index ASSIGNING <row_backup>.
+      IF <row_backup> IS NOT ASSIGNED.
+        CONTINUE.
+      ENDIF.
+      ASSIGN COMPONENT `ZZSELKZ` OF STRUCTURE <row> TO <selkz>.
+      ASSERT sy-subrc = 0.
+      ASSIGN COMPONENT `ZZSELKZ` OF STRUCTURE <row_backup> TO <selkz_backup>.
+      ASSERT sy-subrc = 0.
+      <selkz_backup> = <selkz>.
+    ENDLOOP.
 
   ENDMETHOD.
 

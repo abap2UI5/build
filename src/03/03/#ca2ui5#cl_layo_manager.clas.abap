@@ -183,6 +183,14 @@ CLASS /ca2ui5/cl_layo_manager DEFINITION
       RETURNING
         VALUE(result) TYPE string.
 
+    "! abap_true when layout is a layout of the same table, form or view as
+    "! this one: the same control and the same four handles
+    METHODS is_same_layout
+      IMPORTING
+        !layout       TYPE REF TO /ca2ui5/cl_layo_manager
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+
     CLASS-METHODS select_layouts
       IMPORTING
         layout_guid   TYPE clike OPTIONAL
@@ -417,7 +425,6 @@ CLASS /ca2ui5/cl_layo_manager DEFINITION
 
     CLASS-METHODS create_layout_obj
       IMPORTING
-        layout_guid   TYPE clike       OPTIONAL
         !data         TYPE REF TO data OPTIONAL
         !control      TYPE clike       OPTIONAL
         handle01      TYPE clike       OPTIONAL
@@ -434,7 +441,6 @@ CLASS /ca2ui5/cl_layo_manager DEFINITION
         handle03      TYPE clike
         handle02      TYPE clike
         handle01      TYPE clike
-        layout_guid   TYPE clike
         !format       TYPE clike OPTIONAL
         head          TYPE  ty_t_head
       RETURNING
@@ -468,132 +474,132 @@ CLASS /ca2ui5/cl_layo_manager IMPLEMENTATION.
 
   METHOD get_controls.
 
-    DATA temp77 TYPE /ca2ui5/cl_layo_manager=>ty_t_controls.
-    DATA temp78 LIKE LINE OF temp77.
-    CLEAR temp77.
+    DATA temp85 TYPE /ca2ui5/cl_layo_manager=>ty_t_controls.
+    DATA temp86 LIKE LINE OF temp85.
+    CLEAR temp85.
 
-    temp78-active = abap_true.
-    temp78-control = m_table.
-    temp78-index = 1.
-    temp78-attribute = 'TLABEL'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = m_table.
-    temp78-index = 2.
-    temp78-attribute = 'VISIBLE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = m_table.
-    temp78-index = 3.
-    temp78-attribute = 'MERGE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = m_table.
-    temp78-index = 4.
-    temp78-attribute = 'WIDTH'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = m_table.
-    temp78-index = 5.
-    temp78-attribute = 'ALTERNATIVE_TEXT'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = m_table.
-    temp78-index = 6.
-    temp78-attribute = 'SEQUENCE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = m_table.
-    temp78-index = 7.
-    temp78-attribute = 'SUBCOLUMN'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = m_table.
-    temp78-index = 8.
-    temp78-attribute = 'REFERENCE_FIELD'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = m_table.
-    temp78-index = 9.
-    temp78-attribute = 'SORTING'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = m_table.
-    temp78-index = 10.
-    temp78-attribute = 'NO_CONVEXIT'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_table.
-    temp78-index = 1.
-    temp78-attribute = 'TLABEL'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_table.
-    temp78-index = 2.
-    temp78-attribute = 'VISIBLE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_table.
-    temp78-index = 3.
-    temp78-attribute = 'ALTERNATIVE_TEXT'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_table.
-    temp78-index = 5.
-    temp78-attribute = 'WIDTH'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = others.
-    temp78-index = 1.
-    temp78-attribute = 'TLABEL'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = others.
-    temp78-index = 2.
-    temp78-attribute = 'VISIBLE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = others.
-    temp78-index = 3.
-    temp78-attribute = 'SEQUENCE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = others.
-    temp78-index = 4.
-    temp78-attribute = 'ALTERNATIVE_TEXT'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_simpleform.
-    temp78-index = 1.
-    temp78-attribute = 'TLABEL'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_simpleform.
-    temp78-index = 2.
-    temp78-attribute = 'VISIBLE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_simpleform.
-    temp78-index = 3.
-    temp78-attribute = 'SEQUENCE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_simpleform.
-    temp78-index = 4.
-    temp78-attribute = 'ALTERNATIVE_TEXT'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_simpleform.
-    temp78-index = 5.
-    temp78-attribute = 'REFERENCE_FIELD'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_simpleform.
-    temp78-index = 6.
-    temp78-attribute = 'GRID_LAYOUT'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = ui_simpleform.
-    temp78-index = 7.
-    temp78-attribute = 'NO_CONVEXIT'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = generic.
-    temp78-index = 1.
-    temp78-attribute = 'TLABEL'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = generic.
-    temp78-index = 2.
-    temp78-attribute = 'VISIBLE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = generic.
-    temp78-index = 3.
-    temp78-attribute = 'SEQUENCE'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = generic.
-    temp78-index = 4.
-    temp78-attribute = 'ALTERNATIVE_TEXT'.
-    INSERT temp78 INTO TABLE temp77.
-    temp78-control = generic.
-    temp78-index = 5.
-    temp78-attribute = 'WIDTH'.
-    INSERT temp78 INTO TABLE temp77.
-    result = temp77.
+    temp86-active = abap_true.
+    temp86-control = m_table.
+    temp86-index = 1.
+    temp86-attribute = 'TLABEL'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = m_table.
+    temp86-index = 2.
+    temp86-attribute = 'VISIBLE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = m_table.
+    temp86-index = 3.
+    temp86-attribute = 'MERGE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = m_table.
+    temp86-index = 4.
+    temp86-attribute = 'WIDTH'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = m_table.
+    temp86-index = 5.
+    temp86-attribute = 'ALTERNATIVE_TEXT'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = m_table.
+    temp86-index = 6.
+    temp86-attribute = 'SEQUENCE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = m_table.
+    temp86-index = 7.
+    temp86-attribute = 'SUBCOLUMN'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = m_table.
+    temp86-index = 8.
+    temp86-attribute = 'REFERENCE_FIELD'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = m_table.
+    temp86-index = 9.
+    temp86-attribute = 'SORTING'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = m_table.
+    temp86-index = 10.
+    temp86-attribute = 'NO_CONVEXIT'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_table.
+    temp86-index = 1.
+    temp86-attribute = 'TLABEL'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_table.
+    temp86-index = 2.
+    temp86-attribute = 'VISIBLE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_table.
+    temp86-index = 3.
+    temp86-attribute = 'ALTERNATIVE_TEXT'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_table.
+    temp86-index = 5.
+    temp86-attribute = 'WIDTH'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = others.
+    temp86-index = 1.
+    temp86-attribute = 'TLABEL'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = others.
+    temp86-index = 2.
+    temp86-attribute = 'VISIBLE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = others.
+    temp86-index = 3.
+    temp86-attribute = 'SEQUENCE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = others.
+    temp86-index = 4.
+    temp86-attribute = 'ALTERNATIVE_TEXT'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_simpleform.
+    temp86-index = 1.
+    temp86-attribute = 'TLABEL'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_simpleform.
+    temp86-index = 2.
+    temp86-attribute = 'VISIBLE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_simpleform.
+    temp86-index = 3.
+    temp86-attribute = 'SEQUENCE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_simpleform.
+    temp86-index = 4.
+    temp86-attribute = 'ALTERNATIVE_TEXT'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_simpleform.
+    temp86-index = 5.
+    temp86-attribute = 'REFERENCE_FIELD'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_simpleform.
+    temp86-index = 6.
+    temp86-attribute = 'GRID_LAYOUT'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = ui_simpleform.
+    temp86-index = 7.
+    temp86-attribute = 'NO_CONVEXIT'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = generic.
+    temp86-index = 1.
+    temp86-attribute = 'TLABEL'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = generic.
+    temp86-index = 2.
+    temp86-attribute = 'VISIBLE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = generic.
+    temp86-index = 3.
+    temp86-attribute = 'SEQUENCE'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = generic.
+    temp86-index = 4.
+    temp86-attribute = 'ALTERNATIVE_TEXT'.
+    INSERT temp86 INTO TABLE temp85.
+    temp86-control = generic.
+    temp86-index = 5.
+    temp86-attribute = 'WIDTH'.
+    INSERT temp86 INTO TABLE temp85.
+    result = temp85.
   ENDMETHOD.
 
   METHOD factory_generic.
@@ -623,9 +629,9 @@ CLASS /ca2ui5/cl_layo_manager IMPLEMENTATION.
 
     DATA lv_id TYPE string.
     DATA lr_slot TYPE REF TO ty_s_slot.
-    DATA temp79 LIKE sy-subrc.
-      FIELD-SYMBOLS <temp80> TYPE /ca2ui5/cl_layo_manager=>ty_s_slot.
-      DATA temp81 TYPE /ca2ui5/cl_layo_manager=>ty_s_slot.
+    DATA temp87 LIKE sy-subrc.
+      FIELD-SYMBOLS <temp88> TYPE /ca2ui5/cl_layo_manager=>ty_s_slot.
+      DATA temp89 TYPE /ca2ui5/cl_layo_manager=>ty_s_slot.
 
     result = me.
 
@@ -637,19 +643,19 @@ CLASS /ca2ui5/cl_layo_manager IMPLEMENTATION.
 
 
     READ TABLE mt_slots WITH KEY id = lv_id TRANSPORTING NO FIELDS.
-    temp79 = sy-subrc.
-    IF temp79 = 0.           "#EC CI_SORTSEQ
+    temp87 = sy-subrc.
+    IF temp87 = 0.           "#EC CI_SORTSEQ
 
-      READ TABLE mt_slots WITH KEY id = lv_id ASSIGNING <temp80>.
+      READ TABLE mt_slots WITH KEY id = lv_id ASSIGNING <temp88>.
 IF sy-subrc <> 0.
   ASSERT 1 = 0.
 ENDIF.
-GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
+GET REFERENCE OF <temp88> INTO lr_slot.        "#EC CI_SORTSEQ
     ELSE.
 
-      CLEAR temp81.
-      temp81-id = lv_id.
-      INSERT temp81 INTO TABLE mt_slots REFERENCE INTO lr_slot.
+      CLEAR temp89.
+      temp89-id = lv_id.
+      INSERT temp89 INTO TABLE mt_slots REFERENCE INTO lr_slot.
     ENDIF.
 
     IF label IS NOT INITIAL.
@@ -670,8 +676,8 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
 
     DATA lv_prefix TYPE string.
     DATA lt_id TYPE /ca2ui5/cl_layo_xml_tree=>ty_t_id.
-    DATA temp82 LIKE LINE OF lt_id.
-    DATA lr_id LIKE REF TO temp82.
+    DATA temp90 LIKE LINE OF lt_id.
+    DATA lr_id LIKE REF TO temp90.
 
     result = me.
 
@@ -698,11 +704,11 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
     DATA lt_head TYPE /ca2ui5/cl_layo_manager=>ty_t_head.
     DATA ls_def TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
       DATA lt_pos TYPE /ca2ui5/cl_layo_manager=>ty_t_positions.
-    DATA temp83 LIKE LINE OF mt_slots.
-    DATA lr_slot LIKE REF TO temp83.
-      DATA temp84 LIKE sy-subrc.
-        FIELD-SYMBOLS <temp11> LIKE LINE OF lt_pos.
-        DATA temp12 LIKE sy-tabix.
+    DATA temp91 LIKE LINE OF mt_slots.
+    DATA lr_slot LIKE REF TO temp91.
+      DATA temp92 LIKE sy-subrc.
+        FIELD-SYMBOLS <temp13> LIKE LINE OF lt_pos.
+        DATA temp14 LIKE sy-tabix.
 
     IF ms_layout-s_head-control <> generic OR mv_slots_dirty = abap_false.
       RETURN.
@@ -717,13 +723,12 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
                                     handle04 = ms_layout-s_head-handle04 ).
 
 
-    ls_def = get_default_layout( handle04    = ms_layout-s_head-handle04
-                                       handle03    = ms_layout-s_head-handle03
-                                       handle02    = ms_layout-s_head-handle02
-                                       handle01    = ms_layout-s_head-handle01
-                                       layout_guid = ``
-                                       format      = ms_layout-s_head-screen_format
-                                       head        = lt_head ).
+    ls_def = get_default_layout( handle04 = ms_layout-s_head-handle04
+                                       handle03 = ms_layout-s_head-handle03
+                                       handle02 = ms_layout-s_head-handle02
+                                       handle01 = ms_layout-s_head-handle01
+                                       format   = ms_layout-s_head-screen_format
+                                       head     = lt_head ).
 
     IF ls_def-layout IS NOT INITIAL.
       ms_layout-s_head = ls_def.
@@ -738,18 +743,18 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
 
 
       READ TABLE lt_pos WITH KEY fname = lr_slot->id TRANSPORTING NO FIELDS.
-      temp84 = sy-subrc.
-      IF temp84 = 0.  "#EC CI_SORTSEQ
+      temp92 = sy-subrc.
+      IF temp92 = 0.  "#EC CI_SORTSEQ
         " a saved position - a control registered since the save is new and visible
 
 
-        temp12 = sy-tabix.
-        READ TABLE lt_pos WITH KEY fname = lr_slot->id ASSIGNING <temp11>.
-        sy-tabix = temp12.
+        temp14 = sy-tabix.
+        READ TABLE lt_pos WITH KEY fname = lr_slot->id ASSIGNING <temp13>.
+        sy-tabix = temp14.
         IF sy-subrc <> 0.
           ASSERT 1 = 0.
         ENDIF.
-        MOVE-CORRESPONDING <temp11> TO ls_layout. "#EC CI_SORTSEQ
+        MOVE-CORRESPONDING <temp13> TO ls_layout. "#EC CI_SORTSEQ
       ELSE.
         ls_layout = build_slot_position( slot = lr_slot->*
                                          guid = lv_guid ).
@@ -780,11 +785,11 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
 
     DATA ls_slot TYPE /ca2ui5/cl_layo_xml_tree=>ty_s_slot.
 
-    DATA temp85 LIKE LINE OF ms_layout-t_layout.
-    DATA lr_layout LIKE REF TO temp85.
-      DATA temp86 LIKE sy-subrc.
-        FIELD-SYMBOLS <temp87> LIKE LINE OF mt_slots.
-        DATA temp88 LIKE sy-tabix.
+    DATA temp93 LIKE LINE OF ms_layout-t_layout.
+    DATA lr_layout LIKE REF TO temp93.
+      DATA temp94 LIKE sy-subrc.
+        FIELD-SYMBOLS <temp95> LIKE LINE OF mt_slots.
+        DATA temp96 LIKE sy-tabix.
     LOOP AT ms_layout-t_layout REFERENCE INTO lr_layout.
       CLEAR ls_slot.
       ls_slot-id      = lr_layout->fname.
@@ -796,17 +801,17 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
       ENDIF.
 
       READ TABLE mt_slots WITH KEY id = ls_slot-id TRANSPORTING NO FIELDS.
-      temp86 = sy-subrc.
-      IF temp86 = 0.    "#EC CI_SORTSEQ
+      temp94 = sy-subrc.
+      IF temp94 = 0.    "#EC CI_SORTSEQ
 
 
-        temp88 = sy-tabix.
-        READ TABLE mt_slots WITH KEY id = ls_slot-id ASSIGNING <temp87>.
-        sy-tabix = temp88.
+        temp96 = sy-tabix.
+        READ TABLE mt_slots WITH KEY id = ls_slot-id ASSIGNING <temp95>.
+        sy-tabix = temp96.
         IF sy-subrc <> 0.
           ASSERT 1 = 0.
         ENDIF.
-        ls_slot-label_attr = <temp87>-label_attr. "#EC CI_SORTSEQ
+        ls_slot-label_attr = <temp95>-label_attr. "#EC CI_SORTSEQ
       ENDIF.
       INSERT ls_slot INTO TABLE result.
     ENDLOOP.
@@ -816,9 +821,9 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
   METHOD text_of.
 
     DATA lv_id TYPE string.
-    DATA temp89 LIKE sy-subrc.
-      FIELD-SYMBOLS <temp90> LIKE LINE OF mt_slots.
-      DATA temp91 LIKE sy-tabix.
+    DATA temp97 LIKE sy-subrc.
+      FIELD-SYMBOLS <temp98> LIKE LINE OF mt_slots.
+      DATA temp99 LIKE sy-tabix.
 
     IF ms_layout-s_head-control <> generic.
       result = set_text( layout ).
@@ -833,17 +838,17 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
     lv_id = layout-fname.
 
     READ TABLE mt_slots WITH KEY id = lv_id TRANSPORTING NO FIELDS.
-    temp89 = sy-subrc.
-    IF temp89 = 0.           "#EC CI_SORTSEQ
+    temp97 = sy-subrc.
+    IF temp97 = 0.           "#EC CI_SORTSEQ
 
 
-      temp91 = sy-tabix.
-      READ TABLE mt_slots WITH KEY id = lv_id ASSIGNING <temp90>.
-      sy-tabix = temp91.
+      temp99 = sy-tabix.
+      READ TABLE mt_slots WITH KEY id = lv_id ASSIGNING <temp98>.
+      sy-tabix = temp99.
       IF sy-subrc <> 0.
         ASSERT 1 = 0.
       ENDIF.
-      result = <temp90>-label.            "#EC CI_SORTSEQ
+      result = <temp98>-label.            "#EC CI_SORTSEQ
     ENDIF.
     IF result IS INITIAL.
       result = lv_id.
@@ -864,13 +869,13 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
   ENDMETHOD.
 
   METHOD select_layouts.
-    DATA temp92 TYPE string.
-    DATA fmt LIKE temp92.
+    DATA temp100 TYPE string.
+    DATA fmt LIKE temp100.
     DATA other_default TYPE abap_bool.
-    DATA temp13 LIKE sy-subrc.
+    DATA temp15 LIKE sy-subrc.
     DATA temp1 TYPE xsdboolean.
-    DATA temp93 LIKE LINE OF result.
-    DATA line LIKE REF TO temp93.
+    DATA temp101 LIKE LINE OF result.
+    DATA line LIKE REF TO temp101.
 
     IF layout_guid IS NOT INITIAL.
 
@@ -923,19 +928,19 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
     " format it found the format-less default itself and demoted it.
 
     IF format IS INITIAL.
-      temp92 = screen_format_l.
+      temp100 = screen_format_l.
     ELSE.
-      temp92 = format.
+      temp100 = format.
     ENDIF.
 
-    fmt = temp92.
+    fmt = temp100.
 
 
 
     READ TABLE result WITH KEY screen_format = fmt def = abap_true TRANSPORTING NO FIELDS.
-    temp13 = sy-subrc.
+    temp15 = sy-subrc.
 
-    temp1 = boolc( temp13 = 0 ).
+    temp1 = boolc( temp15 = 0 ).
     other_default = temp1.
 
 
@@ -1032,34 +1037,42 @@ GET REFERENCE OF <temp80> INTO lr_slot.        "#EC CI_SORTSEQ
   ENDMETHOD.
 
   METHOD set_sub_columns.
-    DATA temp94 LIKE LINE OF result.
-    DATA line LIKE REF TO temp94.
+    DATA temp102 LIKE LINE OF result.
+    DATA line LIKE REF TO temp102.
       TYPES temp1 TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
 DATA tab TYPE temp1.
-      DATA temp95 TYPE /ca2ui5/cl_layo_manager=>ty_t_sub_columns.
+      DATA temp103 TYPE /ca2ui5/cl_layo_manager=>ty_t_sub_columns.
       DATA t LIKE LINE OF tab.
-        DATA temp96 LIKE LINE OF temp95.
+        DATA temp104 LIKE LINE OF temp103.
 
     result = layout.
 
+    " every row anew from its SUBCOLUMN - factory_by_guid( ) merges the saved
+    " positions into the rows of the layout shown before, and a row without
+    " subcolumns kept the subcolumns of that layout
 
 
-    LOOP AT result REFERENCE INTO line WHERE subcolumn IS NOT INITIAL.
+    LOOP AT result REFERENCE INTO line.
+
+      CLEAR line->t_sub_col.
+      IF line->subcolumn IS INITIAL.
+        CONTINUE.
+      ENDIF.
 
 
 
       SPLIT line->subcolumn AT ` ` INTO TABLE tab.
 
 
-      CLEAR temp95.
+      CLEAR temp103.
 
       LOOP AT tab INTO t.
 
-        temp96-key = /ca2ui5/cl_layo_context=>uuid_get_c32( ).
-        temp96-fname = t.
-        INSERT temp96 INTO TABLE temp95.
+        temp104-key = /ca2ui5/cl_layo_context=>uuid_get_c32( ).
+        temp104-fname = t.
+        INSERT temp104 INTO TABLE temp103.
       ENDLOOP.
-      line->t_sub_col = temp95.
+      line->t_sub_col = temp103.
 
     ENDLOOP.
 
@@ -1095,15 +1108,15 @@ DATA def TYPE /ca2ui5/t_11-def.
 DATA uname TYPE /ca2ui5/t_11-uname.
 DATA END OF head.
     DATA t_pos TYPE /ca2ui5/cl_layo_manager=>ty_t_positions.
-    DATA temp97 LIKE LINE OF result->ms_layout-t_layout.
-    DATA layout LIKE REF TO temp97.
+    DATA temp105 LIKE LINE OF result->ms_layout-t_layout.
+    DATA layout LIKE REF TO temp105.
       DATA convexit LIKE layout->convexit.
       DATA show_convexit LIKE layout->show_convexit.
       DATA digits LIKE layout->digits.
-      DATA temp98 LIKE sy-subrc.
-        DATA temp99 TYPE /ca2ui5/cl_layo_manager=>ty_s_positions.
-        DATA temp100 TYPE /ca2ui5/cl_layo_manager=>ty_s_positions.
-        DATA pos LIKE temp99.
+      DATA temp106 LIKE sy-subrc.
+        DATA temp107 TYPE /ca2ui5/cl_layo_manager=>ty_s_positions.
+        DATA temp108 TYPE /ca2ui5/cl_layo_manager=>ty_s_positions.
+        DATA pos LIKE temp107.
         DATA fname LIKE layout->fname.
         DATA rollname LIKE layout->rollname.
 
@@ -1156,18 +1169,18 @@ DATA END OF head.
 
 
       READ TABLE t_pos WITH KEY fname = layout->fname TRANSPORTING NO FIELDS.
-      temp98 = sy-subrc.
-      IF temp98 = 0.
+      temp106 = sy-subrc.
+      IF temp106 = 0.
 
 
-        CLEAR temp99.
+        CLEAR temp107.
 
-        READ TABLE t_pos INTO temp100 WITH KEY fname = layout->fname.
+        READ TABLE t_pos INTO temp108 WITH KEY fname = layout->fname.
         IF sy-subrc = 0.
-          temp99 = temp100.
+          temp107 = temp108.
         ENDIF.
 
-        pos = temp99.
+        pos = temp107.
         layout->* = layout->*.
 MOVE-CORRESPONDING pos TO layout->*.
 
@@ -1216,13 +1229,13 @@ MOVE-CORRESPONDING pos TO layout->*.
     DATA head TYPE /ca2ui5/cl_layo_manager=>ty_t_head.
     DATA def TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
       DATA t_pos TYPE /ca2ui5/cl_layo_manager=>ty_t_positions.
-      DATA temp101 LIKE LINE OF t_comp.
-      DATA r_comp LIKE REF TO temp101.
-        DATA temp102 LIKE sy-subrc.
-          FIELD-SYMBOLS <temp103> TYPE /ca2ui5/cl_layo_manager=>ty_s_positions.
-DATA pos LIKE REF TO <temp103>.
-          DATA temp104 TYPE ty_s_positions.
-          DATA layout LIKE temp104.
+      DATA temp109 LIKE LINE OF t_comp.
+      DATA r_comp LIKE REF TO temp109.
+        DATA temp110 LIKE sy-subrc.
+          FIELD-SYMBOLS <temp111> TYPE /ca2ui5/cl_layo_manager=>ty_s_positions.
+DATA pos LIKE REF TO <temp111>.
+          DATA temp112 TYPE ty_s_positions.
+          DATA layout LIKE temp112.
           DATA guid TYPE sysuuid_c32.
       DATA index TYPE i.
 
@@ -1238,22 +1251,20 @@ DATA pos LIKE REF TO <temp103>.
 
     " Select Layout Heads
 
-    head = select_layouts( layout_guid = layout_guid
-                                 control     = control
-                                 handle01    = handle01
-                                 handle02    = handle02
-                                 handle03    = handle03
-                                 handle04    = handle04
-                                 format      = format  ).
+    head = select_layouts( control  = control
+                                 handle01 = handle01
+                                 handle02 = handle02
+                                 handle03 = handle03
+                                 handle04 = handle04
+                                 format   = format  ).
 
 
-    def = get_default_layout( handle04    = handle04
-                                    handle03    = handle03
-                                    handle02    = handle02
-                                    handle01    = handle01
-                                    layout_guid = layout_guid
-                                    format      = format
-                                    head        = head ).
+    def = get_default_layout( handle04 = handle04
+                                    handle03 = handle03
+                                    handle02 = handle02
+                                    handle01 = handle01
+                                    format   = format
+                                    head     = head ).
 
     IF def-layout IS NOT INITIAL.
 
@@ -1267,8 +1278,8 @@ DATA pos LIKE REF TO <temp103>.
 
 
         READ TABLE t_pos WITH KEY fname = r_comp->name TRANSPORTING NO FIELDS.
-        temp102 = sy-subrc.
-        IF NOT temp102 = 0.
+        temp110 = sy-subrc.
+        IF NOT temp110 = 0.
 
           INSERT build_default_positions( comp  = r_comp
                                           guid  = def-guid
@@ -1279,17 +1290,17 @@ DATA pos LIKE REF TO <temp103>.
           " positions of fields that no longer exist are never reached - the
           " loop runs over the fields of the structure
 
-          READ TABLE t_pos WITH KEY fname = r_comp->name ASSIGNING <temp103>.
+          READ TABLE t_pos WITH KEY fname = r_comp->name ASSIGNING <temp111>.
 IF sy-subrc <> 0.
   ASSERT 1 = 0.
 ENDIF.
 
-GET REFERENCE OF <temp103> INTO pos.
+GET REFERENCE OF <temp111> INTO pos.
 
 
-          CLEAR temp104.
+          CLEAR temp112.
 
-          layout = temp104.
+          layout = temp112.
 
           MOVE-CORRESPONDING pos->* TO layout.
           layout-rollname = r_comp->type->get_relative_name( ).
@@ -1400,16 +1411,16 @@ GET REFERENCE OF <temp103> INTO pos.
   ENDMETHOD.
 
   METHOD get_default_layout.
-    DATA temp105 TYPE string.
-    DATA lv_format LIKE temp105.
-    DATA temp106 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
-    DATA temp107 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
-    DATA temp108 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
-    DATA temp109 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
-    DATA temp110 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
-    DATA temp111 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
+    DATA temp113 TYPE string.
+    DATA lv_format LIKE temp113.
+    DATA temp114 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
+    DATA temp115 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
+    DATA temp116 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
+    DATA temp117 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
+    DATA temp118 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
+    DATA temp119 TYPE /ca2ui5/cl_layo_manager=>ty_s_head.
 
-    IF head IS INITIAL OR layout_guid IS NOT INITIAL.
+    IF head IS INITIAL.
       RETURN.
     ENDIF.
 
@@ -1417,22 +1428,22 @@ GET REFERENCE OF <temp103> INTO pos.
     " L when none is requested - so no format asked for is L as well;
     " compared as is, a default never matched
 
-    temp105 = format.
+    temp113 = format.
 
-    lv_format = temp105.
+    lv_format = temp113.
     IF lv_format IS INITIAL.
       lv_format = screen_format_l.
     ENDIF.
 
     " Default all Handles + User and Format
 
-    CLEAR temp106.
+    CLEAR temp114.
 
-    READ TABLE head INTO temp107 WITH KEY handle01 = handle01 handle02 = handle02 handle03 = handle03 handle04 = handle04 screen_format = lv_format def = abap_true uname = sy-uname.
+    READ TABLE head INTO temp115 WITH KEY handle01 = handle01 handle02 = handle02 handle03 = handle03 handle04 = handle04 screen_format = lv_format def = abap_true uname = sy-uname.
     IF sy-subrc = 0.
-      temp106 = temp107.
+      temp114 = temp115.
     ENDIF.
-    result = temp106.
+    result = temp114.
 
     IF result IS NOT INITIAL.
       RETURN.
@@ -1441,13 +1452,13 @@ GET REFERENCE OF <temp103> INTO pos.
     " Fall back to a global default (blank user) - never another user's
     " personal default
 
-    CLEAR temp108.
+    CLEAR temp116.
 
-    READ TABLE head INTO temp109 WITH KEY handle01 = handle01 handle02 = handle02 handle03 = handle03 handle04 = handle04 screen_format = lv_format def = abap_true uname = space.
+    READ TABLE head INTO temp117 WITH KEY handle01 = handle01 handle02 = handle02 handle03 = handle03 handle04 = handle04 screen_format = lv_format def = abap_true uname = space.
     IF sy-subrc = 0.
-      temp108 = temp109.
+      temp116 = temp117.
     ENDIF.
-    result = temp108.
+    result = temp116.
 
     IF result IS NOT INITIAL.
       RETURN.
@@ -1455,13 +1466,13 @@ GET REFERENCE OF <temp103> INTO pos.
 
     " no default at all - the first global layout of the handles and format
 
-    CLEAR temp110.
+    CLEAR temp118.
 
-    READ TABLE head INTO temp111 WITH KEY handle01 = handle01 handle02 = handle02 handle03 = handle03 handle04 = handle04 screen_format = lv_format uname = space.
+    READ TABLE head INTO temp119 WITH KEY handle01 = handle01 handle02 = handle02 handle03 = handle03 handle04 = handle04 screen_format = lv_format uname = space.
     IF sy-subrc = 0.
-      temp110 = temp111.
+      temp118 = temp119.
     ENDIF.
-    result = temp110.
+    result = temp118.
 
   ENDMETHOD.
 
@@ -1474,16 +1485,16 @@ GET REFERENCE OF <temp103> INTO pos.
   METHOD sort.
 
     FIELD-SYMBOLS <table> TYPE STANDARD TABLE.
-    DATA temp112 LIKE sy-subrc.
+    DATA temp120 LIKE sy-subrc.
       DATA selkz TYPE /ca2ui5/cl_layo_manager=>ty_s_positions.
-      FIELD-SYMBOLS <temp14> LIKE LINE OF ms_layout-t_layout.
-      DATA temp15 LIKE sy-tabix.
-        DATA temp113 TYPE abap_sortorder_tab.
-        DATA temp114 LIKE LINE OF temp113.
-        DATA sortorder LIKE temp113.
-    DATA temp115 TYPE abap_sortorder_tab.
+      FIELD-SYMBOLS <temp16> LIKE LINE OF ms_layout-t_layout.
+      DATA temp17 LIKE sy-tabix.
+        DATA temp121 TYPE abap_sortorder_tab.
+        DATA temp122 LIKE LINE OF temp121.
+        DATA sortorder LIKE temp121.
+    DATA temp123 TYPE abap_sortorder_tab.
     DATA layout LIKE LINE OF ms_layout-t_layout.
-      DATA temp116 LIKE LINE OF temp115.
+      DATA temp124 LIKE LINE OF temp123.
       DATA temp2 TYPE xsdboolean.
 
     " the table again - see set_data( )
@@ -1511,48 +1522,48 @@ GET REFERENCE OF <temp103> INTO pos.
     " every sort the user had configured
 
     READ TABLE ms_layout-t_layout WITH KEY fname = 'SELKZ' TRANSPORTING NO FIELDS.
-    temp112 = sy-subrc.
+    temp120 = sy-subrc.
     IF     no_selkz_sort = abap_false
-       AND temp112 = 0.
+       AND temp120 = 0.
 
 
 
-      temp15 = sy-tabix.
-      READ TABLE ms_layout-t_layout WITH KEY fname = 'SELKZ' ASSIGNING <temp14>.
-      sy-tabix = temp15.
+      temp17 = sy-tabix.
+      READ TABLE ms_layout-t_layout WITH KEY fname = 'SELKZ' ASSIGNING <temp16>.
+      sy-tabix = temp17.
       IF sy-subrc <> 0.
         ASSERT 1 = 0.
       ENDIF.
-      selkz = <temp14>.
+      selkz = <temp16>.
 
       IF selkz-sorting = space.
 
 
-        CLEAR temp113.
+        CLEAR temp121.
 
-        temp114-descending = abap_true.
-        temp114-name = 'SELKZ'.
-        temp114-astext = abap_true.
-        INSERT temp114 INTO TABLE temp113.
+        temp122-descending = abap_true.
+        temp122-name = 'SELKZ'.
+        temp122-astext = abap_true.
+        INSERT temp122 INTO TABLE temp121.
 
-        sortorder = temp113.
+        sortorder = temp121.
 
       ENDIF.
     ENDIF.
 
 
-    CLEAR temp115.
-    temp115 = sortorder.
+    CLEAR temp123.
+    temp123 = sortorder.
 
     LOOP AT ms_layout-t_layout INTO layout WHERE sorting <> space.
 
 
       temp2 = boolc( layout-sorting = 'DESCENDING' ).
-      temp116-descending = temp2.
-      temp116-name = layout-fname.
-      INSERT temp116 INTO TABLE temp115.
+      temp124-descending = temp2.
+      temp124-name = layout-fname.
+      INSERT temp124 INTO TABLE temp123.
     ENDLOOP.
-    sortorder = temp115.
+    sortorder = temp123.
 
     IF sortorder IS INITIAL.
       RETURN.
@@ -1572,9 +1583,9 @@ GET REFERENCE OF <temp103> INTO pos.
   METHOD set_selkz.
 
     FIELD-SYMBOLS <table> TYPE STANDARD TABLE.
-    DATA temp117 TYPE string.
-    DATA temp118 TYPE string.
-    DATA id LIKE temp117.
+    DATA temp125 TYPE string.
+    DATA temp126 TYPE string.
+    DATA id LIKE temp125.
     FIELD-SYMBOLS <row> TYPE ANY.
       FIELD-SYMBOLS <id> TYPE any.
       FIELD-SYMBOLS <selkz> TYPE any.
@@ -1604,14 +1615,14 @@ GET REFERENCE OF <temp103> INTO pos.
     ENDIF.
 
 
-    CLEAR temp117.
+    CLEAR temp125.
 
-    READ TABLE t_event_arg INTO temp118 INDEX 1.
+    READ TABLE t_event_arg INTO temp126 INDEX 1.
     IF sy-subrc = 0.
-      temp117 = temp118.
+      temp125 = temp126.
     ENDIF.
 
-    id = temp117.
+    id = temp125.
 
 
     LOOP AT <table> ASSIGNING <row>.
@@ -1656,15 +1667,15 @@ GET REFERENCE OF <temp103> INTO pos.
     FIELD-SYMBOLS <tab> TYPE ANY TABLE.
     FIELD-SYMBOLS <any> TYPE data.
     DATA layout LIKE LINE OF ms_layout-t_layout.
-        DATA temp119 LIKE sy-subrc.
-        DATA temp120 LIKE sy-subrc.
+        DATA temp127 LIKE sy-subrc.
+        DATA temp128 LIKE sy-subrc.
           DATA ref LIKE abap_true.
         DATA tmp LIKE LINE OF ms_layout-t_layout.
-          DATA temp121 LIKE sy-subrc.
-          DATA temp122 LIKE sy-subrc.
+          DATA temp129 LIKE sy-subrc.
+          DATA temp130 LIKE sy-subrc.
           DATA sub LIKE LINE OF tmp-t_sub_col.
-            DATA temp123 LIKE sy-subrc.
-            DATA temp124 LIKE sy-subrc.
+            DATA temp131 LIKE sy-subrc.
+            DATA temp132 LIKE sy-subrc.
           FIELD-SYMBOLS <line> TYPE ANY.
             FIELD-SYMBOLS <value> TYPE any.
 
@@ -1707,11 +1718,11 @@ GET REFERENCE OF <temp103> INTO pos.
         " is this a reference field?
 
 
-        temp120 = sy-subrc.
+        temp128 = sy-subrc.
         READ TABLE ms_layout-t_layout WITH KEY reference_field = layout-fname visible = abap_true TRANSPORTING NO FIELDS.
-        temp119 = sy-subrc.
-        sy-subrc = temp120.
-        IF temp119 = 0.
+        temp127 = sy-subrc.
+        sy-subrc = temp128.
+        IF temp127 = 0.
 
           ref = abap_true.
         ENDIF.
@@ -1721,11 +1732,11 @@ GET REFERENCE OF <temp103> INTO pos.
 
 
 
-          temp122 = sy-subrc.
+          temp130 = sy-subrc.
           READ TABLE tmp-t_sub_col WITH KEY fname = layout-fname TRANSPORTING NO FIELDS.
-          temp121 = sy-subrc.
-          sy-subrc = temp122.
-          IF temp121 = 0.
+          temp129 = sy-subrc.
+          sy-subrc = temp130.
+          IF temp129 = 0.
             ref = abap_true.
           ENDIF.
 
@@ -1734,11 +1745,11 @@ GET REFERENCE OF <temp103> INTO pos.
 
 
 
-            temp124 = sy-subrc.
+            temp132 = sy-subrc.
             READ TABLE ms_layout-t_layout WITH KEY fname = sub-fname reference_field = layout-fname TRANSPORTING NO FIELDS.
-            temp123 = sy-subrc.
-            sy-subrc = temp124.
-            IF temp123 = 0.
+            temp131 = sy-subrc.
+            sy-subrc = temp132.
+            IF temp131 = 0.
               ref = abap_true.
             ENDIF.
           ENDLOOP.
@@ -1798,12 +1809,17 @@ GET REFERENCE OF <temp103> INTO pos.
 
   METHOD convert.
 
-    /ca2ui5/cl_layo_context=>conv_exit(
-      EXPORTING
-        convexit = i_layout-convexit
-        output   = i_output
-      CHANGING
-        value    = c_value ).
+    " a value the exit refuses, or an exit the system does not have, leaves
+    " the cell as it is - one odd cell must not end the whole table
+    TRY.
+        /ca2ui5/cl_layo_context=>conv_exit(
+          EXPORTING
+            convexit = i_layout-convexit
+            output   = i_output
+          CHANGING
+            value    = c_value ).
+      CATCH /ca2ui5/cx_layo_error ##NO_HANDLER.
+    ENDTRY.
 
   ENDMETHOD.
 
@@ -1917,37 +1933,37 @@ GET REFERENCE OF <temp103> INTO pos.
 
   METHOD toggle_sorting.
 
-    DATA temp125 LIKE sy-subrc.
-    FIELD-SYMBOLS <temp126> TYPE /ca2ui5/cl_layo_manager=>ty_s_positions.
-DATA column LIKE REF TO <temp126>.
-    DATA temp127 TYPE string.
-    DATA sorting LIKE temp127.
-    DATA temp128 LIKE LINE OF ms_layout-t_layout.
-    DATA position LIKE REF TO temp128.
+    DATA temp133 LIKE sy-subrc.
+    FIELD-SYMBOLS <temp134> TYPE /ca2ui5/cl_layo_manager=>ty_s_positions.
+DATA column LIKE REF TO <temp134>.
+    DATA temp135 TYPE string.
+    DATA sorting LIKE temp135.
+    DATA temp136 LIKE LINE OF ms_layout-t_layout.
+    DATA position LIKE REF TO temp136.
     READ TABLE ms_layout-t_layout WITH KEY fname = fname TRANSPORTING NO FIELDS.
-    temp125 = sy-subrc.
-    IF NOT temp125 = 0.
+    temp133 = sy-subrc.
+    IF NOT temp133 = 0.
       RETURN.
     ENDIF.
 
-    READ TABLE ms_layout-t_layout WITH KEY fname = fname ASSIGNING <temp126>.
+    READ TABLE ms_layout-t_layout WITH KEY fname = fname ASSIGNING <temp134>.
 IF sy-subrc <> 0.
   ASSERT 1 = 0.
 ENDIF.
 
-GET REFERENCE OF <temp126> INTO column.
+GET REFERENCE OF <temp134> INTO column.
 
 
     CASE column->sorting.
       WHEN space.
-        temp127 = `ASCENDING`.
+        temp135 = `ASCENDING`.
       WHEN `ASCENDING`.
-        temp127 = `DESCENDING`.
+        temp135 = `DESCENDING`.
       WHEN OTHERS.
-        temp127 = ``.
+        temp135 = ``.
     ENDCASE.
 
-    sorting = temp127.
+    sorting = temp135.
 
 
 
@@ -2036,52 +2052,52 @@ DATA source_guids TYPE temp2.
 DATA new_guids    TYPE temp3.
     TYPES temp4 TYPE STANDARD TABLE OF /ca2ui5/t_12 WITH DEFAULT KEY.
 DATA positions    TYPE temp4.
-    DATA temp129 LIKE source_guids.
+    DATA temp137 LIKE source_guids.
     DATA c LIKE LINE OF t_copy.
-      DATA temp130 LIKE LINE OF temp129.
+      DATA temp138 LIKE LINE OF temp137.
     TYPES temp5 TYPE STANDARD TABLE OF /ca2ui5/t_11 WITH DEFAULT KEY.
 DATA sources TYPE temp5.
     TYPES temp6 TYPE STANDARD TABLE OF /ca2ui5/t_12 WITH DEFAULT KEY.
 DATA source_positions TYPE temp6.
     DATA copy LIKE LINE OF t_copy.
-      DATA temp133 TYPE /ca2ui5/t_11.
-      DATA temp134 TYPE /ca2ui5/t_11.
-      DATA head LIKE temp133.
-        DATA temp135 TYPE string.
-        DATA action LIKE temp135.
+      DATA temp141 TYPE /ca2ui5/t_11.
+      DATA temp142 TYPE /ca2ui5/t_11.
+      DATA head LIKE temp141.
+        DATA temp143 TYPE string.
+        DATA action LIKE temp143.
       DATA position LIKE LINE OF source_positions.
-      DATA temp136 LIKE LINE OF new_guids.
+      DATA temp144 LIKE LINE OF new_guids.
         DATA x_sql TYPE REF TO cx_sy_open_sql_db.
-    DATA temp137 TYPE ty_t_head.
+    DATA temp145 TYPE ty_t_head.
     DATA h LIKE LINE OF result.
-    DATA defaults LIKE temp137.
+    DATA defaults LIKE temp145.
       TYPES temp7 TYPE RANGE OF /ca2ui5/t_11-handle03.
 DATA scope03 TYPE temp7.
       TYPES temp8 TYPE RANGE OF /ca2ui5/t_11-guid.
 DATA demote TYPE temp8.
-      DATA temp139 LIKE scope03.
+      DATA temp147 LIKE scope03.
       DATA d LIKE LINE OF defaults.
-        DATA temp140 LIKE LINE OF temp139.
+        DATA temp148 LIKE LINE OF temp147.
       TYPES temp9 TYPE STANDARD TABLE OF /ca2ui5/t_11 WITH DEFAULT KEY.
 DATA candidates TYPE temp9.
       DATA candidate LIKE LINE OF candidates.
-            DATA temp142 LIKE LINE OF demote.
+            DATA temp150 LIKE LINE OF demote.
 
     IF t_copy IS INITIAL.
       RETURN.
     ENDIF.
 
 
-    CLEAR temp129.
+    CLEAR temp137.
 
     LOOP AT t_copy INTO c.
 
-      temp130-sign = `I`.
-      temp130-option = `EQ`.
-      temp130-low = c-guid.
-      INSERT temp130 INTO TABLE temp129.
+      temp138-sign = `I`.
+      temp138-option = `EQ`.
+      temp138-low = c-guid.
+      INSERT temp138 INTO TABLE temp137.
     ENDLOOP.
-    source_guids = temp129.
+    source_guids = temp137.
 
 
 
@@ -2101,14 +2117,14 @@ DATA candidates TYPE temp9.
     LOOP AT t_copy INTO copy.
 
 
-      CLEAR temp133.
+      CLEAR temp141.
 
-      READ TABLE sources INTO temp134 WITH KEY guid = copy-guid.
+      READ TABLE sources INTO temp142 WITH KEY guid = copy-guid.
       IF sy-subrc = 0.
-        temp133 = temp134.
+        temp141 = temp142.
       ENDIF.
 
-      head = temp133.
+      head = temp141.
       IF head IS INITIAL.
         RAISE EXCEPTION TYPE /ca2ui5/cx_layo_error
           EXPORTING val = |Layout { copy-guid } not found|.
@@ -2126,12 +2142,12 @@ DATA candidates TYPE temp9.
       IF check_auth = abap_true.
 
         IF head-uname IS INITIAL.
-          temp135 = /ca2ui5/if_layo_auth=>cs_action-save_shared.
+          temp143 = /ca2ui5/if_layo_auth=>cs_action-save_shared.
         ELSE.
-          temp135 = /ca2ui5/if_layo_auth=>cs_action-save_own.
+          temp143 = /ca2ui5/if_layo_auth=>cs_action-save_own.
         ENDIF.
 
-        action = temp135.
+        action = temp143.
         IF /ca2ui5/cl_layo_auth=>check( action = action
                                       head   = head ) = abap_false.
           RAISE EXCEPTION TYPE /ca2ui5/cx_layo_error
@@ -2148,11 +2164,11 @@ DATA candidates TYPE temp9.
 
       INSERT head INTO TABLE result.
 
-      CLEAR temp136.
-      temp136-sign = `I`.
-      temp136-option = `EQ`.
-      temp136-low = head-guid.
-      INSERT temp136 INTO TABLE new_guids.
+      CLEAR temp144.
+      temp144-sign = `I`.
+      temp144-option = `EQ`.
+      temp144-low = head-guid.
+      INSERT temp144 INTO TABLE new_guids.
 
     ENDLOOP.
 
@@ -2178,13 +2194,13 @@ DATA candidates TYPE temp9.
     " - a layout saved before the screen format existed has none and is a
     " default of the same scope. One read of the candidates, one update.
 
-    CLEAR temp137.
+    CLEAR temp145.
 
     LOOP AT result INTO h WHERE def = abap_true.
-      INSERT h INTO TABLE temp137.
+      INSERT h INTO TABLE temp145.
     ENDLOOP.
 
-    defaults = temp137.
+    defaults = temp145.
     IF defaults IS NOT INITIAL.
 
 
@@ -2192,16 +2208,16 @@ DATA candidates TYPE temp9.
 
 
 
-      CLEAR temp139.
+      CLEAR temp147.
 
       LOOP AT defaults INTO d.
 
-        temp140-sign = `I`.
-        temp140-option = `EQ`.
-        temp140-low = d-handle03.
-        INSERT temp140 INTO TABLE temp139.
+        temp148-sign = `I`.
+        temp148-option = `EQ`.
+        temp148-low = d-handle03.
+        INSERT temp148 INTO TABLE temp147.
       ENDLOOP.
-      scope03 = temp139.
+      scope03 = temp147.
 
 
 
@@ -2224,11 +2240,11 @@ DATA candidates TYPE temp9.
              OR ( head-screen_format = screen_format_l AND candidate-screen_format IS INITIAL )
              OR ( head-screen_format IS INITIAL AND candidate-screen_format = screen_format_l ).
 
-            CLEAR temp142.
-            temp142-sign = `I`.
-            temp142-option = `EQ`.
-            temp142-low = candidate-guid.
-            INSERT temp142 INTO TABLE demote.
+            CLEAR temp150.
+            temp150-sign = `I`.
+            temp150-option = `EQ`.
+            temp150-low = candidate-guid.
+            INSERT temp150 INTO TABLE demote.
             EXIT.
           ENDIF.
         ENDLOOP.
@@ -2242,6 +2258,24 @@ DATA candidates TYPE temp9.
 
     IF iv_commit = abap_true.
       COMMIT WORK AND WAIT.
+    ENDIF.
+
+  ENDMETHOD.
+
+  METHOD is_same_layout.
+
+    IF layout IS NOT BOUND.
+      RETURN.
+    ENDIF.
+
+    " an IF, not xsdbool( ): the 7.02 downport writes the condition into one
+    " line longer than 255 characters
+    IF     ms_layout-s_head-control  = layout->ms_layout-s_head-control
+       AND ms_layout-s_head-handle01 = layout->ms_layout-s_head-handle01
+       AND ms_layout-s_head-handle02 = layout->ms_layout-s_head-handle02
+       AND ms_layout-s_head-handle03 = layout->ms_layout-s_head-handle03
+       AND ms_layout-s_head-handle04 = layout->ms_layout-s_head-handle04.
+      result = abap_true.
     ENDIF.
 
   ENDMETHOD.

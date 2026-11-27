@@ -185,6 +185,8 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
     DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_messages.
     FIELD-SYMBOLS <temp9> LIKE LINE OF lo_pop->mt_msg.
     DATA temp10 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp11> LIKE LINE OF lo_pop->mt_msg.
+    DATA temp12 LIKE sy-tabix.
     CLEAR temp7.
     INSERT `first message` INTO TABLE temp7.
     INSERT `second message` INTO TABLE temp7.
@@ -204,20 +206,30 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `first message`
                                         act = <temp9>-title ).
+    " a message without a message class has no subtitle - no ` 000`
+
+
+    temp12 = sy-tabix.
+    READ TABLE lo_pop->mt_msg INDEX 1 ASSIGNING <temp11>.
+    sy-tabix = temp12.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_initial( <temp11>-subtitle ).
 
   ENDMETHOD.
 
   METHOD test_init_displays_popup.
 
-    DATA temp11 TYPE string_table.
+    DATA temp13 TYPE string_table.
     DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_messages.
     DATA lv_xml TYPE string.
     DATA temp1 TYPE xsdboolean.
     DATA temp2 TYPE xsdboolean.
-    CLEAR temp11.
-    INSERT `first message` INTO TABLE temp11.
+    CLEAR temp13.
+    INSERT `first message` INTO TABLE temp13.
 
-    lo_pop = /ca2ui5/cl_popup_messages=>factory( i_messages = temp11
+    lo_pop = /ca2ui5/cl_popup_messages=>factory( i_messages = temp13
                                                    i_title    = `MSG Title` ).
     client_create( lo_pop ).
 
@@ -236,12 +248,12 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
   METHOD test_continue_closes.
 
-    DATA temp13 TYPE string_table.
+    DATA temp15 TYPE string_table.
     DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_messages.
-    CLEAR temp13.
-    INSERT `msg` INTO TABLE temp13.
+    CLEAR temp15.
+    INSERT `msg` INTO TABLE temp15.
 
-    lo_pop = /ca2ui5/cl_popup_messages=>factory( temp13 ).
+    lo_pop = /ca2ui5/cl_popup_messages=>factory( temp15 ).
     roundtrip_event( io_app   = lo_pop
                      iv_event = `BUTTON_CONTINUE` ).
 
@@ -262,12 +274,12 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
   METHOD popup_destroyed.
 
-    DATA temp15 LIKE sy-subrc.
+    DATA temp17 LIKE sy-subrc.
     DATA temp3 TYPE xsdboolean.
     READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = /ca2ui5/if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
-    temp15 = sy-subrc.
+    temp17 = sy-subrc.
 
-    temp3 = boolc( temp15 = 0 ).
+    temp3 = boolc( temp17 = 0 ).
     result = temp3.
 
   ENDMETHOD.
@@ -288,27 +300,27 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD test_closed_is_confirmed.
 
-    DATA temp16 TYPE string_table.
+    DATA temp18 TYPE string_table.
     DATA lo_pop TYPE REF TO /ca2ui5/cl_popup_messages.
-    DATA temp18 TYPE REF TO /ca2ui5/if_popup_result.
-    DATA li_result LIKE temp18.
-    DATA temp19 TYPE REF TO /ca2ui5/cl_popup_messages=>ty_t_msg.
-    DATA lr_msg LIKE temp19.
-    CLEAR temp16.
-    INSERT `one` INTO TABLE temp16.
-    INSERT `two` INTO TABLE temp16.
+    DATA temp20 TYPE REF TO /ca2ui5/if_popup_result.
+    DATA li_result LIKE temp20.
+    DATA temp21 TYPE REF TO /ca2ui5/cl_popup_messages=>ty_t_msg.
+    DATA lr_msg LIKE temp21.
+    CLEAR temp18.
+    INSERT `one` INTO TABLE temp18.
+    INSERT `two` INTO TABLE temp18.
 
-    lo_pop = /ca2ui5/cl_popup_messages=>factory( temp16 ).
+    lo_pop = /ca2ui5/cl_popup_messages=>factory( temp18 ).
 
-    temp18 ?= lo_pop.
+    temp20 ?= lo_pop.
 
-    li_result = temp18.
+    li_result = temp20.
 
     cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
 
-    temp19 ?= li_result->value( ).
+    temp21 ?= li_result->value( ).
 
-    lr_msg = temp19.
+    lr_msg = temp21.
     cl_abap_unit_assert=>assert_equals( exp = 2
                                         act = lines( lr_msg->* ) ).
     cl_abap_unit_assert=>assert_initial( li_result->value_string( ) ).
