@@ -1,26 +1,27 @@
 # distributions
 
+| Name | Objects | Standard | Cloud |
+|---|---|---|---|
+| `ZABAP2UI5` | `zabap2ui5_cl_ui5_` | [`zabap2ui5-standard`](https://github.com/abap2UI5/distributions/tree/zabap2ui5-standard) | [`zabap2ui5-cloud`](https://github.com/abap2UI5/distributions/tree/zabap2ui5-cloud) |
+| `/Z2UI5/` | `/z2ui5/cl_ui5_` | [`#z2ui5#-standard`](https://github.com/abap2UI5/distributions/tree/%23z2ui5%23-standard) | [`#z2ui5#-cloud`](https://github.com/abap2UI5/distributions/tree/%23z2ui5%23-cloud) |
+| `/KRO/` | `/kro/cl_ui5_` | [`#kro#-standard`](https://github.com/abap2UI5/distributions/tree/%23kro%23-standard) | [`#kro#-cloud`](https://github.com/abap2UI5/distributions/tree/%23kro%23-cloud) |
+| `/CA2UI5/` | `/ca2ui5/cl_ui5_` | [`#ca2ui5#-standard`](https://github.com/abap2UI5/distributions/tree/%23ca2ui5%23-standard) | [`#ca2ui5#-cloud`](https://github.com/abap2UI5/distributions/tree/%23ca2ui5%23-cloud) |
+
+**Not listed here? Want a distribution of your own?** Add your name to
+[`deliveries.json`](deliveries.json) and send a pull request - or fork this
+repository and run it yourself.
+
+
+## Info
+
+Pull a branch with abapGit; its README has the install steps. `standard` is for
+every Standard ABAP system from 7.02, `cloud` for ABAP Cloud.
+
 [abap2UI5](https://github.com/abap2UI5/abap2UI5) and its addons in two delivery
 variants on `main`, and from them **renamed installations** on delivery branches - each
 one an abapGit repository to pull, for a parallel installation next to an
 existing abap2UI5 or for a system that installs everything under a registered
 namespace.
-
-## Deliveries
-
-| Name | Objects | Standard | Cloud |
-|---|---|---|---|
-| `ZABAP2UI5` | `zabap2ui5_cl_ui5_client`, ... | [`zabap2ui5-standard`](https://github.com/abap2UI5/distributions/tree/zabap2ui5-standard) | [`zabap2ui5-cloud`](https://github.com/abap2UI5/distributions/tree/zabap2ui5-cloud) |
-| `/Z2UI5/` | `/z2ui5/cl_ui5_client`, ... | [`#z2ui5#-standard`](https://github.com/abap2UI5/distributions/tree/%23z2ui5%23-standard) | [`#z2ui5#-cloud`](https://github.com/abap2UI5/distributions/tree/%23z2ui5%23-cloud) |
-| `/KRO/` | `/kro/cl_ui5_client`, ... | [`#kro#-standard`](https://github.com/abap2UI5/distributions/tree/%23kro%23-standard) | [`#kro#-cloud`](https://github.com/abap2UI5/distributions/tree/%23kro%23-cloud) |
-| `/CA2UI5/` | `/ca2ui5/cl_ui5_client`, ... | [`#ca2ui5#-standard`](https://github.com/abap2UI5/distributions/tree/%23ca2ui5%23-standard) | [`#ca2ui5#-cloud`](https://github.com/abap2UI5/distributions/tree/%23ca2ui5%23-cloud) |
-
-Pull a branch with abapGit; its README has the install steps. `standard` is for
-every Standard ABAP system from 7.02, `cloud` for ABAP Cloud.
-
-**Not listed here? Want a distribution of your own?** Add your name to
-[`deliveries.json`](deliveries.json) and send a pull request - or fork this
-repository and run it yourself.
 
 ## What is included
 
