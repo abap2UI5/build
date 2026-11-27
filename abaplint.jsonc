@@ -4,27 +4,27 @@
   },
   "dependencies": [
     {
-      "url": "https://github.com/abapedia/steampunk-2305-api-intersect-702",
-      "folder": "/deps/steampunk",
-      "files": "/src/**/*.*"
-    },
-    {
-      "url": "https://github.com/abaplint/deps",
-      "folder": "/deps/abaplint",
+      "url": "https://github.com/open-abap/open-abap-core",
+      "folder": "/deps/open-abap-core",
       "files": "/src/**/*.*"
     }
   ],
   "syntax": {
-    "version": "v750",
+    "version": "v702",
     "errorNamespace": "."
   },
   "rules": {
+    "downport": true,
     "begin_end_names": true,
     "check_ddic": true,
     "check_include": true,
     "check_syntax": true,
     "global_class": true,
+    "definitions_top": true,
     "implement_methods": true,
+    "line_length": {
+      "length": 255
+    },
     "method_implemented_twice": true,
     "parser_error": true,
     "superclass_final": true,
