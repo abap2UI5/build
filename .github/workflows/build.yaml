@@ -1,0 +1,166 @@
+name: build
+
+# main holds abap2UI5 in its two variants - src/702 for every Standard ABAP
+# system, src/cloud for ABAP Cloud - and every delivery branch is one of
+# them under another name
+# (deliveries.json: every name in every variant, branch <name>-<variant>).
+#
+#   sources   takes src/ of abap2UI5's branches 702 and cloud and the rename
+#             tooling (build.mjs sync) and commits what changed
+#             to main. On a pull request nothing is synced: the head is built
+#   lint      per folder: abaplint and the abap2UI5-linter, each with the
+#             config that points at that folder only
+#   deliver   per delivery: build.mjs deliver, then the branch is pushed -
+#             one commit per change, parented on the previous one. abaplint
+#             runs on the result with the branch's own abaplint.jsonc; the
+#             branch is pushed either way, so its badge shows its state, and
+#             issues fail the job after the push. On a pull request the
+#             delivery is built and not pushed
+#
+# A scheduled run that finds abap2UI5 unchanged stops after sources.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.state.outputs.sha }}
+      changed: ${{ steps.state.outputs.changed }}
+      matrix: ${{ steps.state.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Sync from abap2UI5
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          node build.mjs sync
+          git add -A src upstream sources.json
+          if git diff --cached --quiet; then
+            echo "abap2UI5 unchanged"
+            exit 0
+          fi
+          short() { node -p "require('./sources.json').branches['$1'].commit.slice(0, 7)"; }
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git commit -q -m "sync: abap2UI5 702 $(short 702), cloud $(short cloud)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          echo "SYNCED=true" >> "$GITHUB_ENV"
+      - name: State
+        id: state
+        run: |
+          {
+            echo "sha=$(git rev-parse HEAD)"
+            echo "changed=${SYNCED:-false}"
+            echo "matrix=$(node build.mjs matrix)"
+          } >> "$GITHUB_OUTPUT"
+      - run: npm test
+
+  lint:
+    needs: sources
+    if: github.event_name != 'schedule' || needs.sources.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        folder: ["702", cloud]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.sources.outputs.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: abaplint src/${{ matrix.folder }}
+        run: npx abaplint "abaplint.${{ matrix.folder }}.jsonc"
+      - name: abap2UI5-linter src/${{ matrix.folder }}
+        run: npx abap2ui5lint --config "abap2ui5lint.${{ matrix.folder }}.jsonc"
+
+  deliver:
+    needs: [sources, lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        delivery: ${{ fromJSON(needs.sources.outputs.matrix) }}
+    concurrency:
+      group: deliver-${{ matrix.delivery.branch }}-${{ github.event_name == 'pull_request' && github.ref || 'push' }}
+      cancel-in-progress: false
+    env:
+      NAME: ${{ matrix.delivery.name }}
+      VARIANT: ${{ matrix.delivery.variant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.sources.outputs.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - name: Build ${{ matrix.delivery.branch }}
+        id: build
+        run: node build.mjs deliver "$NAME" "$VARIANT"
+
+      - name: Push ${{ matrix.delivery.branch }}
+        if: github.event_name != 'pull_request'
+        env:
+          BRANCH: ${{ steps.build.outputs.branch }}
+          OUT: ${{ steps.build.outputs.out }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git fetch origin --depth 1 "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
+          parent=$(git rev-parse -q --verify "refs/remotes/origin/$BRANCH" || true)
+          index="$RUNNER_TEMP/index"
+          rm -f "$index"
+          (cd "$OUT" && GIT_DIR="$GITHUB_WORKSPACE/.git" GIT_WORK_TREE=. GIT_INDEX_FILE="$index" git add -A)
+          tree=$(GIT_INDEX_FILE="$index" git write-tree)
+          if [ -n "$parent" ] && [ "$(git rev-parse "$parent^{tree}")" = "$tree" ]; then
+            echo "$BRANCH: no changes"
+            exit 0
+          fi
+          source=$(node -p "Object.values(require('./sources.json').branches).find((b) => b.variant === '$VARIANT').commit.slice(0, 7)")
+          commit=$(git commit-tree "$tree" ${parent:+-p "$parent"} -m "build: $NAME $VARIANT (abap2UI5 $source)")
+          git push origin "$commit:refs/heads/$BRANCH"
+          echo "$BRANCH: pushed $commit"
+
+      - name: abaplint
+        env:
+          BRANCH: ${{ steps.build.outputs.branch }}
+          ISSUES: ${{ steps.build.outputs.issues }}
+        run: |
+          echo "abaplint on $BRANCH: $ISSUES issue(s)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$ISSUES" != "0" ]; then
+            echo "::error::abaplint found $ISSUES issue(s) on $BRANCH - see the build step"
+            exit 1
+          fi
