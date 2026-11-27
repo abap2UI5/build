@@ -125,7 +125,7 @@ zabap2ui5_cl_layo_xml_builder=>xml_build_simple_form( i_data   = temp2
     DATA temp3 TYPE zabap2ui5_cl_layo_sample_05=>ty_s_data.
     DATA temp4 TYPE zabap2ui5_cl_layo_sample_05=>ty_s_data.
 
-    SELECT * FROM zabap2ui5_t_11 ORDER BY PRIMARY KEY INTO TABLE mt_table UP TO 5 ROWS ##SUBRC_OK.
+    SELECT * FROM zabap2ui5_t_11 UP TO 5 ROWS INTO TABLE mt_table ORDER BY PRIMARY KEY   ##SUBRC_OK.
 
 
     CLEAR temp3.
