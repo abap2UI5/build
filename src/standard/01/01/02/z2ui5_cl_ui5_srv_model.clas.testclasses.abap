@@ -115,6 +115,79 @@ CLASS ltcl_app_conv IMPLEMENTATION.
 ENDCLASS.
 
 
+" the edges of a binding: a structure written as one value (its dates, its
+" references), a table of references to rows, and numbers with more digits
+" than a double keeps - on every road the model goes out by
+CLASS ltcl_app_edge DEFINITION FINAL
+  FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
+
+  PUBLIC SECTION.
+    INTERFACES z2ui5_if_app.
+
+    TYPES:
+      BEGIN OF ty_s_form,
+        name TYPE string,
+        dt   TYPE d,
+        tm   TYPE t,
+      END OF ty_s_form.
+    TYPES ty_t_form TYPE STANDARD TABLE OF ty_s_form WITH DEFAULT KEY.
+    TYPES:
+      BEGIN OF ty_s_line,
+        id     TYPE i,
+        s_form TYPE ty_s_form,
+      END OF ty_s_line.
+    TYPES ty_t_line TYPE STANDARD TABLE OF ty_s_line WITH DEFAULT KEY.
+    TYPES:
+      BEGIN OF ty_s_withref,
+        name TYPE string,
+        r    TYPE REF TO data,
+        o    TYPE REF TO object,
+      END OF ty_s_withref.
+    TYPES:
+      BEGIN OF ty_s_row,
+        name TYPE string,
+        qty  TYPE i,
+      END OF ty_s_row.
+    TYPES ty_t_refs TYPE STANDARD TABLE OF REF TO ty_s_row WITH DEFAULT KEY.
+    " the shape of a TZNTSTMPL, DEC 21,7 - more digits than a double keeps
+    TYPES ty_stamp TYPE p LENGTH 11 DECIMALS 7.
+    TYPES:
+      BEGIN OF ty_s_wide,
+        name       TYPE string,
+        changed_at TYPE ty_stamp,
+        big        TYPE decfloat34,
+        price      TYPE p LENGTH 8 DECIMALS 2,
+        ratio      TYPE f,
+      END OF ty_s_wide.
+    TYPES ty_t_wide TYPE STANDARD TABLE OF ty_s_wide WITH DEFAULT KEY.
+    TYPES:
+      BEGIN OF ty_s_deep,
+        s_wide TYPE ty_s_wide,
+        t_wide TYPE ty_t_wide,
+      END OF ty_s_deep.
+
+    DATA ms_form    TYPE ty_s_form.
+    DATA mt_form    TYPE ty_t_form.
+    DATA mt_line    TYPE ty_t_line.
+    DATA ms_withref TYPE ty_s_withref.
+    DATA mt_refs    TYPE ty_t_refs.
+    " bound component by component - the general road's scalars
+    DATA ms_wide    TYPE ty_s_wide.
+    " bound whole - the fast road
+    DATA ms_flat    TYPE ty_s_wide.
+    DATA mt_wide    TYPE ty_t_wide.
+    " a deep value - the general road, walked
+    DATA ms_deep    TYPE ty_s_deep.
+    DATA mv_big     TYPE decfloat34.
+ENDCLASS.
+
+
+CLASS ltcl_app_edge IMPLEMENTATION.
+  METHOD z2ui5_if_app~main ##NEEDED.
+  ENDMETHOD.
+ENDCLASS.
+
+
 " three levels of tables - a delta that walks two nested __delta nodes
 CLASS ltcl_app_deep3 DEFINITION FINAL
   FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
@@ -2342,10 +2415,33 @@ CLASS ltcl_03_model_out DEFINITION INHERITING FROM ltcl_00_base FINAL
     METHODS filter_applied           FOR TESTING RAISING cx_static_check.
     " a mapper renames what it says
     METHODS mapper_applied           FOR TESTING RAISING cx_static_check.
+    " the snapshot before main( ): unchanged values are no change - also
+    " when a bound row cannot be reached (its reference was cleared), which
+    " the snapshot leaves out and used to count as bound anew, pushing the
+    " whole model on every roundtrip
+    METHODS snapshot_unchanged       FOR TESTING RAISING cx_static_check.
 ENDCLASS.
 
 
 CLASS ltcl_03_model_out IMPLEMENTATION.
+
+  METHOD snapshot_unchanged.
+    DATA lt_snapshot TYPE z2ui5_cl_ui5_srv_model=>ty_t_snapshot.
+
+    bind_all( ).
+
+    lt_snapshot = mo_model->main_snapshot( ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = mo_model->main_snapshot_changed( lt_snapshot ) ).
+
+    mo_app->mv_string = `changed`.
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = mo_model->main_snapshot_changed( lt_snapshot ) ).
+
+    " a bound row whose reference is gone: in no snapshot, and no change
+    CLEAR mo_app->mr_elem.
+    lt_snapshot = mo_model->main_snapshot( ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = mo_model->main_snapshot_changed( lt_snapshot ) ).
+
+  ENDMETHOD.
 
   METHOD every_bound_row.
     DATA lv_json TYPE string.
@@ -2716,6 +2812,36 @@ CLASS ltcl_04_model_in DEFINITION INHERITING FROM ltcl_00_base FINAL
     " a date or time in a spelling that is neither ISO nor plain digits is
     " refused and traced - it used to be cut to its first characters
     METHODS date_time_text_refused   FOR TESTING RAISING cx_static_check.
+    " a structure, a structure cell and a table written as one value read
+    " an emptied date or time as initial and plain digits like the ISO form
+    METHODS whole_value_dates        FOR TESTING RAISING cx_static_check.
+    " the reference components of a structure written as one value take
+    " nothing from the wire and keep what they held - the edit of a sibling
+    " field lands
+    METHODS whole_value_refs_kept    FOR TESTING RAISING cx_static_check.
+    " a row delta into a table of references goes into the rows they point
+    " to; a reference that points nowhere is traced
+    METHODS delta_ref_rows           FOR TESTING RAISING cx_static_check.
+    " a number with more digits than a double keeps goes out as text on
+    " every road, and comes back unchanged with the edit of a sibling
+    METHODS wide_numbers_quoted      FOR TESTING RAISING cx_static_check.
+    " a numeric text takes digits only, and no more than it has places
+    METHODS delta_numc_refused       FOR TESTING RAISING cx_static_check.
+
+    METHODS edge_model
+      IMPORTING
+        io_app        TYPE REF TO ltcl_app_edge
+      RETURNING
+        VALUE(result) TYPE REF TO z2ui5_cl_ui5_srv_model.
+    " the wide row of wide_numbers_quoted, every field set from its text
+    METHODS wide_fill
+      CHANGING
+        cs_wide TYPE ltcl_app_edge=>ty_s_wide.
+    METHODS edge_bind
+      IMPORTING
+        io_model TYPE REF TO z2ui5_cl_ui5_srv_model
+        ir_val   TYPE REF TO data
+        iv_name  TYPE string.
 
     METHODS typed_app
       RETURNING
@@ -5880,6 +6006,562 @@ lr_attri = lo_model->main_attri_search( temp379 ).
     cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
 
   ENDMETHOD.
+
+  METHOD edge_model.
+
+    DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_t_attri.
+    CREATE DATA lr_attri.
+    CREATE OBJECT result EXPORTING attri = lr_attri app = io_app.
+
+  ENDMETHOD.
+
+  METHOD edge_bind.
+
+    DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
+    lr_attri = io_model->main_attri_search( ir_val ).
+    lr_attri->bind        = abap_true.
+    lr_attri->name_client = iv_name.
+
+  ENDMETHOD.
+
+  METHOD wide_fill.
+
+    cs_wide-name       = `a`.
+    cs_wide-changed_at = '20240115123045.1234567'.
+    cs_wide-big        = '1234567890.123456789'.
+    cs_wide-price      = '12.50'.
+    " a float with every digit a double has: it IS one, and stays a number
+    cs_wide-ratio      = 1 / 3.
+
+  ENDMETHOD.
+
+  METHOD whole_value_dates.
+
+    DATA lo_app TYPE REF TO ltcl_app_edge.
+    DATA temp385 TYPE ltcl_app_edge=>ty_t_line.
+    DATA temp386 LIKE LINE OF temp385.
+    DATA temp387 TYPE ltcl_app_edge=>ty_t_form.
+    DATA temp388 LIKE LINE OF temp387.
+    DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
+    DATA temp389 LIKE REF TO lo_app->ms_form.
+    DATA temp390 LIKE REF TO lo_app->mt_line.
+    DATA temp391 LIKE REF TO lo_app->mt_form.
+    DATA temp392 TYPE string.
+    DATA temp393 TYPE string.
+    DATA temp394 TYPE string.
+    FIELD-SYMBOLS <temp395> LIKE LINE OF lo_app->mt_line.
+    DATA temp396 LIKE sy-tabix.
+    DATA temp397 TYPE string.
+    FIELD-SYMBOLS <temp104> LIKE LINE OF lo_app->mt_line.
+    DATA temp105 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp398> LIKE LINE OF lo_app->mt_line.
+    DATA temp399 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp400> LIKE LINE OF lo_app->mt_form.
+    DATA temp401 LIKE sy-tabix.
+    DATA temp402 TYPE string.
+    FIELD-SYMBOLS <temp106> LIKE LINE OF lo_app->mt_form.
+    DATA temp107 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp403> LIKE LINE OF lo_app->mt_form.
+    DATA temp404 LIKE sy-tabix.
+    CREATE OBJECT lo_app TYPE ltcl_app_edge.
+    CLEAR lo_app->ms_form.
+    lo_app->ms_form-name = `a`.
+    lo_app->ms_form-dt = '20240115'.
+    lo_app->ms_form-tm = '123000'.
+
+    CLEAR temp385.
+
+    temp386-id = 1.
+    CLEAR temp386-s_form.
+    temp386-s_form-name = `l1`.
+    temp386-s_form-dt = '20240115'.
+    temp386-s_form-tm = '123000'.
+    INSERT temp386 INTO TABLE temp385.
+    lo_app->mt_line = temp385.
+
+    CLEAR temp387.
+
+    temp388-name = `r1`.
+    temp388-dt = '20240115'.
+    INSERT temp388 INTO TABLE temp387.
+    lo_app->mt_form = temp387.
+
+    lo_model = edge_model( lo_app ).
+
+    GET REFERENCE OF lo_app->ms_form INTO temp389.
+edge_bind( io_model = lo_model
+               ir_val   = temp389
+               iv_name  = `/MS_FORM` ).
+
+    GET REFERENCE OF lo_app->mt_line INTO temp390.
+edge_bind( io_model = lo_model
+               ir_val   = temp390
+               iv_name  = `/MT_LINE` ).
+
+    GET REFERENCE OF lo_app->mt_form INTO temp391.
+edge_bind( io_model = lo_model
+               ir_val   = temp391
+               iv_name  = `/MT_FORM` ).
+
+    " an emptied date and time are initial: ajson ships an initial one as
+    " "", and assigned as it came that was a date of blanks on a system
+    lo_model->main_json_to_attri( delta( `{"MS_FORM":{"NAME":"b","DT":"","TM":""}}` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = `b`
+                                        act = lo_app->ms_form-name ).
+    cl_abap_unit_assert=>assert_initial( lo_app->ms_form-dt ).
+    cl_abap_unit_assert=>assert_initial( lo_app->ms_form-tm ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+
+    " the blanks such a date went out as come back initial - they used to
+    " refuse the structure, and every later edit of it with them
+    lo_model->main_json_to_attri( delta( `{"MS_FORM":{"NAME":"c","DT":"    -  -  ","TM":"  :  :  "}}` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = `c`
+                                        act = lo_app->ms_form-name ).
+    cl_abap_unit_assert=>assert_initial( lo_app->ms_form-dt ).
+    cl_abap_unit_assert=>assert_initial( lo_app->ms_form-tm ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+
+    " plain digits (valueFormat yyyyMMdd / HHmmss) read like the ISO form,
+    " as a cell reads them
+    lo_model->main_json_to_attri( delta( `{"MS_FORM":{"NAME":"d","DT":"20240301","TM":"123000"}}` ) ).
+
+    temp392 = lo_app->ms_form-dt.
+    cl_abap_unit_assert=>assert_equals( exp = `20240301`
+                                        act = temp392 ).
+
+    temp393 = lo_app->ms_form-tm.
+    cl_abap_unit_assert=>assert_equals( exp = `123000`
+                                        act = temp393 ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+
+    " a date that is none still refuses the value - traced, the old one kept
+    lo_model->main_json_to_attri( delta( `{"MS_FORM":{"NAME":"e","DT":"Jan 15, 2024"}}` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = `d`
+                                        act = lo_app->ms_form-name ).
+
+    temp394 = lo_app->ms_form-dt.
+    cl_abap_unit_assert=>assert_equals( exp = `20240301`
+                                        act = temp394 ).
+    cl_abap_unit_assert=>assert_equals( exp = 1
+                                        act = lines( lo_model->mt_skipped ) ).
+    CLEAR lo_model->mt_skipped.
+
+    " the same for a structure cell of a row ...
+    lo_model->main_json_to_attri(
+        delta( `{"MT_LINE":{"__delta":{"0":{"S_FORM":{"NAME":"l2","DT":"20240302","TM":""}}}}}` ) ).
+
+
+    temp396 = sy-tabix.
+    READ TABLE lo_app->mt_line INDEX 1 ASSIGNING <temp395>.
+    sy-tabix = temp396.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `l2`
+                                        act = <temp395>-s_form-name ).
+
+
+
+    temp105 = sy-tabix.
+    READ TABLE lo_app->mt_line INDEX 1 ASSIGNING <temp104>.
+    sy-tabix = temp105.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    temp397 = <temp104>-s_form-dt.
+    cl_abap_unit_assert=>assert_equals( exp = `20240302`
+                                        act = temp397 ).
+
+
+    temp399 = sy-tabix.
+    READ TABLE lo_app->mt_line INDEX 1 ASSIGNING <temp398>.
+    sy-tabix = temp399.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_initial( <temp398>-s_form-tm ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+
+    " ... and for a whole table
+    lo_model->main_json_to_attri(
+        delta( `{"MT_FORM":[{"NAME":"r1","DT":""},{"NAME":"r2","DT":"20240102","TM":"  :  :  "}]}` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 2
+                                        act = lines( lo_app->mt_form ) ).
+
+
+    temp401 = sy-tabix.
+    READ TABLE lo_app->mt_form INDEX 1 ASSIGNING <temp400>.
+    sy-tabix = temp401.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_initial( <temp400>-dt ).
+
+
+
+    temp107 = sy-tabix.
+    READ TABLE lo_app->mt_form INDEX 2 ASSIGNING <temp106>.
+    sy-tabix = temp107.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    temp402 = <temp106>-dt.
+    cl_abap_unit_assert=>assert_equals( exp = `20240102`
+                                        act = temp402 ).
+
+
+    temp404 = sy-tabix.
+    READ TABLE lo_app->mt_form INDEX 2 ASSIGNING <temp403>.
+    sy-tabix = temp404.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_initial( <temp403>-tm ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+
+  ENDMETHOD.
+
+  METHOD whole_value_refs_kept.
+
+    FIELD-SYMBOLS <inner> TYPE any.
+    DATA lr_inner TYPE REF TO string.
+    DATA lo_app TYPE REF TO ltcl_app_edge.
+    DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
+    DATA temp405 LIKE REF TO lo_app->ms_withref.
+    DATA temp50 TYPE xsdboolean.
+
+    " CREATE DATA, not NEW: the downport turns a NEW of data into a CREATE
+    " OBJECT (abap-check, section 4)
+    CREATE DATA lr_inner.
+    lr_inner->* = `inner`.
+
+    CREATE OBJECT lo_app TYPE ltcl_app_edge.
+    lo_app->ms_withref-name = `x`.
+    lo_app->ms_withref-r = lr_inner.
+
+    lo_model = edge_model( lo_app ).
+
+    GET REFERENCE OF lo_app->ms_withref INTO temp405.
+edge_bind( io_model = lo_model
+               ir_val   = temp405
+               iv_name  = `/MS_WITHREF` ).
+
+    " what the client sends back when NAME is edited: the whole structure,
+    " the data reference as ajson wrote it - its target's value, under a
+    " lower-case name - and the object reference as null
+    lo_model->main_json_to_attri( delta( `{"MS_WITHREF":{"NAME":"edited","r":"typed","O":null}}` ) ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+    cl_abap_unit_assert=>assert_equals( exp = `edited`
+                                        act = lo_app->ms_withref-name ).
+    cl_abap_unit_assert=>assert_bound( lo_app->ms_withref-r ).
+    ASSIGN lo_app->ms_withref-r->* TO <inner>.
+    cl_abap_unit_assert=>assert_equals( exp = `inner`
+                                        act = <inner> ).
+    cl_abap_unit_assert=>assert_not_bound( lo_app->ms_withref-o ).
+
+    " a bound object reference stays what it was as well
+    lo_app->ms_withref-o = lo_app.
+    lo_model->main_json_to_attri( delta( `{"MS_WITHREF":{"NAME":"again","O":null}}` ) ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+    cl_abap_unit_assert=>assert_equals( exp = `again`
+                                        act = lo_app->ms_withref-name ).
+
+    temp50 = boolc( lo_app->ms_withref-o = lo_app ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp50 ).
+    cl_abap_unit_assert=>assert_bound( lo_app->ms_withref-r ).
+
+  ENDMETHOD.
+
+  METHOD delta_ref_rows.
+
+    DATA lr_row  TYPE REF TO ltcl_app_edge=>ty_s_row.
+    DATA lr_none TYPE REF TO ltcl_app_edge=>ty_s_row.
+    DATA lo_app TYPE REF TO ltcl_app_edge.
+    DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
+    DATA temp406 LIKE REF TO lo_app->mt_refs.
+    DATA temp51 TYPE xsdboolean.
+    DATA temp20 LIKE sy-subrc.
+    DATA temp52 TYPE xsdboolean.
+    DATA temp21 LIKE sy-subrc.
+
+    CREATE DATA lr_row.
+    lr_row->name = `r1`.
+    lr_row->qty  = 1.
+
+    CREATE OBJECT lo_app TYPE ltcl_app_edge.
+    INSERT lr_row INTO TABLE lo_app->mt_refs.
+    INSERT lr_none INTO TABLE lo_app->mt_refs.
+
+    lo_model = edge_model( lo_app ).
+
+    GET REFERENCE OF lo_app->mt_refs INTO temp406.
+edge_bind( io_model = lo_model
+               ir_val   = temp406
+               iv_name  = `/MT_REFS` ).
+
+    " ajson writes the row a reference points to - that is what the client
+    " edits, and where the cells go
+    lo_model->main_json_to_attri( delta( `{"MT_REFS":{"__delta":{"0":{"NAME":"edited","QTY":7}}}}` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = `edited`
+                                        act = lr_row->name ).
+    cl_abap_unit_assert=>assert_equals( exp = 7
+                                        act = lr_row->qty ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+
+    " a refused cell keeps its old value and is traced, and so is every
+    " cell of a row whose reference points nowhere
+    lo_model->main_json_to_attri( delta( `{"MT_REFS":{"__delta":{"0":{"QTY":"seven"},"1":{"NAME":"lost"}}}}` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 7
+                                        act = lr_row->qty ).
+    cl_abap_unit_assert=>assert_equals( exp = 2
+                                        act = lines( lo_model->mt_skipped ) ).
+
+
+    READ TABLE lo_model->mt_skipped WITH KEY row = 1 field = `QTY` TRANSPORTING NO FIELDS.
+    temp20 = sy-subrc.
+    temp51 = boolc( temp20 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp51 ). "#EC CI_SORTSEQ
+
+
+    READ TABLE lo_model->mt_skipped WITH KEY row = 2 field = `NAME` TRANSPORTING NO FIELDS.
+    temp21 = sy-subrc.
+    temp52 = boolc( temp21 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp52 ). "#EC CI_SORTSEQ
+
+  ENDMETHOD.
+
+  METHOD wide_numbers_quoted.
+
+    DATA lv_path TYPE string.
+
+    " every wide value set from its text, never copied from another
+    " field: the transpiled runtime copies a packed through a double
+    " (abap-check, section 4), a system does not
+    DATA lo_app TYPE REF TO ltcl_app_edge.
+    FIELD-SYMBOLS <row> TYPE ltcl_app_edge=>ty_s_wide.
+    DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
+    DATA temp407 LIKE REF TO lo_app->ms_wide-name.
+    DATA temp408 LIKE REF TO lo_app->ms_wide-changed_at.
+    DATA temp409 LIKE REF TO lo_app->ms_flat.
+    DATA temp410 LIKE REF TO lo_app->mt_wide.
+    DATA temp411 LIKE REF TO lo_app->ms_deep.
+    DATA temp412 LIKE REF TO lo_app->mv_big.
+    DATA lo_out TYPE REF TO z2ui5_if_ajson.
+    DATA temp413 TYPE string_table.
+    DATA lt_quoted LIKE temp413.
+    DATA temp415 TYPE string_table.
+    DATA lt_number LIKE temp415.
+    CREATE OBJECT lo_app TYPE ltcl_app_edge.
+    wide_fill( CHANGING cs_wide = lo_app->ms_wide ).
+    wide_fill( CHANGING cs_wide = lo_app->ms_flat ).
+    wide_fill( CHANGING cs_wide = lo_app->ms_deep-s_wide ).
+
+    INSERT INITIAL LINE INTO TABLE lo_app->mt_wide ASSIGNING <row>.
+    wide_fill( CHANGING cs_wide = <row> ).
+    INSERT INITIAL LINE INTO TABLE lo_app->ms_deep-t_wide ASSIGNING <row>.
+    wide_fill( CHANGING cs_wide = <row> ).
+    lo_app->mv_big = '12.5'.
+
+    lo_model = edge_model( lo_app ).
+
+    GET REFERENCE OF lo_app->ms_wide-name INTO temp407.
+edge_bind( io_model = lo_model
+               ir_val   = temp407
+               iv_name  = `/MS_WIDE/NAME` ).
+
+    GET REFERENCE OF lo_app->ms_wide-changed_at INTO temp408.
+edge_bind( io_model = lo_model
+               ir_val   = temp408
+               iv_name  = `/MS_WIDE/CHANGED_AT` ).
+
+    GET REFERENCE OF lo_app->ms_flat INTO temp409.
+edge_bind( io_model = lo_model
+               ir_val   = temp409
+               iv_name  = `/MS_FLAT` ).
+
+    GET REFERENCE OF lo_app->mt_wide INTO temp410.
+edge_bind( io_model = lo_model
+               ir_val   = temp410
+               iv_name  = `/MT_WIDE` ).
+
+    GET REFERENCE OF lo_app->ms_deep INTO temp411.
+edge_bind( io_model = lo_model
+               ir_val   = temp411
+               iv_name  = `/MS_DEEP` ).
+
+    GET REFERENCE OF lo_app->mv_big INTO temp412.
+edge_bind( io_model = lo_model
+               ir_val   = temp412
+               iv_name  = `/MV_BIG` ).
+
+
+    lo_out = delta( lo_model->main_json_stringify( ) ).
+
+    " a number a double rounds goes out as text - a component bound on its
+    " own, a flat structure and the rows of a table (the fast road), a deep
+    " value (the general road)
+
+    CLEAR temp413.
+    INSERT `/MS_WIDE/CHANGED_AT` INTO TABLE temp413.
+    INSERT `/MS_FLAT/CHANGED_AT` INTO TABLE temp413.
+    INSERT `/MT_WIDE/1/CHANGED_AT` INTO TABLE temp413.
+    INSERT `/MS_DEEP/S_WIDE/CHANGED_AT` INTO TABLE temp413.
+    INSERT `/MS_DEEP/T_WIDE/1/CHANGED_AT` INTO TABLE temp413.
+
+    lt_quoted = temp413.
+    LOOP AT lt_quoted INTO lv_path.
+      cl_abap_unit_assert=>assert_equals( exp = z2ui5_if_ajson_types=>node_type-string
+                                          act = lo_out->get_node_type( lv_path )
+                                          msg = lv_path ).
+      cl_abap_unit_assert=>assert_equals( exp = `20240115123045.1234567`
+                                          act = lo_out->get_string( lv_path )
+                                          msg = lv_path ).
+    ENDLOOP.
+    cl_abap_unit_assert=>assert_equals( exp = z2ui5_if_ajson_types=>node_type-string
+                                        act = lo_out->get_node_type( `/MS_FLAT/BIG` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = z2ui5_if_ajson_types=>node_type-string
+                                        act = lo_out->get_node_type( `/MS_DEEP/S_WIDE/BIG` ) ).
+
+    " what a double holds stays a number: a price of 8 bytes, a short
+    " decfloat, a float
+
+    CLEAR temp415.
+    INSERT `/MS_FLAT/PRICE` INTO TABLE temp415.
+    INSERT `/MS_FLAT/RATIO` INTO TABLE temp415.
+    INSERT `/MT_WIDE/1/PRICE` INTO TABLE temp415.
+    INSERT `/MS_DEEP/S_WIDE/PRICE` INTO TABLE temp415.
+    INSERT `/MS_DEEP/S_WIDE/RATIO` INTO TABLE temp415.
+    INSERT `/MV_BIG` INTO TABLE temp415.
+
+    lt_number = temp415.
+    LOOP AT lt_number INTO lv_path.
+      cl_abap_unit_assert=>assert_equals( exp = z2ui5_if_ajson_types=>node_type-number
+                                          act = lo_out->get_node_type( lv_path )
+                                          msg = lv_path ).
+    ENDLOOP.
+
+    " the edit of a sibling sends the text back as it came: nothing moves
+    lo_model->main_json_to_attri( delta( `{"MS_WIDE":{"NAME":"b","CHANGED_AT":"20240115123045.1234567"},` &&
+                                         `"MS_FLAT":{"NAME":"b","CHANGED_AT":"20240115123045.1234567",` &&
+                                         `"PRICE":12.5,"RATIO":0.5}}` ) ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+    cl_abap_unit_assert=>assert_equals( exp = `b`
+                                        act = lo_app->ms_wide-name ).
+    cl_abap_unit_assert=>assert_equals( exp = `20240115123045.1234567`
+                                        act = |{ lo_app->ms_wide-changed_at }| ).
+    cl_abap_unit_assert=>assert_equals( exp = `20240115123045.1234567`
+                                        act = |{ lo_app->ms_flat-changed_at }| ).
+
+  ENDMETHOD.
+
+  METHOD delta_numc_refused.
+
+    DATA lo_app TYPE REF TO ltcl_app_conv.
+    DATA temp417 TYPE ltcl_app_conv=>ty_t_row.
+    DATA temp418 LIKE LINE OF temp417.
+    DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_t_attri.
+    DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
+    DATA temp419 TYPE string_table.
+    DATA lt_refused LIKE temp419.
+    DATA lv_value LIKE LINE OF lt_refused.
+      DATA temp421 TYPE string.
+      FIELD-SYMBOLS <temp108> LIKE LINE OF lo_app->mt_row.
+      DATA temp109 LIKE sy-tabix.
+      FIELD-SYMBOLS <temp422> LIKE LINE OF lo_model->mt_skipped.
+      DATA temp423 LIKE sy-tabix.
+    DATA temp424 TYPE string.
+    FIELD-SYMBOLS <temp110> LIKE LINE OF lo_app->mt_row.
+    DATA temp111 LIKE sy-tabix.
+    DATA temp425 TYPE string.
+    FIELD-SYMBOLS <temp112> LIKE LINE OF lo_app->mt_row.
+    DATA temp113 LIKE sy-tabix.
+    CREATE OBJECT lo_app TYPE ltcl_app_conv.
+
+    CLEAR temp417.
+
+    temp418-numc = '00042'.
+    INSERT temp418 INTO TABLE temp417.
+    lo_app->mt_row = temp417.
+
+    CREATE DATA lr_attri.
+
+    CREATE OBJECT lo_model TYPE z2ui5_cl_ui5_srv_model EXPORTING attri = lr_attri app = lo_app.
+
+    " a letter, a sign, a digit more than the field has places: assigned,
+    " the first lost the letter, the second kept the sign on the transpiled
+    " runtime, the third lost its first digit - refused now, the old value
+    " kept
+
+    CLEAR temp419.
+    INSERT `12a3` INTO TABLE temp419.
+    INSERT `-5` INTO TABLE temp419.
+    INSERT `123456` INTO TABLE temp419.
+
+    lt_refused = temp419.
+
+    LOOP AT lt_refused INTO lv_value.
+      CLEAR lo_model->mt_skipped.
+      lo_model->delta_apply_to_table(
+          io_val_front = delta( |\{"__delta":\{"0":\{"NUMC":"{ lv_value }"\}\}\}| )
+          iv_name      = `MT_ROW` ).
+
+
+
+      temp109 = sy-tabix.
+      READ TABLE lo_app->mt_row INDEX 1 ASSIGNING <temp108>.
+      sy-tabix = temp109.
+      IF sy-subrc <> 0.
+        ASSERT 1 = 0.
+      ENDIF.
+      temp421 = <temp108>-numc.
+      cl_abap_unit_assert=>assert_equals( exp = `00042`
+                                          act = temp421
+                                          msg = lv_value ).
+
+
+      temp423 = sy-tabix.
+      READ TABLE lo_model->mt_skipped INDEX 1 ASSIGNING <temp422>.
+      sy-tabix = temp423.
+      IF sy-subrc <> 0.
+        ASSERT 1 = 0.
+      ENDIF.
+      cl_abap_unit_assert=>assert_equals( exp = lv_value
+                                          act = <temp422>-value ).
+    ENDLOOP.
+
+    " leading zeros are no digits of the value, and the emptied field is 0
+    CLEAR lo_model->mt_skipped.
+    lo_model->delta_apply_to_table( io_val_front = delta( `{"__delta":{"0":{"NUMC":"0000007"}}}` )
+                                    iv_name      = `MT_ROW` ).
+
+
+
+    temp111 = sy-tabix.
+    READ TABLE lo_app->mt_row INDEX 1 ASSIGNING <temp110>.
+    sy-tabix = temp111.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    temp424 = <temp110>-numc.
+    cl_abap_unit_assert=>assert_equals( exp = `00007`
+                                        act = temp424 ).
+    lo_model->delta_apply_to_table( io_val_front = delta( `{"__delta":{"0":{"NUMC":""}}}` )
+                                    iv_name      = `MT_ROW` ).
+
+
+
+    temp113 = sy-tabix.
+    READ TABLE lo_app->mt_row INDEX 1 ASSIGNING <temp112>.
+    sy-tabix = temp113.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    temp425 = <temp112>-numc.
+    cl_abap_unit_assert=>assert_equals( exp = `00000`
+                                        act = temp425 ).
+    cl_abap_unit_assert=>assert_initial( lo_model->mt_skipped ).
+
+  ENDMETHOD.
 ENDCLASS.
 
 
@@ -5944,6 +6626,11 @@ CLASS ltcl_05_draft DEFINITION INHERITING FROM ltcl_00_base FINAL
     " a reference the app CLEARed stays cleared across the draft - the
     " restore used to point it back at the owner its `->*` row still named
     METHODS alias_cleared_stays_cleared FOR TESTING RAISING cx_static_check.
+    " a generic reference still INITIAL when the rows were dissolved, given
+    " a table of its own later and never bound: its row has no `->*` child,
+    " and the save used to store no payload for it - the detach then left
+    " the draft without the table
+    METHODS late_table_survives_draft FOR TESTING RAISING cx_static_check.
 
     " the payload shape every draft before 2026-09 carried: the S-RTTI
     " descriptor graph and the data in ONE asXML document. The framework
@@ -5990,12 +6677,12 @@ CLASS ltcl_05_draft IMPLEMENTATION.
     FIELD-SYMBOLS <tab>    TYPE STANDARD TABLE.
     FIELD-SYMBOLS <nested> TYPE any.
     DATA lv_before TYPE string.
-    FIELD-SYMBOLS <temp385> LIKE LINE OF mo_app->mt_rows_ref.
-    DATA temp386 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp387> LIKE LINE OF mo_app->mt_rows_ref.
-    DATA temp388 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp389> LIKE LINE OF mo_app->mt_comp.
-    DATA temp390 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp426> LIKE LINE OF mo_app->mt_rows_ref.
+    DATA temp427 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp428> LIKE LINE OF mo_app->mt_rows_ref.
+    DATA temp429 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp430> LIKE LINE OF mo_app->mt_comp.
+    DATA temp431 LIKE sy-tabix.
 
     bind_all( ).
 
@@ -6019,24 +6706,24 @@ CLASS ltcl_05_draft IMPLEMENTATION.
                                         act = mo_app->ms_with_oref-o_obj->mv_inner ).
 
 
-    temp386 = sy-tabix.
-    READ TABLE mo_app->mt_rows_ref INDEX 1 ASSIGNING <temp385>.
-    sy-tabix = temp386.
+    temp427 = sy-tabix.
+    READ TABLE mo_app->mt_rows_ref INDEX 1 ASSIGNING <temp426>.
+    sy-tabix = temp427.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `cell-ref`
-                                        act = <temp385>-r_elem->* ).
+                                        act = <temp426>-r_elem->* ).
 
 
-    temp388 = sy-tabix.
-    READ TABLE mo_app->mt_rows_ref INDEX 1 ASSIGNING <temp387>.
-    sy-tabix = temp388.
+    temp429 = sy-tabix.
+    READ TABLE mo_app->mt_rows_ref INDEX 1 ASSIGNING <temp428>.
+    sy-tabix = temp429.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `cell-obj`
-                                        act = <temp387>-o_obj->mv_inner ).
+                                        act = <temp428>-o_obj->mv_inner ).
     cl_abap_unit_assert=>assert_equals( exp = `protected`
                                         act = mo_app->get_protected( ) ).
     " the rows of the descriptor table survive, the descriptors they held do
@@ -6045,13 +6732,13 @@ CLASS ltcl_05_draft IMPLEMENTATION.
                                         act = lines( mo_app->mt_comp ) ).
 
 
-    temp390 = sy-tabix.
-    READ TABLE mo_app->mt_comp INDEX 1 ASSIGNING <temp389>.
-    sy-tabix = temp390.
+    temp431 = sy-tabix.
+    READ TABLE mo_app->mt_comp INDEX 1 ASSIGNING <temp430>.
+    sy-tabix = temp431.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_not_bound( <temp389>-type ).
+    cl_abap_unit_assert=>assert_not_bound( <temp430>-type ).
     ASSIGN mo_app->mr_handle_nested->* TO <nested>.
     ASSIGN COMPONENT `T_ITEMS` OF STRUCTURE <nested> TO <tab>.
     cl_abap_unit_assert=>assert_subrc( ).
@@ -6066,7 +6753,7 @@ CLASS ltcl_05_draft IMPLEMENTATION.
     FIELD-SYMBOLS <row> TYPE any.
     DATA ls_sel TYPE ltcl_app_shapes=>ty_s_row_sel.
     DATA lv_changed TYPE string.
-    DATA temp50 TYPE xsdboolean.
+    DATA temp53 TYPE xsdboolean.
 
     bind_all( ).
     roundtrip( ).
@@ -6088,8 +6775,8 @@ CLASS ltcl_05_draft IMPLEMENTATION.
     cl_abap_unit_assert=>assert_differs( exp = lv_second
                                          act = lv_changed ).
 
-    temp50 = boolc( lv_changed CS `"appended after the restore"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp50 ).
+    temp53 = boolc( lv_changed CS `"appended after the restore"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp53 ).
 
     roundtrip( ).
     inv_all( lv_changed ).
@@ -6156,20 +6843,20 @@ CLASS ltcl_05_draft IMPLEMENTATION.
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
     DATA ls_row TYPE ltcl_shp_inner=>ty_s_row.
     DATA lo_app TYPE REF TO ltcl_app_shared_last.
-    DATA temp391 TYPE REF TO cl_abap_tabledescr.
-    DATA lo_tab LIKE temp391.
+    DATA temp432 TYPE REF TO cl_abap_tabledescr.
+    DATA lo_tab LIKE temp432.
     DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_t_attri.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA ls_bind TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_before TYPE string.
-    FIELD-SYMBOLS <temp392> LIKE LINE OF lr_attri->*.
-    DATA temp393 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp394> LIKE LINE OF lr_attri->*.
-    DATA temp395 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp433> LIKE LINE OF lr_attri->*.
+    DATA temp434 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp435> LIKE LINE OF lr_attri->*.
+    DATA temp436 LIKE sy-tabix.
     DATA lv_app_xml TYPE string.
     DATA lv_attri_xml TYPE string.
-    DATA temp51 TYPE xsdboolean.
-    DATA temp52 TYPE xsdboolean.
+    DATA temp54 TYPE xsdboolean.
+    DATA temp55 TYPE xsdboolean.
 
     " the fixture's own shared table: the canonical row is MR_SHARED_B->*
     bind( mo_app->mr_shared_a ).
@@ -6187,9 +6874,9 @@ CLASS ltcl_05_draft IMPLEMENTATION.
     CREATE OBJECT lo_app TYPE ltcl_app_shared_last.
     CREATE OBJECT lo_app->mz_inner.
 
-    temp391 ?= cl_abap_typedescr=>describe_by_data( lo_app->mz_inner->mt_own ).
+    temp432 ?= cl_abap_typedescr=>describe_by_data( lo_app->mz_inner->mt_own ).
 
-    lo_tab = temp391.
+    lo_tab = temp432.
     CREATE DATA lo_app->mr_table TYPE HANDLE lo_tab.
     ASSIGN lo_app->mr_table->* TO <tab>.
     ls_row-col1 = `shared`.
@@ -6213,22 +6900,22 @@ CLASS ltcl_05_draft IMPLEMENTATION.
     lo_model->main_attri_db_save_srtti( ).
 
 
-    temp393 = sy-tabix.
-    READ TABLE lr_attri->* WITH KEY name = `MZ_INNER->MR_SHARED` ASSIGNING <temp392>.
-    sy-tabix = temp393.
+    temp434 = sy-tabix.
+    READ TABLE lr_attri->* WITH KEY name = `MZ_INNER->MR_SHARED` ASSIGNING <temp433>.
+    sy-tabix = temp434.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_not_initial( <temp392>-srtti_data ).
+    cl_abap_unit_assert=>assert_not_initial( <temp433>-srtti_data ).
 
 
-    temp395 = sy-tabix.
-    READ TABLE lr_attri->* WITH KEY name = `MR_TABLE` ASSIGNING <temp394>.
-    sy-tabix = temp395.
+    temp436 = sy-tabix.
+    READ TABLE lr_attri->* WITH KEY name = `MR_TABLE` ASSIGNING <temp435>.
+    sy-tabix = temp436.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_initial( <temp394>-srtti_data ).
+    cl_abap_unit_assert=>assert_initial( <temp435>-srtti_data ).
 
 
     lv_app_xml   = z2ui5_cl_ui5_util_context=>xml_stringify( lo_app ).
@@ -6244,18 +6931,18 @@ CLASS ltcl_05_draft IMPLEMENTATION.
     lo_model->main_attri_db_load( ).
 
 
-    temp51 = boolc( lo_app->mr_table = lo_app->mr_table_tmp ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp51 ).
+    temp54 = boolc( lo_app->mr_table = lo_app->mr_table_tmp ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp54 ).
 
-    temp52 = boolc( lo_app->mr_table = lo_app->mz_inner->mr_shared ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp52 ).
+    temp55 = boolc( lo_app->mr_table = lo_app->mz_inner->mr_shared ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp55 ).
     cl_abap_unit_assert=>assert_equals( exp = lv_before
                                         act = lo_model->main_json_stringify( ) ).
 
   ENDMETHOD.
 
   METHOD dead_objects_stay_quiet.
-    DATA temp396 LIKE REF TO mo_app->mv_string.
+    DATA temp437 LIKE REF TO mo_app->mv_string.
 DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
 
     bind_all( ).
@@ -6267,9 +6954,9 @@ DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     " search instead of dumping it
     cl_abap_unit_assert=>assert_not_bound( row( `MO_DEAD->MV_TEXT` )-o_typedescr ).
 
-    GET REFERENCE OF mo_app->mv_string INTO temp396.
+    GET REFERENCE OF mo_app->mv_string INTO temp437.
 
-lr_attri = mo_model->main_attri_search( temp396 ).
+lr_attri = mo_model->main_attri_search( temp437 ).
     cl_abap_unit_assert=>assert_equals( exp = `MV_STRING`
                                         act = lr_attri->name ).
     " a refresh drops the orphan rows for good
@@ -6281,8 +6968,8 @@ lr_attri = mo_model->main_attri_search( temp396 ).
   METHOD broken_payload_bound_loud.
     DATA lr_payload TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
         DATA lx TYPE REF TO z2ui5_cx_ui5_util_error.
-        DATA temp53 TYPE xsdboolean.
-        DATA temp54 TYPE xsdboolean.
+        DATA temp56 TYPE xsdboolean.
+        DATA temp57 TYPE xsdboolean.
 
     " the payload of a BOUND table is not what S-RTTI wrote (a system
     " upgrade, a type change): the load says so - the alternative was an
@@ -6299,11 +6986,11 @@ lr_attri = mo_model->main_attri_search( temp396 ).
 
       CATCH z2ui5_cx_ui5_util_error INTO lx.
 
-        temp53 = boolc( lx->get_text( ) CS `APP_STATE_RESTORE_ERROR` ).
-        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp53 ).
+        temp56 = boolc( lx->get_text( ) CS `APP_STATE_RESTORE_ERROR` ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp56 ).
 
-        temp54 = boolc( lx->get_text( ) CS `MR_HANDLE_TAB` ).
-        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp54 ).
+        temp57 = boolc( lx->get_text( ) CS `MR_HANDLE_TAB` ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp57 ).
     ENDTRY.
 
   ENDMETHOD.
@@ -6313,10 +7000,10 @@ lr_attri = mo_model->main_attri_search( temp396 ).
     " nothing reads it, so it keeps the lenient treatment - the payload
     " stays on the row (only a SUCCESSFUL restore clears it), the reference
     " the save cleared stays unbound, everything else is restored
-    DATA temp397 LIKE REF TO mo_app->mv_string.
+    DATA temp438 LIKE REF TO mo_app->mv_string.
     DATA lr_broken TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
-    GET REFERENCE OF mo_app->mv_string INTO temp397.
-bind( temp397 ).
+    GET REFERENCE OF mo_app->mv_string INTO temp438.
+bind( temp438 ).
     mo_model->main_attri_db_save_srtti( ).
 
     lr_broken = row_ref( `MR_ELEM` ).
@@ -6334,9 +7021,9 @@ bind( temp397 ).
     DATA lv_before TYPE string.
     DATA lv_app_xml TYPE string.
     DATA lv_attri_xml TYPE string.
-    DATA temp398 TYPE z2ui5_if_ui5_types=>ty_s_attri.
-    DATA temp399 TYPE z2ui5_if_ui5_types=>ty_s_attri.
-    DATA temp400 TYPE z2ui5_if_ui5_types=>ty_s_attri.
+    DATA temp439 TYPE z2ui5_if_ui5_types=>ty_s_attri.
+    DATA temp440 TYPE z2ui5_if_ui5_types=>ty_s_attri.
+    DATA temp441 TYPE z2ui5_if_ui5_types=>ty_s_attri.
 
     " the class lost an attribute since the draft was written: its rows are
     " skipped by every restore step, the rest comes back, and a bind on
@@ -6358,29 +7045,29 @@ bind( temp397 ).
     " the rows of the attribute that is gone: a plain one, and a dref with
     " a payload nobody can put anywhere
 
-    CLEAR temp398.
-    temp398-name = `MV_GONE`.
-    temp398-check_dissolved = abap_true.
-    temp398-type_kind = row( `MV_STRING` )-type_kind.
-    temp398-kind = row( `MV_STRING` )-kind.
-    temp398-bind = abap_true.
-    temp398-name_client = `/MV_GONE`.
-    INSERT temp398 INTO TABLE mr_attri->*.
+    CLEAR temp439.
+    temp439-name = `MV_GONE`.
+    temp439-check_dissolved = abap_true.
+    temp439-type_kind = row( `MV_STRING` )-type_kind.
+    temp439-kind = row( `MV_STRING` )-kind.
+    temp439-bind = abap_true.
+    temp439-name_client = `/MV_GONE`.
+    INSERT temp439 INTO TABLE mr_attri->*.
 
-    CLEAR temp399.
-    temp399-name = `MR_GONE`.
-    temp399-check_dissolved = abap_true.
-    temp399-type_kind = z2ui5_cl_ui5_util_context=>cv_typedescr_typekind_dref.
-    temp399-srtti_data = `payload of a reference nobody has`.
-    INSERT temp399 INTO TABLE mr_attri->*.
+    CLEAR temp440.
+    temp440-name = `MR_GONE`.
+    temp440-check_dissolved = abap_true.
+    temp440-type_kind = z2ui5_cl_ui5_util_context=>cv_typedescr_typekind_dref.
+    temp440-srtti_data = `payload of a reference nobody has`.
+    INSERT temp440 INTO TABLE mr_attri->*.
 
-    CLEAR temp400.
-    temp400-name = `MR_GONE->*`.
-    temp400-name_parent = `MR_GONE`.
-    temp400-check_dissolved = abap_true.
-    temp400-type_kind = z2ui5_cl_ui5_util_context=>cv_typedescr_typekind_table.
-    temp400-name_ref = `MR_SHARED_B->*`.
-    INSERT temp400 INTO TABLE mr_attri->*.
+    CLEAR temp441.
+    temp441-name = `MR_GONE->*`.
+    temp441-name_parent = `MR_GONE`.
+    temp441-check_dissolved = abap_true.
+    temp441-type_kind = z2ui5_cl_ui5_util_context=>cv_typedescr_typekind_table.
+    temp441-name_ref = `MR_SHARED_B->*`.
+    INSERT temp441 INTO TABLE mr_attri->*.
 
     model_renew( ).
     mo_model->main_attri_db_load( ).
@@ -6396,7 +7083,7 @@ bind( temp397 ).
   METHOD attribute_new_found.
     DATA lv_app_xml TYPE string.
     DATA lv_attri_xml TYPE string.
-    DATA temp401 LIKE REF TO mo_app->mv_xstr.
+    DATA temp442 LIKE REF TO mo_app->mv_xstr.
 DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
 
     " the class gained an attribute since the draft was written: it has no
@@ -6419,9 +7106,9 @@ DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     mo_model->main_attri_db_load( ).
 
 
-    GET REFERENCE OF mo_app->mv_xstr INTO temp401.
+    GET REFERENCE OF mo_app->mv_xstr INTO temp442.
 
-lr_attri = mo_model->main_attri_search( temp401 ).
+lr_attri = mo_model->main_attri_search( temp442 ).
     cl_abap_unit_assert=>assert_equals( exp = `MV_XSTR`
                                         act = lr_attri->name ).
     inv_search_finds_bound( ).
@@ -6435,16 +7122,16 @@ lr_attri = mo_model->main_attri_search( temp401 ).
     DATA lo_a TYPE REF TO ltcl_shp_sub_a.
     DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_t_attri.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
-    DATA temp402 LIKE REF TO lo_host->mv_selectedkey.
+    DATA temp443 LIKE REF TO lo_host->mv_selectedkey.
 DATA ls_bind TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_app_xml TYPE string.
     DATA lv_attri_xml TYPE string.
     DATA lo_b TYPE REF TO ltcl_shp_sub_b.
-    FIELD-SYMBOLS <temp403> LIKE LINE OF lr_attri->*.
-    DATA temp404 LIKE sy-tabix.
-    DATA temp405 LIKE REF TO lo_host->mv_selectedkey.
-    DATA temp55 TYPE xsdboolean.
-    DATA temp20 LIKE sy-subrc.
+    FIELD-SYMBOLS <temp444> LIKE LINE OF lr_attri->*.
+    DATA temp445 LIKE sy-tabix.
+    DATA temp446 LIKE REF TO lo_host->mv_selectedkey.
+    DATA temp58 TYPE xsdboolean.
+    DATA temp22 LIKE sy-subrc.
     CREATE OBJECT lo_host TYPE ltcl_app_host.
 
     CREATE OBJECT lo_a TYPE ltcl_shp_sub_a.
@@ -6458,9 +7145,9 @@ DATA ls_bind TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
 
     CREATE OBJECT lo_model TYPE z2ui5_cl_ui5_srv_model EXPORTING attri = lr_attri app = lo_host.
 
-    GET REFERENCE OF lo_host->mv_selectedkey INTO temp402.
+    GET REFERENCE OF lo_host->mv_selectedkey INTO temp443.
 
-ls_bind = lo_model->main_attri_search( temp402 ).
+ls_bind = lo_model->main_attri_search( temp443 ).
     ls_bind->bind = abap_true.
     ls_bind->name_client = `/MV_SELECTEDKEY`.
     ls_bind = lo_model->main_attri_search( lo_a->mt_table ).
@@ -6492,19 +7179,19 @@ ls_bind = lo_model->main_attri_search( temp402 ).
     lo_model->main_attri_db_load( ).
 
 
-    temp404 = sy-tabix.
-    READ TABLE lr_attri->* WITH KEY name = `MO_APP->MO_LAYOUT->MV_INNER` ASSIGNING <temp403>.
-    sy-tabix = temp404.
+    temp445 = sy-tabix.
+    READ TABLE lr_attri->* WITH KEY name = `MO_APP->MO_LAYOUT->MV_INNER` ASSIGNING <temp444>.
+    sy-tabix = temp445.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_not_bound( <temp403>-o_typedescr ).
+    cl_abap_unit_assert=>assert_not_bound( <temp444>-o_typedescr ).
 
     " the host's own bind first - it walks the A rows of its own kind and
     " used to dump on the first one without a descriptor
 
-    GET REFERENCE OF lo_host->mv_selectedkey INTO temp405.
-ls_bind = lo_model->main_attri_search( temp405 ).
+    GET REFERENCE OF lo_host->mv_selectedkey INTO temp446.
+ls_bind = lo_model->main_attri_search( temp446 ).
     cl_abap_unit_assert=>assert_equals( exp = `MV_SELECTEDKEY`
                                         act = ls_bind->name ).
     " then B's table: not in mt_attri, so the search refreshes and finds it
@@ -6515,9 +7202,9 @@ ls_bind = lo_model->main_attri_search( temp405 ).
 
 
     READ TABLE lr_attri->* WITH KEY name = `MO_APP->MT_TABLE->*` TRANSPORTING NO FIELDS.
-    temp20 = sy-subrc.
-    temp55 = boolc( temp20 = 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp55 ).
+    temp22 = sy-subrc.
+    temp58 = boolc( temp22 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp58 ).
 
   ENDMETHOD.
 
@@ -6534,9 +7221,9 @@ ls_bind = lo_model->main_attri_search( temp405 ).
     DATA lv_attri_xml TYPE string.
     DATA lo_b TYPE REF TO ltcl_shp_sub_b.
     DATA lv_before TYPE string.
-    DATA temp56 TYPE xsdboolean.
+    DATA temp59 TYPE xsdboolean.
     DATA lo_b_restored TYPE REF TO ltcl_shp_sub_b.
-    DATA temp57 TYPE xsdboolean.
+    DATA temp60 TYPE xsdboolean.
     CREATE OBJECT lo_host TYPE ltcl_app_host.
 
     CREATE OBJECT lo_a TYPE ltcl_shp_sub_a.
@@ -6578,8 +7265,8 @@ ls_bind = lo_model->main_attri_search( temp405 ).
 
     lv_before = lo_model->main_json_stringify( ).
 
-    temp56 = boolc( lv_before CS `"MO_APP_MT_DATA"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp56 ).
+    temp59 = boolc( lv_before CS `"MO_APP_MT_DATA"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp59 ).
 
     lo_model->main_attri_db_save_srtti( ).
     lv_app_xml   = z2ui5_cl_ui5_util_context=>xml_stringify( lo_host ).
@@ -6599,8 +7286,8 @@ ls_bind = lo_model->main_attri_search( temp405 ).
     lo_b_restored ?= lo_host->mo_app.
     cl_abap_unit_assert=>assert_bound( lo_b_restored->mt_data ).
 
-    temp57 = boolc( lo_b_restored->mt_data = lo_b_restored->mo_lay->mr_shared ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp57 ).
+    temp60 = boolc( lo_b_restored->mt_data = lo_b_restored->mo_lay->mr_shared ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp60 ).
     ls_bind = lo_model->main_attri_search( lo_b_restored->mt_data ).
     cl_abap_unit_assert=>assert_equals( exp = `MO_APP->MT_DATA->*`
                                         act = ls_bind->name ).
@@ -6608,38 +7295,38 @@ ls_bind = lo_model->main_attri_search( temp405 ).
   ENDMETHOD.
 
   METHOD bind_options_survive.
-    DATA temp406 LIKE REF TO mo_app->ms_flat.
+    DATA temp447 LIKE REF TO mo_app->ms_flat.
 DATA lr_flat TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
-    DATA temp407 LIKE REF TO mo_app->mv_string.
+    DATA temp448 LIKE REF TO mo_app->mv_string.
 DATA lr_json TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_before TYPE string.
-    DATA temp58 TYPE xsdboolean.
-    DATA temp59 TYPE xsdboolean.
+    DATA temp61 TYPE xsdboolean.
+    DATA temp62 TYPE xsdboolean.
 
     " mapper, filter and the json flag travel in mt_attri - a filter class
     " that is not serializable would be the app's fault (srv_bind refuses
     " it at bind time), a mapper always serializes
     CLEAR mo_app->ms_flat-col1.
 
-    GET REFERENCE OF mo_app->ms_flat INTO temp406.
+    GET REFERENCE OF mo_app->ms_flat INTO temp447.
 
-lr_flat = bind( temp406 ).
+lr_flat = bind( temp447 ).
     CREATE OBJECT lr_flat->custom_filter TYPE ltcl_shp_filter.
     lr_flat->custom_mapper = z2ui5_cl_ajson_mapping=>create_lower_case( ).
     mo_app->mv_string = `{"sap.app":{"type":"card"}}`.
 
-    GET REFERENCE OF mo_app->mv_string INTO temp407.
+    GET REFERENCE OF mo_app->mv_string INTO temp448.
 
-lr_json = bind( temp407 ).
+lr_json = bind( temp448 ).
     lr_json->check_json = abap_true.
 
     lv_before = mo_model->main_json_stringify( ).
 
-    temp58 = boolc( lv_before CS `"col2"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp58 ).
+    temp61 = boolc( lv_before CS `"col2"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp61 ).
 
-    temp59 = boolc( lv_before CS `"col1"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp59 ).
+    temp62 = boolc( lv_before CS `"col1"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp62 ).
 
     roundtrip( ).
 
@@ -6657,7 +7344,7 @@ lr_json = bind( temp407 ).
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <row> TYPE any.
     DATA ls_sel TYPE ltcl_app_shapes=>ty_s_row_sel.
-    DATA temp408 LIKE REF TO mo_app->mv_markup.
+    DATA temp449 LIKE REF TO mo_app->mv_markup.
     DATA lv_before TYPE string.
     DATA lv_markup LIKE mo_app->mv_markup.
 
@@ -6668,8 +7355,8 @@ lr_json = bind( temp407 ).
     INSERT INITIAL LINE INTO TABLE <tab> ASSIGNING <row>.
     MOVE-CORRESPONDING ls_sel TO <row>.
 
-    GET REFERENCE OF mo_app->mv_markup INTO temp408.
-bind( temp408 ).
+    GET REFERENCE OF mo_app->mv_markup INTO temp449.
+bind( temp449 ).
     bind( mo_app->mr_handle_tab ).
 
     lv_before = mo_model->main_json_stringify( ).
@@ -6687,19 +7374,19 @@ bind( temp408 ).
   METHOD cell_bind_after_restore.
     DATA lo_cont TYPE REF TO z2ui5_cl_ui5_app_cont.
     DATA lo_bind TYPE REF TO z2ui5_cl_ui5_srv_bind.
-    FIELD-SYMBOLS <temp409> TYPE ltcl_shp_inner=>ty_s_row.
-DATA lr_row LIKE REF TO <temp409>.
-    DATA temp410 LIKE REF TO mo_app->mo_inner->mt_own.
-DATA temp104 LIKE REF TO lr_row->col1.
+    FIELD-SYMBOLS <temp450> TYPE ltcl_shp_inner=>ty_s_row.
+DATA lr_row LIKE REF TO <temp450>.
+    DATA temp451 LIKE REF TO mo_app->mo_inner->mt_own.
+DATA temp114 LIKE REF TO lr_row->col1.
 DATA temp33 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
 DATA lv_path TYPE string.
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <row> TYPE any.
-    DATA temp60 TYPE xsdboolean.
+    DATA temp63 TYPE xsdboolean.
     FIELD-SYMBOLS <cell> TYPE any.
-    DATA temp411 TYPE REF TO data.
-DATA temp105 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
-    DATA temp61 TYPE xsdboolean.
+    DATA temp452 TYPE REF TO data.
+DATA temp115 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+    DATA temp64 TYPE xsdboolean.
 
     bind_all( ).
     roundtrip( ).
@@ -6715,22 +7402,22 @@ DATA temp105 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
 
     " row 1 of the helper's own table, the layout row of sample 332
 
-    READ TABLE mo_app->mo_inner->mt_own INDEX 1 ASSIGNING <temp409>.
+    READ TABLE mo_app->mo_inner->mt_own INDEX 1 ASSIGNING <temp450>.
 IF sy-subrc <> 0.
   ASSERT 1 = 0.
 ENDIF.
 
-GET REFERENCE OF <temp409> INTO lr_row.
+GET REFERENCE OF <temp450> INTO lr_row.
 
-    GET REFERENCE OF mo_app->mo_inner->mt_own INTO temp410.
+    GET REFERENCE OF mo_app->mo_inner->mt_own INTO temp451.
 
-GET REFERENCE OF lr_row->col1 INTO temp104.
+GET REFERENCE OF lr_row->col1 INTO temp114.
 
 CLEAR temp33.
-temp33-tab = temp410.
+temp33-tab = temp451.
 temp33-tab_index = 1.
 
-lv_path = lo_bind->main( val    = temp104
+lv_path = lo_bind->main( val    = temp114
                                    config = temp33 ).
     cl_abap_unit_assert=>assert_equals( exp = `{/MO_INNER_MT_OWN/0/COL1}`
                                         act = lv_path ).
@@ -6741,22 +7428,22 @@ lv_path = lo_bind->main( val    = temp104
     ASSIGN mo_app->mr_handle_tab->* TO <tab>.
     READ TABLE <tab> INDEX 2 ASSIGNING <row>.
 
-    temp60 = boolc( <row> IS ASSIGNED ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp60 ).
+    temp63 = boolc( <row> IS ASSIGNED ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp63 ).
 
     ASSIGN COMPONENT `COL1` OF STRUCTURE <row> TO <cell>.
     cl_abap_unit_assert=>assert_subrc( ).
 
-GET REFERENCE OF <cell> INTO temp411.
+GET REFERENCE OF <cell> INTO temp452.
 
-CLEAR temp105.
-temp105-tab = mo_app->mr_handle_tab.
-temp105-tab_index = 2.
-lv_path = lo_bind->main( val    = temp411
-                             config = temp105 ).
+CLEAR temp115.
+temp115-tab = mo_app->mr_handle_tab.
+temp115-tab_index = 2.
+lv_path = lo_bind->main( val    = temp452
+                             config = temp115 ).
 
-    temp61 = boolc( lv_path CP `{/*/1/COL1}` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp61
+    temp64 = boolc( lv_path CP `{/*/1/COL1}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp64
                                       msg = |cell path after restore: { lv_path }| ).
 
   ENDMETHOD.
@@ -6764,21 +7451,21 @@ lv_path = lo_bind->main( val    = temp411
   METHOD interface_and_obj_table.
 
     DATA lo_other TYPE REF TO ltcl_app_shapes.
-    DATA temp412 LIKE REF TO lo_other->mv_string.
-    DATA temp413 LIKE REF TO mo_app->mv_string.
+    DATA temp453 LIKE REF TO lo_other->mv_string.
+    DATA temp454 LIKE REF TO mo_app->mv_string.
     DATA lv_before TYPE string.
     DATA lo_restored TYPE REF TO ltcl_app_shapes.
-    FIELD-SYMBOLS <temp414> LIKE LINE OF mo_app->mt_apps.
-    DATA temp415 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp455> LIKE LINE OF mo_app->mt_apps.
+    DATA temp456 LIKE sy-tabix.
     CREATE OBJECT lo_other TYPE ltcl_app_shapes.
     lo_other->mv_string = `other`.
     mo_app->mi_app = lo_other.
 
-    GET REFERENCE OF lo_other->mv_string INTO temp412.
-bind( temp412 ).
+    GET REFERENCE OF lo_other->mv_string INTO temp453.
+bind( temp453 ).
 
-    GET REFERENCE OF mo_app->mv_string INTO temp413.
-bind( temp413 ).
+    GET REFERENCE OF mo_app->mv_string INTO temp454.
+bind( temp454 ).
 
     lv_before = mo_model->main_json_stringify( ).
 
@@ -6794,14 +7481,14 @@ bind( temp413 ).
                                         act = lines( mo_app->mt_apps ) ).
 
 
-    temp415 = sy-tabix.
-    READ TABLE mo_app->mt_apps INDEX 1 ASSIGNING <temp414>.
-    sy-tabix = temp415.
+    temp456 = sy-tabix.
+    READ TABLE mo_app->mt_apps INDEX 1 ASSIGNING <temp455>.
+    sy-tabix = temp456.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `in-table`
-                                        act = <temp414>->mv_inner ).
+                                        act = <temp455>->mv_inner ).
     inv_json_unchanged( lv_before ).
     inv_search_finds_bound( ).
 
@@ -6862,22 +7549,62 @@ bind( temp413 ).
 
   ENDMETHOD.
 
+  METHOD late_table_survives_draft.
+
+    FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
+    DATA ls_row TYPE ltcl_app_shapes=>ty_s_row.
+    DATA lt_exp TYPE ltcl_app_shapes=>ty_t_row.
+    DATA temp457 TYPE ltcl_app_shapes=>ty_t_row.
+    DATA temp458 LIKE LINE OF temp457.
+
+    " roundtrip 1: the reference is INITIAL when the rows are dissolved
+    CLEAR mo_app->mr_alias_tab.
+    bind_all( ).
+    mo_model->main_attri_db_save_srtti( ).
+    mo_model->main_attri_reattach( ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = row_exists( `MR_ALIAS_TAB->*` ) ).
+
+    " main( ) of roundtrip 2: a table of its own, which nothing binds - so
+    " nothing dissolves the reference again
+    CREATE DATA mo_app->mr_alias_tab LIKE mo_app->mt_std.
+    ASSIGN mo_app->mr_alias_tab->* TO <tab>.
+    ls_row-col1 = `late`.
+    ls_row-col2 = 7.
+    INSERT ls_row INTO TABLE <tab>.
+
+    " the draft read into a new instance carries the table
+    roundtrip( ).
+    cl_abap_unit_assert=>assert_bound( act = mo_app->mr_alias_tab
+                                       msg = `the table was lost from the draft` ).
+    ASSIGN mo_app->mr_alias_tab->* TO <tab>.
+
+    CLEAR temp457.
+
+    temp458-col1 = `late`.
+    temp458-col2 = 7.
+    INSERT temp458 INTO TABLE temp457.
+    lt_exp = temp457.
+    cl_abap_unit_assert=>assert_equals( exp = lt_exp
+                                        act = <tab> ).
+
+  ENDMETHOD.
+
   METHOD alias_repointed_survives.
 
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <row> TYPE any.
     DATA ls_sel TYPE ltcl_app_shapes=>ty_s_row_sel.
     DATA lr_own TYPE REF TO data.
-    DATA temp416 TYPE REF TO cl_abap_tabledescr.
-    DATA lo_tab LIKE temp416.
+    DATA temp459 TYPE REF TO cl_abap_tabledescr.
+    DATA lo_tab LIKE temp459.
     DATA lr_alias TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lr_own_row TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_changed TYPE string.
-    DATA temp62 TYPE xsdboolean.
-    DATA lr_own_tab LIKE REF TO mo_app->mo_inner->mt_own.
-    DATA temp63 TYPE xsdboolean.
-    DATA temp64 TYPE xsdboolean.
     DATA temp65 TYPE xsdboolean.
+    DATA lr_own_tab LIKE REF TO mo_app->mo_inner->mt_own.
+    DATA temp66 TYPE xsdboolean.
+    DATA temp67 TYPE xsdboolean.
+    DATA temp68 TYPE xsdboolean.
 
     " roundtrip 1: the alias into mt_std, the shared trio, as the fixture
     " has them
@@ -6891,9 +7618,9 @@ bind( temp413 ).
     " the first of the shared references at a table of its own
     GET REFERENCE OF mo_app->mo_inner->mt_own INTO mo_app->mr_alias_tab.
 
-    temp416 ?= z2ui5_cl_ui5_util_context=>rtti_get_typedescr_by_data_ref( mo_app->mr_shared_b ).
+    temp459 ?= z2ui5_cl_ui5_util_context=>rtti_get_typedescr_by_data_ref( mo_app->mr_shared_b ).
 
-    lo_tab = temp416.
+    lo_tab = temp459.
     CREATE DATA lr_own TYPE HANDLE lo_tab.
     ASSIGN lr_own->* TO <tab>.
     ls_sel-col1 = `own`.
@@ -6914,8 +7641,8 @@ bind( temp413 ).
 
     lv_changed = mo_model->main_json_stringify( ).
 
-    temp62 = boolc( lv_changed CS `"own"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp62 ).
+    temp65 = boolc( lv_changed CS `"own"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp65 ).
 
     " the save: the rows say what the references say now - the typed table
     " stays the owner, the reference the alias; the parted one carries a
@@ -6934,19 +7661,19 @@ bind( temp413 ).
 
     GET REFERENCE OF mo_app->mo_inner->mt_own INTO lr_own_tab.
 
-    temp63 = boolc( mo_app->mr_alias_tab = lr_own_tab ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp63
+    temp66 = boolc( mo_app->mr_alias_tab = lr_own_tab ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp66
                                       msg = `the restore pointed the alias at its old owner` ).
     cl_abap_unit_assert=>assert_bound( mo_app->mr_shared_a ).
     ASSIGN mo_app->mr_shared_a->* TO <tab>.
     cl_abap_unit_assert=>assert_equals( exp = 1
                                         act = lines( <tab> ) ).
 
-    temp64 = boolc( mo_app->mr_shared_a = mo_app->mr_shared_b ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp64 ).
+    temp67 = boolc( mo_app->mr_shared_a = mo_app->mr_shared_b ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp67 ).
 
-    temp65 = boolc( mo_app->mr_shared_b = mo_app->mo_inner->mr_shared ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp65 ).
+    temp68 = boolc( mo_app->mr_shared_b = mo_app->mo_inner->mr_shared ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp68 ).
     inv_search_finds_bound( ).
     inv_json_unchanged( lv_changed ).
     inv_srtti_cleared( ).
@@ -6999,17 +7726,17 @@ bind( temp413 ).
     FIELD-SYMBOLS <elem> TYPE any.
     DATA ls_sel TYPE ltcl_app_shapes=>ty_s_row_sel.
     DATA lr_new TYPE REF TO data.
-    DATA temp417 TYPE REF TO cl_abap_tabledescr.
-    DATA lo_tab LIKE temp417.
+    DATA temp460 TYPE REF TO cl_abap_tabledescr.
+    DATA lo_tab LIKE temp460.
     DATA lr_shared TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lr_elem TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_changed TYPE string.
-    DATA temp66 TYPE xsdboolean.
-    DATA temp67 TYPE xsdboolean.
-    DATA temp68 TYPE xsdboolean.
-    DATA lr_elem_2 LIKE mo_app->mr_elem.
     DATA temp69 TYPE xsdboolean.
     DATA temp70 TYPE xsdboolean.
+    DATA temp71 TYPE xsdboolean.
+    DATA lr_elem_2 LIKE mo_app->mr_elem.
+    DATA temp72 TYPE xsdboolean.
+    DATA temp73 TYPE xsdboolean.
 
     " roundtrip 1 on the live instance
     bind_all( ).
@@ -7020,9 +7747,9 @@ bind( temp413 ).
     " pointed at a NEW table of the same line type, the elementary
     " reference is created again - no draft was read, the rows stay
 
-    temp417 ?= z2ui5_cl_ui5_util_context=>rtti_get_typedescr_by_data_ref( mo_app->mr_shared_a ).
+    temp460 ?= z2ui5_cl_ui5_util_context=>rtti_get_typedescr_by_data_ref( mo_app->mr_shared_a ).
 
-    lo_tab = temp417.
+    lo_tab = temp460.
     CREATE DATA lr_new TYPE HANDLE lo_tab.
     ASSIGN lr_new->* TO <tab>.
     ls_sel-col1 = `re-created`.
@@ -7048,14 +7775,14 @@ bind( temp413 ).
 
     lv_changed = mo_model->main_json_stringify( ).
 
-    temp66 = boolc( lv_changed CS `"re-created"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp66 ).
+    temp69 = boolc( lv_changed CS `"re-created"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp69 ).
 
-    temp67 = boolc( lv_changed CS `"elem-2"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp67 ).
+    temp70 = boolc( lv_changed CS `"elem-2"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp70 ).
 
-    temp68 = boolc( lv_changed CS `"shared"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp68 ).
+    temp71 = boolc( lv_changed CS `"shared"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp71 ).
 
     " the draft of roundtrip 2, restored in place: the new data, the three
     " references one object again - and, with the save handing the same
@@ -7066,11 +7793,11 @@ bind( temp413 ).
     mo_model->main_attri_reattach( ).
     inv_all( lv_changed ).
 
-    temp69 = boolc( mo_app->mr_shared_a = lr_new ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp69 ).
+    temp72 = boolc( mo_app->mr_shared_a = lr_new ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp72 ).
 
-    temp70 = boolc( mo_app->mr_elem = lr_elem_2 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp70 ).
+    temp73 = boolc( mo_app->mr_elem = lr_elem_2 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp73 ).
     ASSIGN mo_app->mr_shared_a->* TO <tab>.
     cl_abap_unit_assert=>assert_equals( exp = 1
                                         act = lines( <tab> ) ).
@@ -7092,7 +7819,7 @@ bind( temp413 ).
     FIELD-SYMBOLS <elem> TYPE any.
     DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_changed TYPE string.
-    DATA temp71 TYPE xsdboolean.
+    DATA temp74 TYPE xsdboolean.
 
     bind_all( ).
     mo_model->main_attri_db_save_srtti( ).
@@ -7115,8 +7842,8 @@ bind( temp413 ).
 
     lv_changed = mo_model->main_json_stringify( ).
 
-    temp71 = boolc( lv_changed CS `"MR_ELEM_D":7` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp71 ).
+    temp74 = boolc( lv_changed CS `"MR_ELEM_D":7` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp74 ).
 
     " the draft of that roundtrip brings the integer back, as an integer
     mo_model->main_attri_db_save_srtti( ).
@@ -7141,9 +7868,9 @@ bind( temp413 ).
     DATA lv_payloads_1 TYPE i.
     DATA lt_rows TYPE z2ui5_if_ui5_types=>ty_t_attri.
     DATA lv_payloads_2 TYPE i.
-    DATA temp72 TYPE xsdboolean.
-    DATA temp418 LIKE LINE OF lt_rows.
-    DATA lr_old LIKE REF TO temp418.
+    DATA temp75 TYPE xsdboolean.
+    DATA temp461 LIKE LINE OF lt_rows.
+    DATA lr_old LIKE REF TO temp461.
       DATA lr_now TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
 
     bind_all( ).
@@ -7172,8 +7899,8 @@ bind( temp413 ).
     " the same payloads, the same rows: names, owners, bindings, client
     " names, kinds - and the same model and data behind them
 
-    temp72 = boolc( lv_payloads_1 > 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp72 ).
+    temp75 = boolc( lv_payloads_1 > 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp75 ).
     cl_abap_unit_assert=>assert_equals( exp = lv_payloads_1
                                         act = lv_payloads_2 ).
     cl_abap_unit_assert=>assert_equals( exp = lines( lt_rows )
@@ -7201,14 +7928,14 @@ bind( temp413 ).
 
   METHOD late_alias_survives_save.
     DATA lo_late TYPE REF TO ltcl_shp_inner.
-    DATA temp419 LIKE REF TO lo_late->mv_inner.
+    DATA temp462 LIKE REF TO lo_late->mv_inner.
 DATA lr_value TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lr_table TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_changed TYPE string.
-    DATA temp73 TYPE xsdboolean.
+    DATA temp76 TYPE xsdboolean.
     DATA lr_std LIKE REF TO mo_app->mt_std.
-    DATA temp74 TYPE xsdboolean.
-    DATA temp75 TYPE xsdboolean.
+    DATA temp77 TYPE xsdboolean.
+    DATA temp78 TYPE xsdboolean.
 
     bind_all( ).
     mo_model->main_attri_db_save_srtti( ).
@@ -7225,9 +7952,9 @@ DATA lr_value TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     " the render binds the helper's value and the table through its
     " reference: the value as its own row, the table as the OWNER's
 
-    GET REFERENCE OF lo_late->mv_inner INTO temp419.
+    GET REFERENCE OF lo_late->mv_inner INTO temp462.
 
-lr_value = bind( temp419 ).
+lr_value = bind( temp462 ).
     cl_abap_unit_assert=>assert_equals( exp = `MO_INNER->MO_DEEPER->MO_DEEPER->MV_INNER`
                                         act = lr_value->name ).
 
@@ -7239,8 +7966,8 @@ lr_value = bind( temp419 ).
 
     lv_changed = mo_model->main_json_stringify( ).
 
-    temp73 = boolc( lv_changed CS `"late"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp73 ).
+    temp76 = boolc( lv_changed CS `"late"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp76 ).
 
     " the save keeps the alias an alias: restored in place and from a new
     " instance it points INTO mt_std again, not at a copy
@@ -7250,15 +7977,15 @@ lr_value = bind( temp419 ).
 
     GET REFERENCE OF mo_app->mt_std INTO lr_std.
 
-    temp74 = boolc( mo_app->mo_inner->mo_deeper->mo_deeper->mr_shared = lr_std ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp74 ).
+    temp77 = boolc( mo_app->mo_inner->mo_deeper->mo_deeper->mr_shared = lr_std ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp77 ).
 
     roundtrip( ).
     inv_all( lv_changed ).
     GET REFERENCE OF mo_app->mt_std INTO lr_std.
 
-    temp75 = boolc( mo_app->mo_inner->mo_deeper->mo_deeper->mr_shared = lr_std ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp75 ).
+    temp78 = boolc( mo_app->mo_inner->mo_deeper->mo_deeper->mr_shared = lr_std ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp78 ).
     cl_abap_unit_assert=>assert_equals( exp = `late`
                                         act = mo_app->mo_inner->mo_deeper->mo_deeper->mv_inner ).
 
@@ -7307,16 +8034,16 @@ CLASS ltcl_app_struct_alias IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD fill.
-    DATA temp420 TYPE ltcl_app_struct_alias=>ty_t_row.
-    DATA temp421 LIKE LINE OF temp420.
+    DATA temp463 TYPE ltcl_app_struct_alias=>ty_t_row.
+    DATA temp464 LIKE LINE OF temp463.
     ms_nested-id      = `n1`.
 
-    CLEAR temp420.
+    CLEAR temp463.
 
-    temp421-col1 = `a`.
-    temp421-col2 = 1.
-    INSERT temp421 INTO TABLE temp420.
-    ms_nested-t_items = temp420.
+    temp464-col1 = `a`.
+    temp464-col2 = 1.
+    INSERT temp464 INTO TABLE temp463.
+    ms_nested-t_items = temp463.
     GET REFERENCE OF ms_nested INTO mr_alias.
   ENDMETHOD.
 
@@ -7340,13 +8067,13 @@ CLASS ltcl_06_struct_alias IMPLEMENTATION.
     DATA lo_app   TYPE REF TO ltcl_app_struct_alias.
     DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_t_attri.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
-    DATA temp422 TYPE REF TO data.
+    DATA temp465 TYPE REF TO data.
 DATA lr_row TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_app_xml TYPE string.
     DATA lv_attri_xml TYPE string.
     DATA lo_descr TYPE REF TO cl_abap_typedescr.
     DATA lr_struc LIKE REF TO lo_app->ms_nested.
-    DATA temp76 TYPE xsdboolean.
+    DATA temp79 TYPE xsdboolean.
 
     CREATE OBJECT lo_app.
     lo_app->fill( ).
@@ -7359,9 +8086,9 @@ DATA lr_row TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     ASSIGN COMPONENT `T_ITEMS` OF STRUCTURE <struc> TO <tab>.
     cl_abap_unit_assert=>assert_subrc( ).
 
-GET REFERENCE OF <tab> INTO temp422.
+GET REFERENCE OF <tab> INTO temp465.
 
-lr_row = lo_model->main_attri_search( temp422 ).
+lr_row = lo_model->main_attri_search( temp465 ).
     lr_row->bind        = abap_true.
     lr_row->name_client = `/T_ITEMS`.
 
@@ -7391,8 +8118,8 @@ lr_row = lo_model->main_attri_search( temp422 ).
 
     GET REFERENCE OF lo_app->ms_nested INTO lr_struc.
 
-    temp76 = boolc( lo_app->mr_alias = lr_struc ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp76
+    temp79 = boolc( lo_app->mr_alias = lr_struc ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp79
                                       msg = `alias no longer points at ms_nested` ).
     cl_abap_unit_assert=>assert_equals( exp = 1
                                         act = lines( lo_app->ms_nested-t_items ) ).
@@ -7465,9 +8192,9 @@ CLASS ltcl_07_alias_dref IMPLEMENTATION.
     DATA lv_app_xml TYPE string.
     DATA lv_attri_xml TYPE string.
     DATA lr_self LIKE REF TO lo_app->ms_nested-r_val.
-    DATA temp77 TYPE xsdboolean.
+    DATA temp80 TYPE xsdboolean.
     DATA lr_struc LIKE REF TO lo_app->ms_nested.
-    DATA temp78 TYPE xsdboolean.
+    DATA temp81 TYPE xsdboolean.
 
     CREATE OBJECT lo_app.
     lo_app->fill( ).
@@ -7496,8 +8223,8 @@ CLASS ltcl_07_alias_dref IMPLEMENTATION.
     cl_abap_unit_assert=>assert_bound( act = lo_app->ms_nested-r_val
                                        msg = `r_val lost across the draft` ).
 
-    temp77 = boolc( lo_app->ms_nested-r_val = lr_self ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp77
+    temp80 = boolc( lo_app->ms_nested-r_val = lr_self ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp80
                                        msg = `r_val points at itself` ).
     ASSIGN lo_app->ms_nested-r_val->* TO <lv_val>.
     cl_abap_unit_assert=>assert_subrc( ).
@@ -7506,8 +8233,8 @@ CLASS ltcl_07_alias_dref IMPLEMENTATION.
 
     GET REFERENCE OF lo_app->ms_nested INTO lr_struc.
 
-    temp78 = boolc( lo_app->mr_alias = lr_struc ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp78
+    temp81 = boolc( lo_app->mr_alias = lr_struc ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp81
                                       msg = `alias no longer points at ms_nested` ).
 
   ENDMETHOD.
@@ -7548,13 +8275,13 @@ CLASS ltcl_app_two_refs IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD fill.
-    DATA temp423 TYPE ltcl_app_two_refs=>ty_t_row.
-    DATA temp424 LIKE LINE OF temp423.
-    CLEAR temp423.
+    DATA temp466 TYPE ltcl_app_two_refs=>ty_t_row.
+    DATA temp467 LIKE LINE OF temp466.
+    CLEAR temp466.
 
-    temp424-col1 = `a`.
-    INSERT temp424 INTO TABLE temp423.
-    ma_tab = temp423.
+    temp467-col1 = `a`.
+    INSERT temp467 INTO TABLE temp466.
+    ma_tab = temp466.
     GET REFERENCE OF ma_tab INTO mr_a.
     GET REFERENCE OF ma_tab INTO mr_b.
   ENDMETHOD.
@@ -7578,15 +8305,15 @@ CLASS ltcl_06_two_refs IMPLEMENTATION.
     DATA lo_app   TYPE REF TO ltcl_app_two_refs.
     DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_t_attri.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
-    DATA temp425 TYPE REF TO data.
+    DATA temp468 TYPE REF TO data.
 DATA lr_row TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
-    DATA temp426 LIKE LINE OF lr_attri->*.
-    DATA lr_alias LIKE REF TO temp426.
+    DATA temp469 LIKE LINE OF lr_attri->*.
+    DATA lr_alias LIKE REF TO temp469.
     DATA lv_app_xml TYPE string.
     DATA lv_attri_xml TYPE string.
     DATA lr_tab LIKE REF TO lo_app->ma_tab.
-    DATA temp79 TYPE xsdboolean.
-    DATA temp80 TYPE xsdboolean.
+    DATA temp82 TYPE xsdboolean.
+    DATA temp83 TYPE xsdboolean.
 
     CREATE OBJECT lo_app.
     lo_app->fill( ).
@@ -7597,9 +8324,9 @@ DATA lr_row TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     " the table bound through the FIRST reference, as _bind( mr_a->* ) does
     ASSIGN lo_app->mr_a->* TO <tab>.
 
-GET REFERENCE OF <tab> INTO temp425.
+GET REFERENCE OF <tab> INTO temp468.
 
-lr_row = lo_model->main_attri_search( temp425 ).
+lr_row = lo_model->main_attri_search( temp468 ).
     lr_row->bind        = abap_true.
     lr_row->name_client = `/MA_TAB`.
 
@@ -7633,14 +8360,14 @@ lr_row = lo_model->main_attri_search( temp425 ).
     cl_abap_unit_assert=>assert_bound( act = lo_app->mr_a
                                        msg = `mr_a lost across the draft` ).
 
-    temp79 = boolc( lo_app->mr_a = lr_tab ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp79
+    temp82 = boolc( lo_app->mr_a = lr_tab ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp82
                                       msg = `mr_a no longer points at ma_tab` ).
     cl_abap_unit_assert=>assert_bound( act = lo_app->mr_b
                                        msg = `mr_b lost across the draft` ).
 
-    temp80 = boolc( lo_app->mr_b = lr_tab ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp80
+    temp83 = boolc( lo_app->mr_b = lr_tab ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp83
                                       msg = `mr_b no longer points at ma_tab` ).
 
   ENDMETHOD.
@@ -7749,17 +8476,17 @@ CLASS ltcl_app_view_host IMPLEMENTATION.
     " what render_sub_app( ) does on every tab switch, and it does it AFTER
     " the host has already bound its own attribute
     DATA lo_sub TYPE REF TO ltcl_app_sub_view.
-    DATA temp427 TYPE ltcl_app_sub_view=>ty_t_row.
-    DATA temp428 LIKE LINE OF temp427.
+    DATA temp470 TYPE ltcl_app_sub_view=>ty_t_row.
+    DATA temp471 LIKE LINE OF temp470.
     CREATE OBJECT lo_sub TYPE ltcl_app_sub_view.
 
-    CLEAR temp427.
+    CLEAR temp470.
 
-    temp428-carrid = `LH`.
-    INSERT temp428 INTO TABLE temp427.
-    temp428-carrid = `UA`.
-    INSERT temp428 INTO TABLE temp427.
-    lo_sub->mt_table       = temp427.
+    temp471-carrid = `LH`.
+    INSERT temp471 INTO TABLE temp470.
+    temp471-carrid = `UA`.
+    INSERT temp471 INTO TABLE temp470.
+    lo_sub->mt_table       = temp470.
     lo_sub->mo_parent_page = mo_main_page.
     mo_app                 = lo_sub.
 
@@ -7816,13 +8543,13 @@ CLASS ltcl_07_view_host IMPLEMENTATION.
 
   METHOD row_exists.
 
-    DATA temp429 LIKE sy-subrc.
-    DATA temp81 TYPE xsdboolean.
+    DATA temp472 LIKE sy-subrc.
+    DATA temp84 TYPE xsdboolean.
     READ TABLE mr_attri->* WITH KEY name = iv_name TRANSPORTING NO FIELDS.
-    temp429 = sy-subrc.
+    temp472 = sy-subrc.
 
-    temp81 = boolc( temp429 = 0 ).
-    result = temp81.
+    temp84 = boolc( temp472 = 0 ).
+    result = temp84.
 
   ENDMETHOD.
 
@@ -7836,16 +8563,16 @@ CLASS ltcl_07_view_host IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD subapp_binds_under_host.
-    DATA temp430 TYPE REF TO ltcl_app_sub_view.
-    DATA lo_sub LIKE temp430.
-    DATA temp431 LIKE REF TO lo_sub->mt_table.
+    DATA temp473 TYPE REF TO ltcl_app_sub_view.
+    DATA lo_sub LIKE temp473.
+    DATA temp474 LIKE REF TO lo_sub->mt_table.
 DATA lr_row TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_json TYPE string.
-    DATA temp82 TYPE xsdboolean.
-    DATA temp432 TYPE REF TO z2ui5_if_ajson.
-    DATA lo_front LIKE temp432.
-    FIELD-SYMBOLS <temp433> LIKE LINE OF lo_sub->mt_table.
-    DATA temp434 LIKE sy-tabix.
+    DATA temp85 TYPE xsdboolean.
+    DATA temp475 TYPE REF TO z2ui5_if_ajson.
+    DATA lo_front LIKE temp475.
+    FIELD-SYMBOLS <temp476> LIKE LINE OF lo_sub->mt_table.
+    DATA temp477 LIKE sy-tabix.
 
     mo_host->create_sub_app( ).
     mo_model->main_attri_refresh( ).
@@ -7853,13 +8580,13 @@ DATA lr_row TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     " the row is the HOST's - the sub-app is reached through MO_APP, so that
     " is the name the draft saves and the model writes back into
 
-    temp430 ?= mo_host->mo_app.
+    temp473 ?= mo_host->mo_app.
 
-    lo_sub = temp430.
+    lo_sub = temp473.
 
-    GET REFERENCE OF lo_sub->mt_table INTO temp431.
+    GET REFERENCE OF lo_sub->mt_table INTO temp474.
 
-lr_row = mo_model->main_attri_search( temp431 ).
+lr_row = mo_model->main_attri_search( temp474 ).
     cl_abap_unit_assert=>assert_equals( exp = `MO_APP->MT_TABLE`
                                         act = lr_row->name ).
 
@@ -7868,28 +8595,28 @@ lr_row = mo_model->main_attri_search( temp431 ).
 
     lv_json = mo_model->main_json_stringify( ).
 
-    temp82 = boolc( lv_json CS `"LH"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp82
+    temp85 = boolc( lv_json CS `"LH"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp85
                                       msg = `the sub-app's rows never reached the host's model` ).
 
     " ...and the way back lands in the sub-app instance, not in a copy
 
-    temp432 ?= z2ui5_cl_ajson=>parse( lv_json ).
+    temp475 ?= z2ui5_cl_ajson=>parse( lv_json ).
 
-    lo_front = temp432.
+    lo_front = temp475.
     lo_front->set( iv_path = `/MT_TABLE/1/CARRID`
                    iv_val  = `AA` ).
     mo_model->main_json_to_attri( lo_front ).
 
 
-    temp434 = sy-tabix.
-    READ TABLE lo_sub->mt_table INDEX 1 ASSIGNING <temp433>.
-    sy-tabix = temp434.
+    temp477 = sy-tabix.
+    READ TABLE lo_sub->mt_table INDEX 1 ASSIGNING <temp476>.
+    sy-tabix = temp477.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `AA`
-                                        act = <temp433>-carrid ).
+                                        act = <temp476>-carrid ).
 
   ENDMETHOD.
 
@@ -7897,13 +8624,13 @@ lr_row = mo_model->main_attri_search( temp431 ).
 
     " roundtrip 1: the host renders and binds its own attribute; no sub-app
     " exists yet, so nothing of it can be in the rows
-    DATA temp435 LIKE REF TO mo_host->mv_selectedkey.
+    DATA temp478 LIKE REF TO mo_host->mv_selectedkey.
 DATA lr_key TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
-    FIELD-SYMBOLS <temp436> LIKE LINE OF mr_attri->*.
-    DATA temp437 LIKE sy-tabix.
-    GET REFERENCE OF mo_host->mv_selectedkey INTO temp435.
+    FIELD-SYMBOLS <temp479> LIKE LINE OF mr_attri->*.
+    DATA temp480 LIKE sy-tabix.
+    GET REFERENCE OF mo_host->mv_selectedkey INTO temp478.
 
-lr_key = mo_model->main_attri_search( temp435 ).
+lr_key = mo_model->main_attri_search( temp478 ).
     lr_key->bind        = abap_true.
     lr_key->name_client = `/MV_SELECTEDKEY`.
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = row_exists( `MO_APP->MT_TABLE` ) ).
@@ -7916,14 +8643,14 @@ lr_key = mo_model->main_attri_search( temp435 ).
     " the host's own binding is untouched by the refresh
 
 
-    temp437 = sy-tabix.
-    READ TABLE mr_attri->* WITH KEY name = `MV_SELECTEDKEY` ASSIGNING <temp436>.
-    sy-tabix = temp437.
+    temp480 = sy-tabix.
+    READ TABLE mr_attri->* WITH KEY name = `MV_SELECTEDKEY` ASSIGNING <temp479>.
+    sy-tabix = temp480.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = abap_true
-                                        act = <temp436>-bind ).
+                                        act = <temp479>-bind ).
 
   ENDMETHOD.
 
@@ -7968,25 +8695,25 @@ lr_key = mo_model->main_attri_search( temp435 ).
   ENDMETHOD.
 
   METHOD host_survives_roundtrip.
-    DATA temp438 TYPE REF TO ltcl_app_sub_view.
-    DATA lo_live LIKE temp438.
-    DATA temp439 LIKE REF TO lo_live->mt_table.
+    DATA temp481 TYPE REF TO ltcl_app_sub_view.
+    DATA lo_live LIKE temp481.
+    DATA temp482 LIKE REF TO lo_live->mt_table.
 DATA lr_row TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
     DATA lv_before TYPE string.
     DATA lv_app_xml TYPE string.
     DATA lv_attri_xml TYPE string.
-    DATA temp440 TYPE REF TO ltcl_app_sub_view.
-    DATA lo_back LIKE temp440.
+    DATA temp483 TYPE REF TO ltcl_app_sub_view.
+    DATA lo_back LIKE temp483.
 
     mo_host->create_sub_app( ).
 
-    temp438 ?= mo_host->mo_app.
+    temp481 ?= mo_host->mo_app.
 
-    lo_live = temp438.
+    lo_live = temp481.
 
-    GET REFERENCE OF lo_live->mt_table INTO temp439.
+    GET REFERENCE OF lo_live->mt_table INTO temp482.
 
-lr_row = mo_model->main_attri_search( temp439 ).
+lr_row = mo_model->main_attri_search( temp482 ).
     lr_row->bind        = abap_true.
     lr_row->name_client = `/MT_TABLE`.
 
@@ -8015,9 +8742,9 @@ lr_row = mo_model->main_attri_search( temp439 ).
     cl_abap_unit_assert=>assert_bound( act = mo_host->mo_app
                                        msg = `the sub-app was lost across the draft` ).
 
-    temp440 ?= mo_host->mo_app.
+    temp483 ?= mo_host->mo_app.
 
-    lo_back = temp440.
+    lo_back = temp483.
     cl_abap_unit_assert=>assert_not_bound( act = lo_back->mo_parent_page
                                            msg = `the sub-app's page reference came back` ).
     cl_abap_unit_assert=>assert_equals( exp = 2
@@ -8112,29 +8839,29 @@ CLASS ltcl_app_tm_pop IMPLEMENTATION.
     FIELD-SYMBOLS <tab>    TYPE ty_t_fix_val.
 
     DATA lv_field LIKE LINE OF mt_field.
-      DATA temp441 TYPE abap_componentdescr.
-      DATA temp106 TYPE REF TO cl_abap_datadescr.
-      DATA temp442 TYPE abap_componentdescr.
-      DATA temp107 TYPE REF TO cl_abap_datadescr.
+      DATA temp484 TYPE abap_componentdescr.
+      DATA temp116 TYPE REF TO cl_abap_datadescr.
+      DATA temp485 TYPE abap_componentdescr.
+      DATA temp117 TYPE REF TO cl_abap_datadescr.
     DATA lo_row TYPE REF TO cl_abap_structdescr.
     DATA lo_fix TYPE REF TO cl_abap_structdescr.
-      DATA temp443 TYPE ltcl_app_tm_pop=>ty_t_fix_val.
-      DATA temp444 LIKE LINE OF temp443.
+      DATA temp486 TYPE ltcl_app_tm_pop=>ty_t_fix_val.
+      DATA temp487 LIKE LINE OF temp486.
     LOOP AT mt_field INTO lv_field.
 
-      CLEAR temp441.
-      temp441-name = lv_field.
+      CLEAR temp484.
+      temp484-name = lv_field.
 
-      temp106 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
-      temp441-type = temp106.
-      INSERT temp441 INTO TABLE lt_comp_row.
+      temp116 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
+      temp484-type = temp116.
+      INSERT temp484 INTO TABLE lt_comp_row.
 
-      CLEAR temp442.
-      temp442-name = lv_field.
+      CLEAR temp485.
+      temp485-name = lv_field.
 
-      temp107 ?= cl_abap_typedescr=>describe_by_data( lt_fixval ).
-      temp442-type = temp107.
-      INSERT temp442 INTO TABLE lt_comp_fix.
+      temp117 ?= cl_abap_typedescr=>describe_by_data( lt_fixval ).
+      temp485-type = temp117.
+      INSERT temp485 INTO TABLE lt_comp_fix.
     ENDLOOP.
 
     lo_row = cl_abap_structdescr=>create( lt_comp_row ).
@@ -8152,15 +8879,15 @@ CLASS ltcl_app_tm_pop IMPLEMENTATION.
       ASSIGN COMPONENT lv_field OF STRUCTURE <fixval> TO <tab>.
       cl_abap_unit_assert=>assert_subrc( ).
 
-      CLEAR temp443.
+      CLEAR temp486.
 
-      temp444-low = `A`.
-      temp444-descr = |a of { lv_field }|.
-      INSERT temp444 INTO TABLE temp443.
-      temp444-low = `B`.
-      temp444-descr = `b`.
-      INSERT temp444 INTO TABLE temp443.
-      <tab> = temp443.
+      temp487-low = `A`.
+      temp487-descr = |a of { lv_field }|.
+      INSERT temp487 INTO TABLE temp486.
+      temp487-low = `B`.
+      temp487-descr = `b`.
+      INSERT temp487 INTO TABLE temp486.
+      <tab> = temp486.
     ENDLOOP.
 
   ENDMETHOD.
@@ -8206,51 +8933,51 @@ CLASS ltcl_app_ns IMPLEMENTATION.
 
     " MATNR sorts between the namespace CWM and the plain ZZ_LAST - the
     " namespace object takes its place by its own name
-    DATA temp445 TYPE abap_component_tab.
-    DATA temp446 LIKE LINE OF temp445.
-    DATA temp108 TYPE REF TO cl_abap_datadescr.
-    DATA temp109 TYPE REF TO cl_abap_datadescr.
-    DATA temp110 TYPE REF TO cl_abap_datadescr.
-    DATA temp111 TYPE REF TO cl_abap_datadescr.
-    DATA temp112 TYPE REF TO cl_abap_datadescr.
+    DATA temp488 TYPE abap_component_tab.
+    DATA temp489 LIKE LINE OF temp488.
+    DATA temp118 TYPE REF TO cl_abap_datadescr.
+    DATA temp119 TYPE REF TO cl_abap_datadescr.
+    DATA temp120 TYPE REF TO cl_abap_datadescr.
+    DATA temp121 TYPE REF TO cl_abap_datadescr.
+    DATA temp122 TYPE REF TO cl_abap_datadescr.
     DATA lo_row TYPE REF TO cl_abap_structdescr.
     DATA lo_tab TYPE REF TO cl_abap_tabledescr.
     FIELD-SYMBOLS <first> TYPE any.
-    DATA temp447 TYPE abap_component_tab.
-    DATA temp448 LIKE LINE OF temp447.
-    DATA temp113 TYPE REF TO cl_abap_datadescr.
-    DATA temp114 TYPE REF TO cl_abap_datadescr.
+    DATA temp490 TYPE abap_component_tab.
+    DATA temp491 LIKE LINE OF temp490.
+    DATA temp123 TYPE REF TO cl_abap_datadescr.
+    DATA temp124 TYPE REF TO cl_abap_datadescr.
     DATA lo_deep_row TYPE REF TO cl_abap_structdescr.
     DATA lo_deep TYPE REF TO cl_abap_tabledescr.
     FIELD-SYMBOLS <deep> TYPE STANDARD TABLE.
-    CLEAR temp445.
+    CLEAR temp488.
 
-    temp446-name = `MATNR`.
+    temp489-name = `MATNR`.
 
-    temp108 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
-    temp446-type = temp108.
-    INSERT temp446 INTO TABLE temp445.
-    temp446-name = `/CWM/XCWMAT`.
+    temp118 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
+    temp489-type = temp118.
+    INSERT temp489 INTO TABLE temp488.
+    temp489-name = `/CWM/XCWMAT`.
 
-    temp109 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
-    temp446-type = temp109.
-    INSERT temp446 INTO TABLE temp445.
-    temp446-name = `/CWM/VALUM`.
+    temp119 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
+    temp489-type = temp119.
+    INSERT temp489 INTO TABLE temp488.
+    temp489-name = `/CWM/VALUM`.
 
-    temp110 ?= cl_abap_typedescr=>describe_by_data( lv_int ).
-    temp446-type = temp110.
-    INSERT temp446 INTO TABLE temp445.
-    temp446-name = `/VSO/R_TILT`.
+    temp120 ?= cl_abap_typedescr=>describe_by_data( lv_int ).
+    temp489-type = temp120.
+    INSERT temp489 INTO TABLE temp488.
+    temp489-name = `/VSO/R_TILT`.
 
-    temp111 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
-    temp446-type = temp111.
-    INSERT temp446 INTO TABLE temp445.
-    temp446-name = `AA_FIRST`.
+    temp121 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
+    temp489-type = temp121.
+    INSERT temp489 INTO TABLE temp488.
+    temp489-name = `AA_FIRST`.
 
-    temp112 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
-    temp446-type = temp112.
-    INSERT temp446 INTO TABLE temp445.
-    lt_comp = temp445.
+    temp122 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
+    temp489-type = temp122.
+    INSERT temp489 INTO TABLE temp488.
+    lt_comp = temp488.
 
     lo_row = cl_abap_structdescr=>create( lt_comp ).
 
@@ -8285,22 +9012,22 @@ CLASS ltcl_app_ns IMPLEMENTATION.
     " the deep rows: a key, a namespaced column and a namespaced table of
     " the flat rows above
 
-    CLEAR temp447.
+    CLEAR temp490.
 
-    temp448-name = `ID`.
+    temp491-name = `ID`.
 
-    temp113 ?= cl_abap_typedescr=>describe_by_data( lv_int ).
-    temp448-type = temp113.
-    INSERT temp448 INTO TABLE temp447.
-    temp448-name = `/ABC/NOTE`.
+    temp123 ?= cl_abap_typedescr=>describe_by_data( lv_int ).
+    temp491-type = temp123.
+    INSERT temp491 INTO TABLE temp490.
+    temp491-name = `/ABC/NOTE`.
 
-    temp114 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
-    temp448-type = temp114.
-    INSERT temp448 INTO TABLE temp447.
-    temp448-name = `/ABC/ITEMS`.
-    temp448-type = lo_tab.
-    INSERT temp448 INTO TABLE temp447.
-    lt_comp = temp447.
+    temp124 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
+    temp491-type = temp124.
+    INSERT temp491 INTO TABLE temp490.
+    temp491-name = `/ABC/ITEMS`.
+    temp491-type = lo_tab.
+    INSERT temp491 INTO TABLE temp490.
+    lt_comp = temp490.
 
     lo_deep_row = cl_abap_structdescr=>create( lt_comp ).
 
@@ -8420,7 +9147,8 @@ CLASS ltcl_06_fast_json DEFINITION FINAL
       RETURNING
         VALUE(result) TYPE ty_t_kinds.
 
-    " the general road: ajson under the upper-case mapping
+    " the general road: ajson under the upper-case mapping, a wide number
+    " quoted when its digits need it (json_quote_lossy) as on the fast road
     METHODS ajson_text
       IMPORTING
         iv_val        TYPE any
@@ -8506,11 +9234,11 @@ CLASS ltcl_06_fast_json IMPLEMENTATION.
   METHOD setup.
 
     DATA lr_attri TYPE REF TO z2ui5_if_ui5_types=>ty_t_attri.
-    DATA temp115 TYPE REF TO ltcl_app_fast.
+    DATA temp125 TYPE REF TO ltcl_app_fast.
     CREATE DATA lr_attri.
 
-    CREATE OBJECT temp115 TYPE ltcl_app_fast.
-    CREATE OBJECT mo_model EXPORTING attri = lr_attri app = temp115.
+    CREATE OBJECT temp125 TYPE ltcl_app_fast.
+    CREATE OBJECT mo_model EXPORTING attri = lr_attri app = temp125.
 
   ENDMETHOD.
 
@@ -8559,10 +9287,17 @@ CLASS ltcl_06_fast_json IMPLEMENTATION.
 
   METHOD ajson_text.
 
-    result = z2ui5_cl_ajson=>create_empty( ii_custom_mapping = z2ui5_cl_ui5_util_json_fl=>mapper_upper( )
-               )->set( iv_ignore_empty = abap_false
-                       iv_path         = `/`
-                       iv_val          = iv_val )->stringify( ).
+    DATA lr_val TYPE REF TO data.
+    DATA li_json TYPE REF TO z2ui5_if_ajson.
+    li_json = z2ui5_cl_ajson=>create_empty( ii_custom_mapping = z2ui5_cl_ui5_util_json_fl=>mapper_upper( )
+                      )->set( iv_ignore_empty = abap_false
+                              iv_path         = `/`
+                              iv_val          = iv_val ).
+    GET REFERENCE OF iv_val INTO lr_val.
+    mo_model->json_quote_lossy( io_json = li_json
+                                iv_path = ``
+                                ir_ref  = lr_val ).
+    result = li_json->stringify( ).
 
   ENDMETHOD.
 
@@ -8571,9 +9306,6 @@ CLASS ltcl_06_fast_json IMPLEMENTATION.
     DATA lt_rows TYPE ltcl_06_fast_json=>ty_t_kinds.
     DATA lr_rows LIKE REF TO lt_rows.
     DATA lv_act TYPE string.
-    DATA temp83 TYPE xsdboolean.
-    DATA temp84 TYPE xsdboolean.
-    DATA temp85 TYPE xsdboolean.
     DATA temp86 TYPE xsdboolean.
     DATA temp87 TYPE xsdboolean.
     DATA temp88 TYPE xsdboolean.
@@ -8584,6 +9316,11 @@ CLASS ltcl_06_fast_json IMPLEMENTATION.
     DATA temp93 TYPE xsdboolean.
     DATA temp94 TYPE xsdboolean.
     DATA temp95 TYPE xsdboolean.
+    DATA temp96 TYPE xsdboolean.
+    DATA temp97 TYPE xsdboolean.
+    DATA temp98 TYPE xsdboolean.
+    DATA temp99 TYPE xsdboolean.
+    DATA temp100 TYPE xsdboolean.
     lt_rows = rows( ).
 
     GET REFERENCE OF lt_rows INTO lr_rows.
@@ -8597,44 +9334,51 @@ CLASS ltcl_06_fast_json IMPLEMENTATION.
     " and a few of the renderings, pinned - the compare above would also
     " pass if both sides changed together
 
-    temp83 = boolc( lv_act CS `"V_P":1234567.89` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp83 ).
-
-    temp84 = boolc( lv_act CS `"V_P":-0.01` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp84 ).
-
-    temp85 = boolc( lv_act CS `"V_P":0.00` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp85 ).
-
-    temp86 = boolc( lv_act CS `"V_BOOL":true` ).
+    temp86 = boolc( lv_act CS `"V_P":1234567.89` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp86 ).
 
-    temp87 = boolc( lv_act CS `"V_BOOL":false` ).
+    temp87 = boolc( lv_act CS `"V_P":-0.01` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp87 ).
 
-    temp88 = boolc( lv_act CS `"V_D":"2024-02-29"` ).
+    temp88 = boolc( lv_act CS `"V_P":0.00` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp88 ).
 
-    temp89 = boolc( lv_act CS `"V_T":"23:59:59"` ).
+    temp89 = boolc( lv_act CS `"V_BOOL":true` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp89 ).
 
-    temp90 = boolc( lv_act CS `"V_D":""` ).
+    temp90 = boolc( lv_act CS `"V_BOOL":false` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp90 ).
 
-    temp91 = boolc( lv_act CS `"V_T":""` ).
+    temp91 = boolc( lv_act CS `"V_D":"2024-02-29"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp91 ).
 
-    temp92 = boolc( lv_act CS `"V_N":"00007"` ).
+    temp92 = boolc( lv_act CS `"V_T":"23:59:59"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp92 ).
 
-    temp93 = boolc( lv_act CS `"V_X":"A0FF"` ).
+    temp93 = boolc( lv_act CS `"V_D":""` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp93 ).
 
-    temp94 = boolc( lv_act CS `"V_C":"ab c"` ).
+    temp94 = boolc( lv_act CS `"V_T":""` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp94 ).
 
-    temp95 = boolc( lv_act CS `"V_INT2":-32768` ).
+    temp95 = boolc( lv_act CS `"V_N":"00007"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp95 ).
+
+    temp96 = boolc( lv_act CS `"V_X":"A0FF"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp96 ).
+
+    temp97 = boolc( lv_act CS `"V_C":"ab c"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp97 ).
+
+    temp98 = boolc( lv_act CS `"V_INT2":-32768` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp98 ).
+    " more digits than a double keeps - quoted; fewer stay a number
+
+    temp99 = boolc( lv_act CS `"V_DEC34":"123456789012345678901234567890"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp99 ).
+
+    temp100 = boolc( lv_act CS `"V_DEC34":-1234.5678` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp100 ).
 
   ENDMETHOD.
 
@@ -8654,8 +9398,8 @@ CLASS ltcl_06_fast_json IMPLEMENTATION.
   METHOD flat_struct_identical.
 
     DATA lt_rows TYPE ltcl_06_fast_json=>ty_t_kinds.
-    DATA temp449 LIKE LINE OF lt_rows.
-    DATA lr_row LIKE REF TO temp449.
+    DATA temp492 LIKE LINE OF lt_rows.
+    DATA lr_row LIKE REF TO temp492.
     lt_rows = rows( ).
 
 
@@ -8671,26 +9415,26 @@ CLASS ltcl_06_fast_json IMPLEMENTATION.
     " ajson writes the members of an object by name, not in component
     " order - A_FIRST is the last component and the first key
     DATA lt_rows TYPE ltcl_06_fast_json=>ty_t_kinds.
-    DATA temp450 LIKE REF TO lt_rows.
+    DATA temp493 LIKE REF TO lt_rows.
 DATA lv_act TYPE string.
-    DATA temp96 TYPE xsdboolean.
-    DATA temp97 TYPE xsdboolean.
-    DATA temp98 TYPE xsdboolean.
+    DATA temp101 TYPE xsdboolean.
+    DATA temp102 TYPE xsdboolean.
+    DATA temp103 TYPE xsdboolean.
     lt_rows = rows( ).
 
-    GET REFERENCE OF lt_rows INTO temp450.
+    GET REFERENCE OF lt_rows INTO temp493.
 
-lv_act = mo_model->attri_json_fast( temp450 ).
+lv_act = mo_model->attri_json_fast( temp493 ).
 
 
-    temp96 = boolc( lv_act CP `[{"A_FIRST":"a",*` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp96 ).
+    temp101 = boolc( lv_act CP `[{"A_FIRST":"a",*` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp101 ).
 
-    temp97 = boolc( lv_act CS `"ZA_LAST":"z"}` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp97 ).
+    temp102 = boolc( lv_act CS `"ZA_LAST":"z"}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp102 ).
 
-    temp98 = boolc( find( val = lv_act sub = `"V_I":` ) < find( val = lv_act sub = `"V_INT1":` ) ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp98 ).
+    temp103 = boolc( find( val = lv_act sub = `"V_I":` ) < find( val = lv_act sub = `"V_INT1":` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp103 ).
 
   ENDMETHOD.
 
@@ -8722,33 +9466,33 @@ lv_act = mo_model->attri_json_fast( temp450 ).
     DATA lt_sorted TYPE ty_t_kinds_sorted.
     DATA lt_scalar TYPE string_table.
     DATA lv_scalar TYPE string.
-    DATA temp451 TYPE ltcl_06_fast_json=>ty_s_nested.
-    DATA temp452 TYPE ltcl_06_fast_json=>ty_s_kinds.
-    DATA temp453 LIKE REF TO lt_nested.
-    DATA temp454 LIKE REF TO lt_sorted.
-    DATA temp455 LIKE REF TO lt_scalar.
-    DATA temp456 LIKE REF TO lv_scalar.
-    CLEAR temp451.
-    temp451-id = 1.
-    INSERT temp451 INTO TABLE lt_nested.
+    DATA temp494 TYPE ltcl_06_fast_json=>ty_s_nested.
+    DATA temp495 TYPE ltcl_06_fast_json=>ty_s_kinds.
+    DATA temp496 LIKE REF TO lt_nested.
+    DATA temp497 LIKE REF TO lt_sorted.
+    DATA temp498 LIKE REF TO lt_scalar.
+    DATA temp499 LIKE REF TO lv_scalar.
+    CLEAR temp494.
+    temp494-id = 1.
+    INSERT temp494 INTO TABLE lt_nested.
 
-    CLEAR temp452.
-    temp452-v_i = 1.
-    INSERT temp452 INTO TABLE lt_sorted.
+    CLEAR temp495.
+    temp495-v_i = 1.
+    INSERT temp495 INTO TABLE lt_sorted.
     INSERT `x` INTO TABLE lt_scalar.
 
 
-    GET REFERENCE OF lt_nested INTO temp453.
-cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp453 ) ).
+    GET REFERENCE OF lt_nested INTO temp496.
+cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp496 ) ).
 
-    GET REFERENCE OF lt_sorted INTO temp454.
-cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp454 ) ).
+    GET REFERENCE OF lt_sorted INTO temp497.
+cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp497 ) ).
 
-    GET REFERENCE OF lt_scalar INTO temp455.
-cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp455 ) ).
+    GET REFERENCE OF lt_scalar INTO temp498.
+cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp498 ) ).
 
-    GET REFERENCE OF lv_scalar INTO temp456.
-cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp456 ) ).
+    GET REFERENCE OF lv_scalar INTO temp499.
+cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp499 ) ).
 
   ENDMETHOD.
 
@@ -8757,53 +9501,53 @@ cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp456 ) ).
     " the fields of an include are members of the row like its own - in
     " ajson's order (by name), whatever the order of the components
     DATA lt_rows TYPE ty_t_inc_plain.
-    DATA temp457 TYPE ltcl_06_fast_json=>ty_s_inc_plain.
-    DATA temp458 LIKE REF TO lt_rows.
+    DATA temp500 TYPE ltcl_06_fast_json=>ty_s_inc_plain.
+    DATA temp501 LIKE REF TO lt_rows.
 DATA lv_act TYPE string.
-    DATA temp99 TYPE xsdboolean.
-    FIELD-SYMBOLS <temp116> TYPE ltcl_06_fast_json=>ty_s_inc_plain.
-DATA temp459 LIKE REF TO <temp116>.
-FIELD-SYMBOLS <temp117> LIKE LINE OF lt_rows.
-DATA temp118 LIKE sy-tabix.
-    CLEAR temp457.
-    temp457-z_own = `z`.
-    temp457-b_id = 1.
-    temp457-b_text = `in "clu" de`.
-    temp457-b_day = '20240229'.
-    temp457-b_ok = abap_true.
-    temp457-a_own = 7.
-    INSERT temp457 INTO TABLE lt_rows.
+    DATA temp104 TYPE xsdboolean.
+    FIELD-SYMBOLS <temp126> TYPE ltcl_06_fast_json=>ty_s_inc_plain.
+DATA temp502 LIKE REF TO <temp126>.
+FIELD-SYMBOLS <temp127> LIKE LINE OF lt_rows.
+DATA temp128 LIKE sy-tabix.
+    CLEAR temp500.
+    temp500-z_own = `z`.
+    temp500-b_id = 1.
+    temp500-b_text = `in "clu" de`.
+    temp500-b_day = '20240229'.
+    temp500-b_ok = abap_true.
+    temp500-a_own = 7.
+    INSERT temp500 INTO TABLE lt_rows.
     INSERT INITIAL LINE INTO TABLE lt_rows.
 
 
-    GET REFERENCE OF lt_rows INTO temp458.
+    GET REFERENCE OF lt_rows INTO temp501.
 
-lv_act = mo_model->attri_json_fast( temp458 ).
+lv_act = mo_model->attri_json_fast( temp501 ).
 
     cl_abap_unit_assert=>assert_not_initial( lv_act ).
     cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
                                         act = lv_act ).
 
-    temp99 = boolc( lv_act CS `{"A_OWN":7,"B_DAY":"2024-02-29","B_ID":1,"B_OK":true,"B_TEXT":"in \"clu\" de","Z_OWN":"z"}` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp99 ).
+    temp104 = boolc( lv_act CS `{"A_OWN":7,"B_DAY":"2024-02-29","B_ID":1,"B_OK":true,"B_TEXT":"in \"clu\" de","Z_OWN":"z"}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp104 ).
     " and the structure itself
 
-    READ TABLE lt_rows INDEX 1 ASSIGNING <temp116>.
+    READ TABLE lt_rows INDEX 1 ASSIGNING <temp126>.
 IF sy-subrc <> 0.
   ASSERT 1 = 0.
 ENDIF.
 
-GET REFERENCE OF <temp116> INTO temp459.
+GET REFERENCE OF <temp126> INTO temp502.
 
 
-temp118 = sy-tabix.
-READ TABLE lt_rows INDEX 1 ASSIGNING <temp117>.
-sy-tabix = temp118.
+temp128 = sy-tabix.
+READ TABLE lt_rows INDEX 1 ASSIGNING <temp127>.
+sy-tabix = temp128.
 IF sy-subrc <> 0.
   ASSERT 1 = 0.
 ENDIF.
-cl_abap_unit_assert=>assert_equals( exp = ajson_text( <temp117> )
-                                        act = mo_model->attri_json_fast( temp459 ) ).
+cl_abap_unit_assert=>assert_equals( exp = ajson_text( <temp127> )
+                                        act = mo_model->attri_json_fast( temp502 ) ).
 
   ENDMETHOD.
 
@@ -8811,31 +9555,31 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( <temp117> )
 
     " an include whose structure has an include of its own
     DATA lt_rows TYPE ty_t_inc_nested.
-    DATA temp460 TYPE ltcl_06_fast_json=>ty_s_inc_nested.
-    DATA temp461 LIKE REF TO lt_rows.
+    DATA temp503 TYPE ltcl_06_fast_json=>ty_s_inc_nested.
+    DATA temp504 LIKE REF TO lt_rows.
 DATA lv_act TYPE string.
-    DATA temp100 TYPE xsdboolean.
-    CLEAR temp460.
-    temp460-z_own = `z`.
-    temp460-b_id = 1.
-    temp460-b_text = `deep`.
-    temp460-b_ok = abap_true.
-    temp460-a_own = 7.
-    temp460-m_own = '120000'.
-    INSERT temp460 INTO TABLE lt_rows.
+    DATA temp105 TYPE xsdboolean.
+    CLEAR temp503.
+    temp503-z_own = `z`.
+    temp503-b_id = 1.
+    temp503-b_text = `deep`.
+    temp503-b_ok = abap_true.
+    temp503-a_own = 7.
+    temp503-m_own = '120000'.
+    INSERT temp503 INTO TABLE lt_rows.
     INSERT INITIAL LINE INTO TABLE lt_rows.
 
 
-    GET REFERENCE OF lt_rows INTO temp461.
+    GET REFERENCE OF lt_rows INTO temp504.
 
-lv_act = mo_model->attri_json_fast( temp461 ).
+lv_act = mo_model->attri_json_fast( temp504 ).
 
     cl_abap_unit_assert=>assert_not_initial( lv_act ).
     cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
                                         act = lv_act ).
 
-    temp100 = boolc( lv_act CS `"B_TEXT":"deep","M_OWN":"12:00:00","Z_OWN":"z"}` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp100 ).
+    temp105 = boolc( lv_act CS `"B_TEXT":"deep","M_OWN":"12:00:00","Z_OWN":"z"}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp105 ).
 
   ENDMETHOD.
 
@@ -8845,40 +9589,40 @@ lv_act = mo_model->attri_json_fast( temp461 ).
     " members carry the suffixed names, and the name of the include itself
     " (AS s_old) is no member
     DATA lt_rows TYPE ty_t_inc_suffix.
-    DATA temp462 TYPE ltcl_06_fast_json=>ty_s_inc_suffix.
-    DATA temp463 LIKE REF TO lt_rows.
+    DATA temp505 TYPE ltcl_06_fast_json=>ty_s_inc_suffix.
+    DATA temp506 LIKE REF TO lt_rows.
 DATA lv_act TYPE string.
-    DATA temp101 TYPE xsdboolean.
-    DATA temp102 TYPE xsdboolean.
-    DATA temp103 TYPE xsdboolean.
-    CLEAR temp462.
-    temp462-key = 1.
-    temp462-b_id_old = 10.
-    temp462-b_text_old = `before`.
-    temp462-b_id_new = 11.
-    temp462-b_text_new = `after`.
-    temp462-b_ok_new = abap_true.
-    INSERT temp462
+    DATA temp106 TYPE xsdboolean.
+    DATA temp107 TYPE xsdboolean.
+    DATA temp108 TYPE xsdboolean.
+    CLEAR temp505.
+    temp505-key = 1.
+    temp505-b_id_old = 10.
+    temp505-b_text_old = `before`.
+    temp505-b_id_new = 11.
+    temp505-b_text_new = `after`.
+    temp505-b_ok_new = abap_true.
+    INSERT temp505
            INTO TABLE lt_rows.
     INSERT INITIAL LINE INTO TABLE lt_rows.
 
 
-    GET REFERENCE OF lt_rows INTO temp463.
+    GET REFERENCE OF lt_rows INTO temp506.
 
-lv_act = mo_model->attri_json_fast( temp463 ).
+lv_act = mo_model->attri_json_fast( temp506 ).
 
     cl_abap_unit_assert=>assert_not_initial( lv_act ).
     cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
                                         act = lv_act ).
 
-    temp101 = boolc( lv_act CS `"B_ID_NEW":11,"B_ID_OLD":10,` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp101 ).
+    temp106 = boolc( lv_act CS `"B_ID_NEW":11,"B_ID_OLD":10,` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp106 ).
 
-    temp102 = boolc( lv_act CS `"B_TEXT_NEW":"after","B_TEXT_OLD":"before","KEY":1}` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp102 ).
+    temp107 = boolc( lv_act CS `"B_TEXT_NEW":"after","B_TEXT_OLD":"before","KEY":1}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp107 ).
 
-    temp103 = boolc( lv_act CS `S_OLD` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp103 ).
+    temp108 = boolc( lv_act CS `S_OLD` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp108 ).
 
   ENDMETHOD.
 
@@ -8887,16 +9631,16 @@ lv_act = mo_model->attri_json_fast( temp463 ).
     " an include that brings a nested structure along: not flat, so the
     " general road - which writes the same document as before
     DATA lt_rows TYPE ty_t_inc_deep.
-    DATA temp464 TYPE ltcl_06_fast_json=>ty_s_inc_deep.
-    DATA temp465 LIKE REF TO lt_rows.
-    CLEAR temp464.
-    temp464-key = 1.
-    temp464-id_d = 2.
-    INSERT temp464 INTO TABLE lt_rows.
+    DATA temp507 TYPE ltcl_06_fast_json=>ty_s_inc_deep.
+    DATA temp508 LIKE REF TO lt_rows.
+    CLEAR temp507.
+    temp507-key = 1.
+    temp507-id_d = 2.
+    INSERT temp507 INTO TABLE lt_rows.
 
 
-    GET REFERENCE OF lt_rows INTO temp465.
-cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp465 ) ).
+    GET REFERENCE OF lt_rows INTO temp508.
+cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp508 ) ).
 
   ENDMETHOD.
 
@@ -8911,54 +9655,54 @@ cl_abap_unit_assert=>assert_initial( mo_model->attri_json_fast( temp465 ) ).
     " nanoseconds - a system holds them all. Row 4 carries such a
     " fraction and is only compared, not pinned
     DATA lt_rows TYPE ty_t_stamp.
-    DATA temp466 TYPE ltcl_06_fast_json=>ty_s_stamp.
-    DATA temp467 TYPE ltcl_06_fast_json=>ty_s_stamp.
-    DATA temp468 TYPE ltcl_06_fast_json=>ty_s_stamp.
-    DATA temp469 TYPE ltcl_06_fast_json=>ty_s_stamp.
-    DATA temp470 LIKE REF TO lt_rows.
+    DATA temp509 TYPE ltcl_06_fast_json=>ty_s_stamp.
+    DATA temp510 TYPE ltcl_06_fast_json=>ty_s_stamp.
+    DATA temp511 TYPE ltcl_06_fast_json=>ty_s_stamp.
+    DATA temp512 TYPE ltcl_06_fast_json=>ty_s_stamp.
+    DATA temp513 LIKE REF TO lt_rows.
 DATA lv_act TYPE string.
-    DATA temp104 TYPE xsdboolean.
-    DATA temp105 TYPE xsdboolean.
-    DATA temp106 TYPE xsdboolean.
-    CLEAR temp466.
-    temp466-id = 1.
-    INSERT temp466 INTO TABLE lt_rows.
+    DATA temp109 TYPE xsdboolean.
+    DATA temp110 TYPE xsdboolean.
+    DATA temp111 TYPE xsdboolean.
+    CLEAR temp509.
+    temp509-id = 1.
+    INSERT temp509 INTO TABLE lt_rows.
 
-    CLEAR temp467.
-    temp467-id = 2.
-    temp467-ts = '20240229230000'.
-    temp467-tsl = '20240229230000'.
-    INSERT temp467 INTO TABLE lt_rows.
+    CLEAR temp510.
+    temp510-id = 2.
+    temp510-ts = '20240229230000'.
+    temp510-tsl = '20240229230000'.
+    INSERT temp510 INTO TABLE lt_rows.
 
-    CLEAR temp468.
-    temp468-id = 3.
-    temp468-ts = '19991231120000'.
-    temp468-tsl = '20240229230000.5'.
-    INSERT temp468 INTO TABLE lt_rows.
+    CLEAR temp511.
+    temp511-id = 3.
+    temp511-ts = '19991231120000'.
+    temp511-tsl = '20240229230000.5'.
+    INSERT temp511 INTO TABLE lt_rows.
 
-    CLEAR temp469.
-    temp469-id = 4.
-    temp469-ts = '20240229235959'.
-    temp469-tsl = '20240229235959.1234567'.
-    INSERT temp469 INTO TABLE lt_rows.
+    CLEAR temp512.
+    temp512-id = 4.
+    temp512-ts = '20240229235959'.
+    temp512-tsl = '20240229235959.1234567'.
+    INSERT temp512 INTO TABLE lt_rows.
 
 
-    GET REFERENCE OF lt_rows INTO temp470.
+    GET REFERENCE OF lt_rows INTO temp513.
 
-lv_act = mo_model->attri_json_fast( temp470 ).
+lv_act = mo_model->attri_json_fast( temp513 ).
 
     cl_abap_unit_assert=>assert_not_initial( lv_act ).
     cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
                                         act = lv_act ).
 
-    temp104 = boolc( lv_act CS `{"ID":1,"TS":"0000-00-00T00:00:00Z","TSL":"0000-00-00T00:00:00.0Z"}` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp104 ).
+    temp109 = boolc( lv_act CS `{"ID":1,"TS":"0000-00-00T00:00:00Z","TSL":"0000-00-00T00:00:00.0Z"}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp109 ).
 
-    temp105 = boolc( lv_act CS `{"ID":2,"TS":"2024-02-29T23:00:00Z","TSL":"2024-02-29T23:00:00.0Z"}` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp105 ).
+    temp110 = boolc( lv_act CS `{"ID":2,"TS":"2024-02-29T23:00:00Z","TSL":"2024-02-29T23:00:00.0Z"}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp110 ).
 
-    temp106 = boolc( lv_act CS `{"ID":3,"TS":"1999-12-31T12:00:00Z","TSL":"2024-02-29T23:00:00.5Z"}` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp106 ).
+    temp111 = boolc( lv_act CS `{"ID":3,"TS":"1999-12-31T12:00:00Z","TSL":"2024-02-29T23:00:00.5Z"}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp111 ).
 
   ENDMETHOD.
 
@@ -8966,19 +9710,19 @@ lv_act = mo_model->attri_json_fast( temp470 ).
 
     " a flat structure with time stamps, row by row
     DATA lt_rows TYPE ty_t_stamp.
-    DATA temp471 TYPE ltcl_06_fast_json=>ty_s_stamp.
-    DATA temp472 TYPE ltcl_06_fast_json=>ty_s_stamp.
-    DATA temp473 LIKE LINE OF lt_rows.
-    DATA lr_row LIKE REF TO temp473.
-    CLEAR temp471.
-    temp471-id = 1.
-    INSERT temp471 INTO TABLE lt_rows.
+    DATA temp514 TYPE ltcl_06_fast_json=>ty_s_stamp.
+    DATA temp515 TYPE ltcl_06_fast_json=>ty_s_stamp.
+    DATA temp516 LIKE LINE OF lt_rows.
+    DATA lr_row LIKE REF TO temp516.
+    CLEAR temp514.
+    temp514-id = 1.
+    INSERT temp514 INTO TABLE lt_rows.
 
-    CLEAR temp472.
-    temp472-id = 2.
-    temp472-ts = '20240229230000'.
-    temp472-tsl = '20240229230000.5'.
-    INSERT temp472 INTO TABLE lt_rows.
+    CLEAR temp515.
+    temp515-id = 2.
+    temp515-ts = '20240229230000'.
+    temp515-tsl = '20240229230000.5'.
+    INSERT temp515 INTO TABLE lt_rows.
 
 
 
@@ -8994,35 +9738,35 @@ lv_act = mo_model->attri_json_fast( temp470 ).
 
     " the whole model with a table whose row type has an include and both
     " time stamp kinds: the document the tree alone writes
-    DATA temp474 TYPE REF TO ltcl_app_fast.
-    DATA lo_app LIKE temp474.
-    DATA temp475 TYPE ltcl_app_fast=>ty_t_log.
-    DATA temp476 LIKE LINE OF temp475.
-    DATA temp477 LIKE LINE OF mo_model->mt_attri->*.
-    DATA lr_attri LIKE REF TO temp477.
+    DATA temp517 TYPE REF TO ltcl_app_fast.
+    DATA lo_app LIKE temp517.
+    DATA temp518 TYPE ltcl_app_fast=>ty_t_log.
+    DATA temp519 LIKE LINE OF temp518.
+    DATA temp520 LIKE LINE OF mo_model->mt_attri->*.
+    DATA lr_attri LIKE REF TO temp520.
     DATA li_exp TYPE REF TO z2ui5_cl_ajson.
     DATA lv_act TYPE string.
-    DATA temp107 TYPE xsdboolean.
-    DATA temp478 LIKE REF TO lo_app->mt_log.
-    temp474 ?= mo_model->mo_app.
+    DATA temp112 TYPE xsdboolean.
+    DATA temp521 LIKE REF TO lo_app->mt_log.
+    temp517 ?= mo_model->mo_app.
 
-    lo_app = temp474.
+    lo_app = temp517.
 
-    CLEAR temp475.
+    CLEAR temp518.
 
-    CLEAR temp476.
-    temp476-id = 1.
-    temp476-id_r = 10.
-    temp476-name_r = `one`.
-    temp476-price_r = '1.50'.
-    temp476-ok_r = abap_true.
-    temp476-day_r = '20240101'.
-    temp476-created_at = '20240229230000'.
-    temp476-changed_at = '20240229230000.5'.
-    INSERT temp476 INTO TABLE temp475.
-    CLEAR temp476.
-    INSERT temp476 INTO TABLE temp475.
-    lo_app->mt_log = temp475.
+    CLEAR temp519.
+    temp519-id = 1.
+    temp519-id_r = 10.
+    temp519-name_r = `one`.
+    temp519-price_r = '1.50'.
+    temp519-ok_r = abap_true.
+    temp519-day_r = '20240101'.
+    temp519-created_at = '20240229230000'.
+    temp519-changed_at = '20240229230000.5'.
+    INSERT temp519 INTO TABLE temp518.
+    CLEAR temp519.
+    INSERT temp519 INTO TABLE temp518.
+    lo_app->mt_log = temp518.
     mo_model->main_attri_refresh( ).
 
 
@@ -9044,12 +9788,12 @@ lv_act = mo_model->attri_json_fast( temp470 ).
     cl_abap_unit_assert=>assert_equals( exp = li_exp->stringify( )
                                         act = lv_act ).
 
-    temp107 = boolc( lv_act CS `{"MT_LOG":[{"CHANGED_AT":"2024-02-29T23:00:00.5Z","CREATED_AT":"2024-02-29T23:00:00Z","DAY_R":"2024-01-01",` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp107 ).
+    temp112 = boolc( lv_act CS `{"MT_LOG":[{"CHANGED_AT":"2024-02-29T23:00:00.5Z","CREATED_AT":"2024-02-29T23:00:00Z","DAY_R":"2024-01-01",` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp112 ).
     " through the fast path, not the tree: the row type is taken
 
-    GET REFERENCE OF lo_app->mt_log INTO temp478.
-cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
+    GET REFERENCE OF lo_app->mt_log INTO temp521.
+cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp521 ) ).
 
   ENDMETHOD.
 
@@ -9058,36 +9802,36 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     " the whole model: a bound table and a bound structure through the fast
     " path, a bound scalar through the tree - the document is what the
     " tree alone wrote before (a string node per bound attribute)
-    DATA temp479 TYPE REF TO ltcl_app_fast.
-    DATA lo_app LIKE temp479.
-    DATA temp480 TYPE ltcl_app_fast=>ty_t_row.
-    DATA temp481 LIKE LINE OF temp480.
-    DATA temp482 LIKE LINE OF mo_model->mt_attri->*.
-    DATA lr_attri LIKE REF TO temp482.
+    DATA temp522 TYPE REF TO ltcl_app_fast.
+    DATA lo_app LIKE temp522.
+    DATA temp523 TYPE ltcl_app_fast=>ty_t_row.
+    DATA temp524 LIKE LINE OF temp523.
+    DATA temp525 LIKE LINE OF mo_model->mt_attri->*.
+    DATA lr_attri LIKE REF TO temp525.
     DATA li_exp TYPE REF TO z2ui5_cl_ajson.
     DATA lv_act TYPE string.
-    DATA temp108 TYPE xsdboolean.
-    DATA temp109 TYPE xsdboolean.
-    temp479 ?= mo_model->mo_app.
+    DATA temp113 TYPE xsdboolean.
+    DATA temp114 TYPE xsdboolean.
+    temp522 ?= mo_model->mo_app.
 
-    lo_app = temp479.
+    lo_app = temp522.
 
-    CLEAR temp480.
+    CLEAR temp523.
 
-    CLEAR temp481.
-    temp481-id = 1.
-    temp481-name = `one`.
-    temp481-price = '1.50'.
-    temp481-ok = abap_true.
-    temp481-day = '20240101'.
-    INSERT temp481 INTO TABLE temp480.
-    CLEAR temp481.
-    temp481-id = 2.
-    temp481-name = `t"wo`.
-    INSERT temp481 INTO TABLE temp480.
-    CLEAR temp481.
-    INSERT temp481 INTO TABLE temp480.
-    lo_app->mt_rows = temp480.
+    CLEAR temp524.
+    temp524-id = 1.
+    temp524-name = `one`.
+    temp524-price = '1.50'.
+    temp524-ok = abap_true.
+    temp524-day = '20240101'.
+    INSERT temp524 INTO TABLE temp523.
+    CLEAR temp524.
+    temp524-id = 2.
+    temp524-name = `t"wo`.
+    INSERT temp524 INTO TABLE temp523.
+    CLEAR temp524.
+    INSERT temp524 INTO TABLE temp523.
+    lo_app->mt_rows = temp523.
     CLEAR lo_app->ms_head.
     lo_app->ms_head-id = 9.
     lo_app->ms_head-name = `head`.
@@ -9119,11 +9863,11 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     cl_abap_unit_assert=>assert_equals( exp = li_exp->stringify( )
                                         act = lv_act ).
 
-    temp108 = boolc( lv_act CS `"MT_ROWS":[{"DAY":"2024-01-01","ID":1,"NAME":"one","OK":true,"PRICE":1.50},` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp108 ).
+    temp113 = boolc( lv_act CS `"MT_ROWS":[{"DAY":"2024-01-01","ID":1,"NAME":"one","OK":true,"PRICE":1.50},` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp113 ).
 
-    temp109 = boolc( lv_act CS `z2ui5-fast-` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp109 ).
+    temp114 = boolc( lv_act CS `z2ui5-fast-` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp114 ).
 
   ENDMETHOD.
 
@@ -9133,23 +9877,23 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     " transpiled runtime's replace( ) reads as a pattern), a value that
     " looks like a token of this very path, in a cell and in the scalar
     " the tree writes before the table
-    DATA temp483 TYPE REF TO ltcl_app_fast.
-    DATA lo_app LIKE temp483.
-    DATA temp484 TYPE ltcl_app_fast=>ty_t_row.
-    DATA temp485 LIKE LINE OF temp484.
-    DATA temp486 LIKE LINE OF mo_model->mt_attri->*.
-    DATA lr_attri LIKE REF TO temp486.
+    DATA temp526 TYPE REF TO ltcl_app_fast.
+    DATA lo_app LIKE temp526.
+    DATA temp527 TYPE ltcl_app_fast=>ty_t_row.
+    DATA temp528 LIKE LINE OF temp527.
+    DATA temp529 LIKE LINE OF mo_model->mt_attri->*.
+    DATA lr_attri LIKE REF TO temp529.
     DATA li_exp TYPE REF TO z2ui5_cl_ajson.
-    temp483 ?= mo_model->mo_app.
+    temp526 ?= mo_model->mo_app.
 
-    lo_app = temp483.
+    lo_app = temp526.
 
-    CLEAR temp484.
+    CLEAR temp527.
 
-    temp485-id = 1.
-    temp485-name = `$& $1 $$ z2ui5-fast-x-1`.
-    INSERT temp485 INTO TABLE temp484.
-    lo_app->mt_rows  = temp484.
+    temp528-id = 1.
+    temp528-name = `$& $1 $$ z2ui5-fast-x-1`.
+    INSERT temp528 INTO TABLE temp527.
+    lo_app->mt_rows  = temp527.
     lo_app->mv_title = `"z2ui5-fast-` && `00000000000000000000000000000000-1"`.
     mo_model->main_attri_refresh( ).
 
@@ -9181,26 +9925,26 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     " what a replace( ) would read as a pattern and what looks like the
     " token that follows it - spliced text is not searched again
     DATA ls_fast TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast_state.
-    DATA temp487 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
-    DATA temp488 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
-    DATA temp489 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
+    DATA temp530 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
+    DATA temp531 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
+    DATA temp532 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
     DATA lv_json TYPE string.
     ls_fast-uuid = `U1`.
 
-    CLEAR temp487.
-    temp487-token = `z2ui5-fast-U1-1`.
-    temp487-json = `[{"A":"$& $1 \"z2ui5-fast-U1-2\""}]`.
-    INSERT temp487 INTO TABLE ls_fast-t_token.
+    CLEAR temp530.
+    temp530-token = `z2ui5-fast-U1-1`.
+    temp530-json = `[{"A":"$& $1 \"z2ui5-fast-U1-2\""}]`.
+    INSERT temp530 INTO TABLE ls_fast-t_token.
 
-    CLEAR temp488.
-    temp488-token = `z2ui5-fast-U1-2`.
-    temp488-json = `[]`.
-    INSERT temp488 INTO TABLE ls_fast-t_token.
+    CLEAR temp531.
+    temp531-token = `z2ui5-fast-U1-2`.
+    temp531-json = `[]`.
+    INSERT temp531 INTO TABLE ls_fast-t_token.
 
-    CLEAR temp489.
-    temp489-token = `z2ui5-fast-U1-3`.
-    temp489-json = `{"B":1}`.
-    INSERT temp489 INTO TABLE ls_fast-t_token.
+    CLEAR temp532.
+    temp532-token = `z2ui5-fast-U1-3`.
+    temp532-json = `{"B":1}`.
+    INSERT temp532 INTO TABLE ls_fast-t_token.
 
     lv_json = `{"C":"z2ui5-fast-U1-3","D":"z2ui5-fast-U1-1","E":"x","F":"z2ui5-fast-U1-2"}`.
 
@@ -9233,24 +9977,24 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     " a token the document does not hold, and one it holds twice: both are
     " a table missing from the model, and both are refused
     DATA ls_fast TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast_state.
-    DATA temp490 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
-    DATA temp491 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
+    DATA temp533 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
+    DATA temp534 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
     DATA lv_json TYPE string.
         DATA lx_lost TYPE REF TO z2ui5_cx_ui5_util_error.
-        DATA temp110 TYPE xsdboolean.
+        DATA temp115 TYPE xsdboolean.
         DATA lx_twice TYPE REF TO z2ui5_cx_ui5_util_error.
-        DATA temp111 TYPE xsdboolean.
+        DATA temp116 TYPE xsdboolean.
     ls_fast-uuid = `U1`.
 
-    CLEAR temp490.
-    temp490-token = `z2ui5-fast-U1-1`.
-    temp490-json = `[]`.
-    INSERT temp490 INTO TABLE ls_fast-t_token.
+    CLEAR temp533.
+    temp533-token = `z2ui5-fast-U1-1`.
+    temp533-json = `[]`.
+    INSERT temp533 INTO TABLE ls_fast-t_token.
 
-    CLEAR temp491.
-    temp491-token = `z2ui5-fast-U1-2`.
-    temp491-json = `[]`.
-    INSERT temp491 INTO TABLE ls_fast-t_token.
+    CLEAR temp534.
+    temp534-token = `z2ui5-fast-U1-2`.
+    temp534-json = `[]`.
+    INSERT temp534 INTO TABLE ls_fast-t_token.
 
 
     lv_json = `{"A":"z2ui5-fast-U1-2"}`.
@@ -9261,8 +10005,8 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
       CATCH z2ui5_cx_ui5_util_error INTO lx_lost.
 
-        temp110 = boolc( lx_lost->get_text( ) CS `MODEL_FAST_PATH_TOKEN_LOST` ).
-        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp110 ).
+        temp115 = boolc( lx_lost->get_text( ) CS `MODEL_FAST_PATH_TOKEN_LOST` ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp115 ).
     ENDTRY.
 
     lv_json = `{"A":"z2ui5-fast-U1-1","B":"z2ui5-fast-U1-1"}`.
@@ -9273,8 +10017,8 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
       CATCH z2ui5_cx_ui5_util_error INTO lx_twice.
 
-        temp111 = boolc( lx_twice->get_text( ) CS `MODEL_FAST_PATH_TOKEN_LOST` ).
-        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp111 ).
+        temp116 = boolc( lx_twice->get_text( ) CS `MODEL_FAST_PATH_TOKEN_LOST` ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp116 ).
     ENDTRY.
 
   ENDMETHOD.
@@ -9284,23 +10028,23 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     " a token the tree cannot write (main_json_stringify marked it lost)
     " is not expected in the document - every other one still is
     DATA ls_fast TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast_state.
-    DATA temp492 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
-    DATA temp493 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
+    DATA temp535 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
+    DATA temp536 TYPE z2ui5_cl_ui5_srv_model=>ty_s_fast.
     DATA lv_json TYPE string.
         DATA lx TYPE REF TO z2ui5_cx_ui5_util_error.
-        DATA temp112 TYPE xsdboolean.
+        DATA temp117 TYPE xsdboolean.
     ls_fast-uuid = `U1`.
 
-    CLEAR temp492.
-    temp492-token = `z2ui5-fast-U1-1`.
-    temp492-json = `[1]`.
-    temp492-lost = abap_true.
-    INSERT temp492 INTO TABLE ls_fast-t_token.
+    CLEAR temp535.
+    temp535-token = `z2ui5-fast-U1-1`.
+    temp535-json = `[1]`.
+    temp535-lost = abap_true.
+    INSERT temp535 INTO TABLE ls_fast-t_token.
 
-    CLEAR temp493.
-    temp493-token = `z2ui5-fast-U1-2`.
-    temp493-json = `[2]`.
-    INSERT temp493 INTO TABLE ls_fast-t_token.
+    CLEAR temp536.
+    temp536-token = `z2ui5-fast-U1-2`.
+    temp536-json = `[2]`.
+    INSERT temp536 INTO TABLE ls_fast-t_token.
 
     lv_json = `{"A":"z2ui5-fast-U1-2"}`.
 
@@ -9320,8 +10064,8 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
       CATCH z2ui5_cx_ui5_util_error INTO lx.
 
-        temp112 = boolc( lx->get_text( ) CS `MODEL_FAST_PATH_TOKEN_LOST` ).
-        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp112 ).
+        temp117 = boolc( lx->get_text( ) CS `MODEL_FAST_PATH_TOKEN_LOST` ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp117 ).
     ENDTRY.
 
   ENDMETHOD.
@@ -9336,8 +10080,8 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
     DATA lo_bind TYPE REF TO z2ui5_cl_ui5_srv_bind.
     DATA lv_field LIKE LINE OF io_app->mt_field.
-      DATA temp494 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
-      DATA temp495 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+      DATA temp537 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+      DATA temp538 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
     CREATE OBJECT lo_bind TYPE z2ui5_cl_ui5_srv_bind EXPORTING APP = io_cont.
     ASSIGN io_app->ms_data_row->* TO <row>.
     ASSIGN io_app->ms_fixval->* TO <fixval>.
@@ -9347,18 +10091,18 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
       cl_abap_unit_assert=>assert_subrc( ).
       GET REFERENCE OF <val> INTO lr_val.
 
-      CLEAR temp494.
-      temp494-path_only = abap_true.
+      CLEAR temp537.
+      temp537-path_only = abap_true.
       INSERT lo_bind->main( val    = lr_val
-                            config = temp494 ) INTO TABLE result.
+                            config = temp537 ) INTO TABLE result.
       ASSIGN COMPONENT lv_field OF STRUCTURE <fixval> TO <struc>.
       cl_abap_unit_assert=>assert_subrc( ).
       GET REFERENCE OF <struc> INTO lr_val.
 
-      CLEAR temp495.
-      temp495-path_only = abap_true.
+      CLEAR temp538.
+      temp538-path_only = abap_true.
       INSERT lo_bind->main( val    = lr_val
-                            config = temp495 ) INTO TABLE result.
+                            config = temp538 ) INTO TABLE result.
     ENDLOOP.
 
   ENDMETHOD.
@@ -9367,8 +10111,8 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
     DATA li_exp TYPE REF TO z2ui5_cl_ajson.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
-    DATA temp496 LIKE LINE OF io_cont->mt_attri->*.
-    DATA lr_attri LIKE REF TO temp496.
+    DATA temp539 LIKE LINE OF io_cont->mt_attri->*.
+    DATA lr_attri LIKE REF TO temp539.
       DATA lr_ref TYPE REF TO data.
       FIELD-SYMBOLS <val> TYPE data.
     li_exp = z2ui5_cl_ajson=>create_empty( ii_custom_mapping = z2ui5_cl_ui5_util_json_fl=>mapper_upper( ) ).
@@ -9396,40 +10140,40 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     " industry solution or a customer namespace appended - the shape that
     " raised MODEL_FAST_PATH_TOKEN_LOST on the first rendering of the popup
     DATA lo_app TYPE REF TO ltcl_app_tm_pop.
-    DATA temp497 TYPE string_table.
-      DATA temp499 LIKE LINE OF lo_app->mt_field.
+    DATA temp540 TYPE string_table.
+      DATA temp542 LIKE LINE OF lo_app->mt_field.
     DATA lo_cont TYPE REF TO z2ui5_cl_ui5_app_cont.
     DATA lt_path TYPE string_table.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA lv_act TYPE string.
-    DATA temp113 TYPE xsdboolean.
+    DATA temp118 TYPE xsdboolean.
     DATA li_doc TYPE REF TO z2ui5_cl_ajson.
     DATA lv_field LIKE LINE OF lo_app->mt_field.
       DATA lv_val_path LIKE LINE OF lt_path.
-      FIELD-SYMBOLS <temp119> LIKE LINE OF lt_path.
-      DATA temp120 LIKE sy-tabix.
+      FIELD-SYMBOLS <temp129> LIKE LINE OF lt_path.
+      DATA temp130 LIKE sy-tabix.
       DATA lv_fix_path LIKE LINE OF lt_path.
-      FIELD-SYMBOLS <temp121> LIKE LINE OF lt_path.
-      DATA temp122 LIKE sy-tabix.
-      DATA temp114 TYPE xsdboolean.
-    FIELD-SYMBOLS <temp500> LIKE LINE OF lt_path.
-    DATA temp501 LIKE sy-tabix.
+      FIELD-SYMBOLS <temp131> LIKE LINE OF lt_path.
+      DATA temp132 LIKE sy-tabix.
+      DATA temp119 TYPE xsdboolean.
+    FIELD-SYMBOLS <temp543> LIKE LINE OF lt_path.
+    DATA temp544 LIKE sy-tabix.
     CREATE OBJECT lo_app TYPE ltcl_app_tm_pop.
 
-    CLEAR temp497.
-    INSERT `MANDT` INTO TABLE temp497.
-    INSERT `MATNR` INTO TABLE temp497.
-    INSERT `ERSDA` INTO TABLE temp497.
-    INSERT `ZZ_A_RATHER_LONG_FIELD_NAME_XX` INTO TABLE temp497.
-    INSERT `/CWM/XCWMAT` INTO TABLE temp497.
-    INSERT `/CWM/VALUM` INTO TABLE temp497.
-    INSERT `/VSO/R_TILT_IND` INTO TABLE temp497.
-    INSERT `/SAPMP/KADU` INTO TABLE temp497.
-    lo_app->mt_field = temp497.
+    CLEAR temp540.
+    INSERT `MANDT` INTO TABLE temp540.
+    INSERT `MATNR` INTO TABLE temp540.
+    INSERT `ERSDA` INTO TABLE temp540.
+    INSERT `ZZ_A_RATHER_LONG_FIELD_NAME_XX` INTO TABLE temp540.
+    INSERT `/CWM/XCWMAT` INTO TABLE temp540.
+    INSERT `/CWM/VALUM` INTO TABLE temp540.
+    INSERT `/VSO/R_TILT_IND` INTO TABLE temp540.
+    INSERT `/SAPMP/KADU` INTO TABLE temp540.
+    lo_app->mt_field = temp540.
     DO 30 TIMES.
 
-      temp499 = |F{ sy-index }|.
-      INSERT temp499 INTO TABLE lo_app->mt_field.
+      temp542 = |F{ sy-index }|.
+      INSERT temp542 INTO TABLE lo_app->mt_field.
     ENDDO.
     lo_app->build( ).
 
@@ -9449,8 +10193,8 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     cl_abap_unit_assert=>assert_equals( exp = tm_pop_ajson_text( lo_cont )
                                         act = lv_act ).
 
-    temp113 = boolc( lv_act CS `z2ui5-fast-` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp113 ).
+    temp118 = boolc( lv_act CS `z2ui5-fast-` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp118 ).
 
     " every binding path is one UI5 resolves - no empty segment, at which
     " sap.ui.model.json.JSONModel stops walking - and finds the field's
@@ -9462,26 +10206,26 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
 
 
-      temp120 = sy-tabix.
-      READ TABLE lt_path INDEX 2 * sy-tabix - 1 ASSIGNING <temp119>.
-      sy-tabix = temp120.
+      temp130 = sy-tabix.
+      READ TABLE lt_path INDEX 2 * sy-tabix - 1 ASSIGNING <temp129>.
+      sy-tabix = temp130.
       IF sy-subrc <> 0.
         ASSERT 1 = 0.
       ENDIF.
-      lv_val_path = <temp119>.
+      lv_val_path = <temp129>.
 
 
 
-      temp122 = sy-tabix.
-      READ TABLE lt_path INDEX 2 * sy-tabix ASSIGNING <temp121>.
-      sy-tabix = temp122.
+      temp132 = sy-tabix.
+      READ TABLE lt_path INDEX 2 * sy-tabix ASSIGNING <temp131>.
+      sy-tabix = temp132.
       IF sy-subrc <> 0.
         ASSERT 1 = 0.
       ENDIF.
-      lv_fix_path = <temp121>.
+      lv_fix_path = <temp131>.
 
-      temp114 = boolc( lv_val_path CS `//` OR lv_fix_path CS `//` ).
-      cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp114
+      temp119 = boolc( lv_val_path CS `//` OR lv_fix_path CS `//` ).
+      cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp119
                                          msg = |empty path segment for { lv_field }| ).
       cl_abap_unit_assert=>assert_equals( exp = |v-{ lv_field }|
                                           act = li_doc->get_string( lv_val_path )
@@ -9492,14 +10236,14 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     ENDLOOP.
 
 
-    temp501 = sy-tabix.
-    READ TABLE lt_path INDEX 10 ASSIGNING <temp500>.
-    sy-tabix = temp501.
+    temp544 = sy-tabix.
+    READ TABLE lt_path INDEX 10 ASSIGNING <temp543>.
+    sy-tabix = temp544.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `/MS_FIXVAL/CWM/XCWMAT`
-                                        act = <temp500> ).
+                                        act = <temp543> ).
 
   ENDMETHOD.
 
@@ -9510,20 +10254,20 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     " the empty segment ajson files under a path no parent walks. Not a
     " fast path case - the general road, which writes what it always wrote
     DATA lo_app TYPE REF TO ltcl_app_tm_pop.
-    DATA temp502 TYPE string_table.
+    DATA temp545 TYPE string_table.
     DATA lo_cont TYPE REF TO z2ui5_cl_ui5_app_cont.
-    DATA temp504 LIKE LINE OF lo_cont->mt_attri->*.
-    DATA lr_attri LIKE REF TO temp504.
+    DATA temp547 LIKE LINE OF lo_cont->mt_attri->*.
+    DATA lr_attri LIKE REF TO temp547.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA lv_act TYPE string.
-    DATA temp115 TYPE xsdboolean.
-    DATA temp116 TYPE xsdboolean.
+    DATA temp120 TYPE xsdboolean.
+    DATA temp121 TYPE xsdboolean.
     CREATE OBJECT lo_app TYPE ltcl_app_tm_pop.
 
-    CLEAR temp502.
-    INSERT `MATNR` INTO TABLE temp502.
-    INSERT `/CWM/XCWMAT` INTO TABLE temp502.
-    lo_app->mt_field = temp502.
+    CLEAR temp545.
+    INSERT `MATNR` INTO TABLE temp545.
+    INSERT `/CWM/XCWMAT` INTO TABLE temp545.
+    lo_app->mt_field = temp545.
     lo_app->build( ).
 
     CREATE OBJECT lo_cont TYPE z2ui5_cl_ui5_app_cont.
@@ -9547,11 +10291,11 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     cl_abap_unit_assert=>assert_equals( exp = tm_pop_ajson_text( lo_cont )
                                         act = lv_act ).
 
-    temp115 = boolc( lv_act CS `z2ui5-fast-` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp115 ).
+    temp120 = boolc( lv_act CS `z2ui5-fast-` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp120 ).
 
-    temp116 = boolc( lv_act CS `"MATNR":[{"DESCR":"a of MATNR"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp116 ).
+    temp121 = boolc( lv_act CS `"MATNR":[{"DESCR":"a of MATNR"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp121 ).
 
   ENDMETHOD.
 
@@ -9562,19 +10306,19 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     " replaces the node holding the first token. The general road loses
     " that value the same way - the document is the same, not an error
     DATA lo_app TYPE REF TO ltcl_app_tm_pop.
-    DATA temp505 TYPE string_table.
+    DATA temp548 TYPE string_table.
     DATA lo_cont TYPE REF TO z2ui5_cl_ui5_app_cont.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA lv_act TYPE string.
-    DATA temp117 TYPE xsdboolean.
-    DATA temp118 TYPE xsdboolean.
+    DATA temp122 TYPE xsdboolean.
+    DATA temp123 TYPE xsdboolean.
     CREATE OBJECT lo_app TYPE ltcl_app_tm_pop.
 
-    CLEAR temp505.
-    INSERT `/CWM/XCWMAT` INTO TABLE temp505.
-    INSERT `CWM` INTO TABLE temp505.
-    INSERT `MATNR` INTO TABLE temp505.
-    lo_app->mt_field = temp505.
+    CLEAR temp548.
+    INSERT `/CWM/XCWMAT` INTO TABLE temp548.
+    INSERT `CWM` INTO TABLE temp548.
+    INSERT `MATNR` INTO TABLE temp548.
+    lo_app->mt_field = temp548.
     lo_app->build( ).
 
     CREATE OBJECT lo_cont TYPE z2ui5_cl_ui5_app_cont.
@@ -9590,18 +10334,18 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     cl_abap_unit_assert=>assert_equals( exp = tm_pop_ajson_text( lo_cont )
                                         act = lv_act ).
 
-    temp117 = boolc( lv_act CS `z2ui5-fast-` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp117 ).
+    temp122 = boolc( lv_act CS `z2ui5-fast-` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp122 ).
 
-    temp118 = boolc( lv_act CS `"CWM":[{"DESCR":"a of CWM"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp118 ).
+    temp123 = boolc( lv_act CS `"CWM":[{"DESCR":"a of CWM"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp123 ).
 
   ENDMETHOD.
 
   METHOD ns_setup.
     DATA lo_bind TYPE REF TO z2ui5_cl_ui5_srv_bind.
-    DATA temp507 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
-    DATA temp508 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+    DATA temp550 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+    DATA temp551 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
 
     CREATE OBJECT eo_app.
     eo_app->build( ).
@@ -9610,15 +10354,15 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
     CREATE OBJECT lo_bind TYPE z2ui5_cl_ui5_srv_bind EXPORTING APP = eo_cont.
 
-    CLEAR temp507.
-    temp507-path_only = abap_true.
+    CLEAR temp550.
+    temp550-path_only = abap_true.
     INSERT lo_bind->main( val    = eo_app->mr_tab
-                          config = temp507 ) INTO TABLE et_path.
+                          config = temp550 ) INTO TABLE et_path.
 
-    CLEAR temp508.
-    temp508-path_only = abap_true.
+    CLEAR temp551.
+    temp551-path_only = abap_true.
     INSERT lo_bind->main( val    = eo_app->mr_deep
-                          config = temp508 ) INTO TABLE et_path.
+                          config = temp551 ) INTO TABLE et_path.
 
   ENDMETHOD.
 
@@ -9632,8 +10376,8 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     DATA li_tree TYPE REF TO z2ui5_cl_ajson.
     FIELD-SYMBOLS <tab> TYPE any.
     DATA li_doc TYPE REF TO z2ui5_cl_ajson.
-    FIELD-SYMBOLS <temp509> LIKE LINE OF lt_path.
-    DATA temp510 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp552> LIKE LINE OF lt_path.
+    DATA temp553 LIKE sy-tabix.
     ns_setup( IMPORTING eo_app  = lo_app
                         eo_cont = lo_cont
                         et_path = lt_path ).
@@ -9662,14 +10406,14 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     li_doc = z2ui5_cl_ajson=>parse( lo_model->main_json_stringify( ) ).
 
 
-    temp510 = sy-tabix.
-    READ TABLE lt_path INDEX 1 ASSIGNING <temp509>.
-    sy-tabix = temp510.
+    temp553 = sy-tabix.
+    READ TABLE lt_path INDEX 1 ASSIGNING <temp552>.
+    sy-tabix = temp553.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `X2`
-                                        act = li_doc->get_string( |{ <temp509> }/2/CWM/XCWMAT| ) ).
+                                        act = li_doc->get_string( |{ <temp552> }/2/CWM/XCWMAT| ) ).
     cl_abap_unit_assert=>assert_equals( exp = `CWM/XCWMAT`
                                         act = z2ui5_cl_ui5_view_builder=>component_path( `/CWM/XCWMAT` ) ).
     cl_abap_unit_assert=>assert_equals( exp = `MATNR`
@@ -9695,13 +10439,13 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     DATA lt_path TYPE string_table.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA lv_act TYPE string.
-    DATA temp119 TYPE xsdboolean.
-    DATA temp120 TYPE xsdboolean.
-    DATA temp121 TYPE xsdboolean.
-    DATA temp122 TYPE xsdboolean.
+    DATA temp124 TYPE xsdboolean.
+    DATA temp125 TYPE xsdboolean.
+    DATA temp126 TYPE xsdboolean.
+    DATA temp127 TYPE xsdboolean.
     DATA li_doc TYPE REF TO z2ui5_cl_ajson.
-    FIELD-SYMBOLS <temp511> LIKE LINE OF lt_path.
-    DATA temp512 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp554> LIKE LINE OF lt_path.
+    DATA temp555 LIKE sy-tabix.
     ns_setup( IMPORTING eo_app  = lo_app
                         eo_cont = lo_cont
                         et_path = lt_path ).
@@ -9713,29 +10457,29 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
     lv_act = lo_model->main_json_stringify( ).
 
-    temp119 = boolc( lv_act CS `z2ui5-fast-` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp119 ).
+    temp124 = boolc( lv_act CS `z2ui5-fast-` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp124 ).
 
-    temp120 = boolc( lv_act CS `"/` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp120 ).
+    temp125 = boolc( lv_act CS `"/` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp125 ).
 
-    temp121 = boolc( lv_act CS `[{"ABC":{"ITEMS":[{"AA_FIRST":"A1","CWM":{"VALUM":10,"XCWMAT":"X1"},"MATNR":"M1","VSO":{"R_TILT":"T1"}},` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp121 ).
+    temp126 = boolc( lv_act CS `[{"ABC":{"ITEMS":[{"AA_FIRST":"A1","CWM":{"VALUM":10,"XCWMAT":"X1"},"MATNR":"M1","VSO":{"R_TILT":"T1"}},` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp126 ).
 
-    temp122 = boolc( lv_act CS `],"NOTE":"note"},"ID":1}]` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp122 ).
+    temp127 = boolc( lv_act CS `],"NOTE":"note"},"ID":1}]` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp127 ).
 
     li_doc = z2ui5_cl_ajson=>parse( lv_act ).
 
 
-    temp512 = sy-tabix.
-    READ TABLE lt_path INDEX 2 ASSIGNING <temp511>.
-    sy-tabix = temp512.
+    temp555 = sy-tabix.
+    READ TABLE lt_path INDEX 2 ASSIGNING <temp554>.
+    sy-tabix = temp555.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `X2`
-                                        act = li_doc->get_string( |{ <temp511> }/1/ABC/ITEMS/2/CWM/XCWMAT| ) ).
+                                        act = li_doc->get_string( |{ <temp554> }/1/ABC/ITEMS/2/CWM/XCWMAT| ) ).
 
   ENDMETHOD.
 
@@ -9746,9 +10490,9 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
     DATA lt_rows TYPE ltcl_06_fast_json=>ty_t_kinds.
     DATA li_tree TYPE REF TO z2ui5_cl_ajson.
     DATA lt_nested TYPE ty_t_nested.
-    DATA temp513 TYPE ltcl_06_fast_json=>ty_t_nested.
-    DATA temp514 LIKE LINE OF temp513.
-    DATA temp515 LIKE REF TO lt_rows.
+    DATA temp556 TYPE ltcl_06_fast_json=>ty_t_nested.
+    DATA temp557 LIKE LINE OF temp556.
+    DATA temp558 LIKE REF TO lt_rows.
     lt_rows = rows( ).
 
     li_tree = z2ui5_cl_ajson=>create_empty( ii_custom_mapping = z2ui5_cl_ui5_util_json_fl=>mapper_upper( ) ).
@@ -9760,13 +10504,13 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
 
 
-    CLEAR temp513.
+    CLEAR temp556.
 
-    temp514-id = 1.
-    INSERT temp514 INTO TABLE temp513.
-    temp514-id = 2.
-    INSERT temp514 INTO TABLE temp513.
-    lt_nested = temp513.
+    temp557-id = 1.
+    INSERT temp557 INTO TABLE temp556.
+    temp557-id = 2.
+    INSERT temp557 INTO TABLE temp556.
+    lt_nested = temp556.
     li_tree = z2ui5_cl_ajson=>create_empty( ii_custom_mapping = z2ui5_cl_ui5_util_json_fl=>mapper_upper( ) ).
     li_tree->set( iv_ignore_empty = abap_false
                   iv_path         = `/`
@@ -9776,9 +10520,9 @@ cl_abap_unit_assert=>assert_not_initial( mo_model->attri_json_fast( temp478 ) ).
 
     " and the plain table on the fast path is the text it always was
 
-    GET REFERENCE OF lt_rows INTO temp515.
+    GET REFERENCE OF lt_rows INTO temp558.
 cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
-                                        act = mo_model->attri_json_fast( temp515 ) ).
+                                        act = mo_model->attri_json_fast( temp558 ) ).
 
   ENDMETHOD.
 
@@ -9790,14 +10534,14 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
     DATA lo_app TYPE REF TO ltcl_app_ns.
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <row> TYPE any.
-    DATA temp123 TYPE xsdboolean.
+    DATA temp128 TYPE xsdboolean.
     FIELD-SYMBOLS <cell> TYPE any.
     DATA lo_cont TYPE REF TO z2ui5_cl_ui5_app_cont.
     DATA lo_client TYPE REF TO z2ui5_cl_ui5_srv_bind.
-    DATA temp516 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+    DATA temp559 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA lv_act TYPE string.
-    DATA temp124 TYPE xsdboolean.
+    DATA temp129 TYPE xsdboolean.
     CREATE OBJECT lo_app TYPE ltcl_app_ns.
     lo_app->build( ).
 
@@ -9808,8 +10552,8 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
 
     READ TABLE <tab> INDEX 1 ASSIGNING <row>.
 
-    temp123 = boolc( <row> IS ASSIGNED ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp123 ).
+    temp128 = boolc( <row> IS ASSIGNED ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp128 ).
 
     ASSIGN COMPONENT `/CWM/XCWMAT` OF STRUCTURE <row> TO <cell>.
     cl_abap_unit_assert=>assert_subrc( ).
@@ -9823,19 +10567,19 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
 
     CREATE OBJECT lo_client TYPE z2ui5_cl_ui5_srv_bind EXPORTING APP = lo_cont.
 
-    CLEAR temp516.
-    temp516-path_only = abap_true.
-    CREATE OBJECT temp516-custom_filter TYPE ltcl_shp_filter.
+    CLEAR temp559.
+    temp559-path_only = abap_true.
+    CREATE OBJECT temp559-custom_filter TYPE ltcl_shp_filter.
     lo_client->main( val    = lo_app->mr_tab
-                     config = temp516 ).
+                     config = temp559 ).
 
     CREATE OBJECT lo_model TYPE z2ui5_cl_ui5_srv_model EXPORTING attri = lo_cont->mt_attri app = lo_app.
 
     lv_act = lo_model->main_json_stringify( ).
 
-    temp124 = boolc( lv_act CS `[{"AA_FIRST":"A1","CWM":{"VALUM":10},"MATNR":"M1"}]` ).
+    temp129 = boolc( lv_act CS `[{"AA_FIRST":"A1","CWM":{"VALUM":10},"MATNR":"M1"}]` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true
-        act = temp124
+        act = temp129
         msg = lv_act ).
 
   ENDMETHOD.
@@ -9846,21 +10590,21 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
     DATA lo_cont TYPE REF TO z2ui5_cl_ui5_app_cont.
     DATA lt_path TYPE string_table.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
-    DATA temp517 TYPE REF TO z2ui5_if_ajson.
-    DATA li_front LIKE temp517.
-    FIELD-SYMBOLS <temp518> LIKE LINE OF lt_path.
-    DATA temp519 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp520> LIKE LINE OF lt_path.
-    DATA temp521 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp522> LIKE LINE OF lt_path.
-    DATA temp523 LIKE sy-tabix.
+    DATA temp560 TYPE REF TO z2ui5_if_ajson.
+    DATA li_front LIKE temp560.
+    FIELD-SYMBOLS <temp561> LIKE LINE OF lt_path.
+    DATA temp562 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp563> LIKE LINE OF lt_path.
+    DATA temp564 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp565> LIKE LINE OF lt_path.
+    DATA temp566 LIKE sy-tabix.
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <row_1> TYPE any.
     FIELD-SYMBOLS <row_2> TYPE any.
-    FIELD-SYMBOLS <temp524> LIKE LINE OF lo_model->mt_skipped.
-    DATA temp525 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp526> LIKE LINE OF lo_model->mt_skipped.
-    DATA temp527 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp567> LIKE LINE OF lo_model->mt_skipped.
+    DATA temp568 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp569> LIKE LINE OF lo_model->mt_skipped.
+    DATA temp570 LIKE sy-tabix.
     ns_setup( IMPORTING eo_app  = lo_app
                         eo_cont = lo_cont
                         et_path = lt_path ).
@@ -9869,38 +10613,38 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
     " what Lib.buildDeltaFromPaths sends for an edit at /<table>/1/CWM/XCWMAT:
     " the row's member CWM whole, read from the client's model
 
-    temp517 ?= z2ui5_cl_ajson=>create_empty( ).
+    temp560 ?= z2ui5_cl_ajson=>create_empty( ).
 
-    li_front = temp517.
+    li_front = temp560.
 
 
-    temp519 = sy-tabix.
-    READ TABLE lt_path INDEX 1 ASSIGNING <temp518>.
-    sy-tabix = temp519.
+    temp562 = sy-tabix.
+    READ TABLE lt_path INDEX 1 ASSIGNING <temp561>.
+    sy-tabix = temp562.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    li_front->set( iv_path = |{ <temp518> }/__delta/1/CWM/XCWMAT|
+    li_front->set( iv_path = |{ <temp561> }/__delta/1/CWM/XCWMAT|
                    iv_val  = `edited` ).
 
 
-    temp521 = sy-tabix.
-    READ TABLE lt_path INDEX 1 ASSIGNING <temp520>.
-    sy-tabix = temp521.
+    temp564 = sy-tabix.
+    READ TABLE lt_path INDEX 1 ASSIGNING <temp563>.
+    sy-tabix = temp564.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    li_front->set( iv_path = |{ <temp520> }/__delta/1/CWM/VALUM|
+    li_front->set( iv_path = |{ <temp563> }/__delta/1/CWM/VALUM|
                    iv_val  = `abc` ).
 
 
-    temp523 = sy-tabix.
-    READ TABLE lt_path INDEX 1 ASSIGNING <temp522>.
-    sy-tabix = temp523.
+    temp566 = sy-tabix.
+    READ TABLE lt_path INDEX 1 ASSIGNING <temp565>.
+    sy-tabix = temp566.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    li_front->set( iv_path = |{ <temp522> }/__delta/1/MATNR|
+    li_front->set( iv_path = |{ <temp565> }/__delta/1/MATNR|
                    iv_val  = `M-edited` ).
     lo_model->main_json_to_attri( li_front ).
 
@@ -9929,24 +10673,24 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
                                         act = lines( lo_model->mt_skipped ) ).
 
 
-    temp525 = sy-tabix.
-    READ TABLE lo_model->mt_skipped INDEX 1 ASSIGNING <temp524>.
-    sy-tabix = temp525.
+    temp568 = sy-tabix.
+    READ TABLE lo_model->mt_skipped INDEX 1 ASSIGNING <temp567>.
+    sy-tabix = temp568.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `/CWM/VALUM`
-                                        act = <temp524>-field ).
+                                        act = <temp567>-field ).
 
 
-    temp527 = sy-tabix.
-    READ TABLE lo_model->mt_skipped INDEX 1 ASSIGNING <temp526>.
-    sy-tabix = temp527.
+    temp570 = sy-tabix.
+    READ TABLE lo_model->mt_skipped INDEX 1 ASSIGNING <temp569>.
+    sy-tabix = temp570.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = 2
-                                        act = <temp526>-row ).
+                                        act = <temp569>-row ).
 
   ENDMETHOD.
 
@@ -9960,16 +10704,16 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
     DATA lt_path TYPE string_table.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA li_out TYPE REF TO z2ui5_cl_ajson.
-    DATA temp528 TYPE REF TO z2ui5_if_ajson.
-    DATA li_front LIKE temp528.
-    FIELD-SYMBOLS <temp529> LIKE LINE OF lt_path.
-    DATA temp530 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp123> LIKE LINE OF lt_path.
-    DATA temp124 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp531> LIKE LINE OF lt_path.
-    DATA temp532 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp533> LIKE LINE OF lt_path.
-    DATA temp534 LIKE sy-tabix.
+    DATA temp571 TYPE REF TO z2ui5_if_ajson.
+    DATA li_front LIKE temp571.
+    FIELD-SYMBOLS <temp572> LIKE LINE OF lt_path.
+    DATA temp573 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp133> LIKE LINE OF lt_path.
+    DATA temp134 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp574> LIKE LINE OF lt_path.
+    DATA temp575 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp576> LIKE LINE OF lt_path.
+    DATA temp577 LIKE sy-tabix.
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <row_1> TYPE any.
     FIELD-SYMBOLS <row_2> TYPE any.
@@ -9981,46 +10725,46 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
 
     li_out = z2ui5_cl_ajson=>parse( lo_model->main_json_stringify( ) ).
 
-    temp528 ?= z2ui5_cl_ajson=>create_empty( ).
+    temp571 ?= z2ui5_cl_ajson=>create_empty( ).
 
-    li_front = temp528.
+    li_front = temp571.
 
 
-    temp530 = sy-tabix.
-    READ TABLE lt_path INDEX 1 ASSIGNING <temp529>.
-    sy-tabix = temp530.
+    temp573 = sy-tabix.
+    READ TABLE lt_path INDEX 1 ASSIGNING <temp572>.
+    sy-tabix = temp573.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
 
 
-    temp124 = sy-tabix.
-    READ TABLE lt_path INDEX 1 ASSIGNING <temp123>.
-    sy-tabix = temp124.
+    temp134 = sy-tabix.
+    READ TABLE lt_path INDEX 1 ASSIGNING <temp133>.
+    sy-tabix = temp134.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    li_front->set( iv_path = <temp529>
-                   iv_val  = li_out->slice( <temp123> ) ).
+    li_front->set( iv_path = <temp572>
+                   iv_val  = li_out->slice( <temp133> ) ).
 
 
-    temp532 = sy-tabix.
-    READ TABLE lt_path INDEX 1 ASSIGNING <temp531>.
-    sy-tabix = temp532.
+    temp575 = sy-tabix.
+    READ TABLE lt_path INDEX 1 ASSIGNING <temp574>.
+    sy-tabix = temp575.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    li_front->set( iv_path = |{ <temp531> }/1/CWM/XCWMAT|
+    li_front->set( iv_path = |{ <temp574> }/1/CWM/XCWMAT|
                    iv_val  = `whole` ).
 
 
-    temp534 = sy-tabix.
-    READ TABLE lt_path INDEX 1 ASSIGNING <temp533>.
-    sy-tabix = temp534.
+    temp577 = sy-tabix.
+    READ TABLE lt_path INDEX 1 ASSIGNING <temp576>.
+    sy-tabix = temp577.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    li_front->set( iv_path = |{ <temp533> }/2/VSO/R_TILT|
+    li_front->set( iv_path = |{ <temp576> }/2/VSO/R_TILT|
                    iv_val  = `tilt` ).
     lo_model->main_json_to_attri( li_front ).
 
@@ -10061,20 +10805,20 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
     DATA lt_path TYPE string_table.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA li_out TYPE REF TO z2ui5_cl_ajson.
-    DATA temp535 TYPE REF TO z2ui5_if_ajson.
-    DATA li_front LIKE temp535.
-    FIELD-SYMBOLS <temp536> LIKE LINE OF lt_path.
-    DATA temp537 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp125> LIKE LINE OF lt_path.
-    DATA temp126 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp538> LIKE LINE OF lt_path.
-    DATA temp539 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp540> LIKE LINE OF lt_path.
-    DATA temp541 LIKE sy-tabix.
+    DATA temp578 TYPE REF TO z2ui5_if_ajson.
+    DATA li_front LIKE temp578.
+    FIELD-SYMBOLS <temp579> LIKE LINE OF lt_path.
+    DATA temp580 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp135> LIKE LINE OF lt_path.
+    DATA temp136 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp581> LIKE LINE OF lt_path.
+    DATA temp582 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp583> LIKE LINE OF lt_path.
+    DATA temp584 LIKE sy-tabix.
     FIELD-SYMBOLS <deep> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <items> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <deep_row> TYPE any.
-    DATA temp125 TYPE xsdboolean.
+    DATA temp130 TYPE xsdboolean.
     FIELD-SYMBOLS <item_1> TYPE any.
     FIELD-SYMBOLS <item_2> TYPE any.
     ns_setup( IMPORTING eo_app  = lo_app
@@ -10085,46 +10829,46 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
 
     li_out = z2ui5_cl_ajson=>parse( lo_model->main_json_stringify( ) ).
 
-    temp535 ?= z2ui5_cl_ajson=>create_empty( ).
+    temp578 ?= z2ui5_cl_ajson=>create_empty( ).
 
-    li_front = temp535.
+    li_front = temp578.
 
 
-    temp537 = sy-tabix.
-    READ TABLE lt_path INDEX 2 ASSIGNING <temp536>.
-    sy-tabix = temp537.
+    temp580 = sy-tabix.
+    READ TABLE lt_path INDEX 2 ASSIGNING <temp579>.
+    sy-tabix = temp580.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
 
 
-    temp126 = sy-tabix.
-    READ TABLE lt_path INDEX 2 ASSIGNING <temp125>.
-    sy-tabix = temp126.
+    temp136 = sy-tabix.
+    READ TABLE lt_path INDEX 2 ASSIGNING <temp135>.
+    sy-tabix = temp136.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    li_front->set( iv_path = |{ <temp536> }/__delta/0/ABC|
-                   iv_val  = li_out->slice( |{ <temp125> }/1/ABC| ) ).
+    li_front->set( iv_path = |{ <temp579> }/__delta/0/ABC|
+                   iv_val  = li_out->slice( |{ <temp135> }/1/ABC| ) ).
 
 
-    temp539 = sy-tabix.
-    READ TABLE lt_path INDEX 2 ASSIGNING <temp538>.
-    sy-tabix = temp539.
+    temp582 = sy-tabix.
+    READ TABLE lt_path INDEX 2 ASSIGNING <temp581>.
+    sy-tabix = temp582.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    li_front->set( iv_path = |{ <temp538> }/__delta/0/ABC/ITEMS/2/CWM/XCWMAT|
+    li_front->set( iv_path = |{ <temp581> }/__delta/0/ABC/ITEMS/2/CWM/XCWMAT|
                    iv_val  = `deep` ).
 
 
-    temp541 = sy-tabix.
-    READ TABLE lt_path INDEX 2 ASSIGNING <temp540>.
-    sy-tabix = temp541.
+    temp584 = sy-tabix.
+    READ TABLE lt_path INDEX 2 ASSIGNING <temp583>.
+    sy-tabix = temp584.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    li_front->set( iv_path = |{ <temp540> }/__delta/0/ABC/NOTE|
+    li_front->set( iv_path = |{ <temp583> }/__delta/0/ABC/NOTE|
                    iv_val  = `note2` ).
     lo_model->main_json_to_attri( li_front ).
 
@@ -10134,8 +10878,8 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
 
     READ TABLE <deep> INDEX 1 ASSIGNING <deep_row>.
 
-    temp125 = boolc( <deep_row> IS ASSIGNED ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp125 ).
+    temp130 = boolc( <deep_row> IS ASSIGNED ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp130 ).
     cl_abap_unit_assert=>assert_equals( exp = `note2`
                                         act = ltcl_app_ns=>cell( is_row  = <deep_row>
                                                                  iv_name = `/ABC/NOTE` ) ).
@@ -10168,13 +10912,13 @@ cl_abap_unit_assert=>assert_equals( exp = ajson_text( lt_rows )
     DATA lo_cont TYPE REF TO z2ui5_cl_ui5_app_cont.
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <row> TYPE any.
-    DATA temp126 TYPE xsdboolean.
+    DATA temp131 TYPE xsdboolean.
     FIELD-SYMBOLS <cell> TYPE any.
     DATA lo_bind TYPE REF TO z2ui5_cl_ui5_srv_bind.
-    DATA temp542 TYPE REF TO data.
-DATA temp127 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+    DATA temp585 TYPE REF TO data.
+DATA temp137 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
 DATA lv_path TYPE string.
-    DATA temp543 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+    DATA temp586 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
     DATA lv_tab TYPE string.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA li_doc TYPE REF TO z2ui5_cl_ajson.
@@ -10188,29 +10932,29 @@ DATA lv_path TYPE string.
 
     READ TABLE <tab> INDEX 2 ASSIGNING <row>.
 
-    temp126 = boolc( <row> IS ASSIGNED ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp126 ).
+    temp131 = boolc( <row> IS ASSIGNED ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp131 ).
 
     ASSIGN COMPONENT `/CWM/XCWMAT` OF STRUCTURE <row> TO <cell>.
     cl_abap_unit_assert=>assert_subrc( ).
 
     CREATE OBJECT lo_bind TYPE z2ui5_cl_ui5_srv_bind EXPORTING APP = lo_cont.
 
-GET REFERENCE OF <cell> INTO temp542.
+GET REFERENCE OF <cell> INTO temp585.
 
-CLEAR temp127.
-temp127-tab = lo_app->mr_tab.
-temp127-tab_index = 2.
-temp127-path_only = abap_true.
+CLEAR temp137.
+temp137-tab = lo_app->mr_tab.
+temp137-tab_index = 2.
+temp137-path_only = abap_true.
 
-lv_path = lo_bind->main( val    = temp542
-                                   config = temp127 ).
+lv_path = lo_bind->main( val    = temp585
+                                   config = temp137 ).
 
-    CLEAR temp543.
-    temp543-path_only = abap_true.
+    CLEAR temp586.
+    temp586-path_only = abap_true.
 
     lv_tab = lo_bind->main( val    = lo_app->mr_tab
-                                  config = temp543 ).
+                                  config = temp586 ).
     " UI5 counts the rows from 0
     cl_abap_unit_assert=>assert_equals( exp = |{ lv_tab }/1/CWM/XCWMAT|
                                         act = lv_path ).
@@ -10342,11 +11086,11 @@ CLASS ltcl_07_intf_attr IMPLEMENTATION.
 
   METHOD bind.
 
-    DATA temp544 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
-    CLEAR temp544.
-    temp544-path_only = abap_true.
+    DATA temp587 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+    CLEAR temp587.
+    temp587-path_only = abap_true.
     result = mo_bind->main( val    = ir_val
-                            config = temp544 ).
+                            config = temp587 ).
 
   ENDMETHOD.
 
@@ -10366,27 +11110,27 @@ CLASS ltcl_07_intf_attr IMPLEMENTATION.
 
   METHOD intf_attribute_bound.
 
-    DATA temp545 LIKE REF TO mo_app->mv_own.
-    DATA temp546 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
-    DATA temp547 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
-    DATA temp548 LIKE REF TO mo_app->mv_own.
-    GET REFERENCE OF mo_app->mv_own INTO temp545.
+    DATA temp588 LIKE REF TO mo_app->mv_own.
+    DATA temp589 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
+    DATA temp590 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
+    DATA temp591 LIKE REF TO mo_app->mv_own.
+    GET REFERENCE OF mo_app->mv_own INTO temp588.
 cl_abap_unit_assert=>assert_equals( exp = `/MV_OWN`
-                                        act = bind( temp545 ) ).
+                                        act = bind( temp588 ) ).
 
-    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp546.
+    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp589.
 cl_abap_unit_assert=>assert_equals( exp = `/LIF_INTF_ATTR~MV_INTF`
-                                        act = bind( temp546 ) ).
+                                        act = bind( temp589 ) ).
     " a second bind finds the row the first one created
 
-    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp547.
+    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp590.
 cl_abap_unit_assert=>assert_equals( exp = `/LIF_INTF_ATTR~MV_INTF`
-                                        act = bind( temp547 ) ).
+                                        act = bind( temp590 ) ).
     " and the class attribute keeps its path
 
-    GET REFERENCE OF mo_app->mv_own INTO temp548.
+    GET REFERENCE OF mo_app->mv_own INTO temp591.
 cl_abap_unit_assert=>assert_equals( exp = `/MV_OWN`
-                                        act = bind( temp548 ) ).
+                                        act = bind( temp591 ) ).
 
   ENDMETHOD.
 
@@ -10394,9 +11138,9 @@ cl_abap_unit_assert=>assert_equals( exp = `/MV_OWN`
 
     " the app implements three interfaces - none of their attributes is
     " dissolved while nothing binds one
-    DATA temp549 LIKE REF TO mo_app->mv_own.
-    GET REFERENCE OF mo_app->mv_own INTO temp549.
-bind( temp549 ).
+    DATA temp592 LIKE REF TO mo_app->mv_own.
+    GET REFERENCE OF mo_app->mv_own INTO temp592.
+bind( temp592 ).
     cl_abap_unit_assert=>assert_equals( exp = 0
                                         act = intf_rows( ) ).
 
@@ -10406,75 +11150,75 @@ bind( temp549 ).
 
     " a reference typed with the interface, no alias: the class of the
     " object behind it declares nothing of its own
-    DATA temp550 LIKE REF TO mo_app->mi_state->mv_intf.
-    DATA temp551 LIKE REF TO mo_app->mo_state->lif_intf_attr~mv_intf.
-    GET REFERENCE OF mo_app->mi_state->mv_intf INTO temp550.
+    DATA temp593 LIKE REF TO mo_app->mi_state->mv_intf.
+    DATA temp594 LIKE REF TO mo_app->mo_state->lif_intf_attr~mv_intf.
+    GET REFERENCE OF mo_app->mi_state->mv_intf INTO temp593.
 cl_abap_unit_assert=>assert_equals( exp = `/MI_STATE/LIF_INTF_ATTR~MV_INTF`
-                                        act = bind( temp550 ) ).
+                                        act = bind( temp593 ) ).
     " an object reference, its interface attribute spelled out
 
-    GET REFERENCE OF mo_app->mo_state->lif_intf_attr~mv_intf INTO temp551.
+    GET REFERENCE OF mo_app->mo_state->lif_intf_attr~mv_intf INTO temp594.
 cl_abap_unit_assert=>assert_equals( exp = `/MO_STATE/LIF_INTF_ATTR~MV_INTF`
-                                        act = bind( temp551 ) ).
+                                        act = bind( temp594 ) ).
 
   ENDMETHOD.
 
   METHOD intf_struct_and_table.
 
-    DATA temp552 LIKE REF TO mo_app->lif_intf_attr~ms_intf-name.
-    DATA temp553 LIKE REF TO mo_app->lif_intf_attr~mt_intf.
-    DATA temp127 TYPE xsdboolean.
-    DATA temp21 LIKE sy-subrc.
-    GET REFERENCE OF mo_app->lif_intf_attr~ms_intf-name INTO temp552.
+    DATA temp595 LIKE REF TO mo_app->lif_intf_attr~ms_intf-name.
+    DATA temp596 LIKE REF TO mo_app->lif_intf_attr~mt_intf.
+    DATA temp132 TYPE xsdboolean.
+    DATA temp23 LIKE sy-subrc.
+    GET REFERENCE OF mo_app->lif_intf_attr~ms_intf-name INTO temp595.
 cl_abap_unit_assert=>assert_equals( exp = `/LIF_INTF_ATTR~MS_INTF/NAME`
-                                        act = bind( temp552 ) ).
+                                        act = bind( temp595 ) ).
 
-    GET REFERENCE OF mo_app->lif_intf_attr~mt_intf INTO temp553.
+    GET REFERENCE OF mo_app->lif_intf_attr~mt_intf INTO temp596.
 cl_abap_unit_assert=>assert_equals( exp = `/LIF_INTF_ATTR~MT_INTF`
-                                        act = bind( temp553 ) ).
+                                        act = bind( temp596 ) ).
     " a constant of the interface is no row
 
 
     READ TABLE mo_cont->mt_attri->* WITH KEY name = `LIF_INTF_ATTR~C_CONST` TRANSPORTING NO FIELDS.
-    temp21 = sy-subrc.
-    temp127 = boolc( temp21 = 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp127 ).
+    temp23 = sy-subrc.
+    temp132 = boolc( temp23 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp132 ).
 
   ENDMETHOD.
 
   METHOD intf_model_out_and_back.
-    DATA temp554 TYPE lif_intf_attr=>ty_t_row.
-    DATA temp555 LIKE LINE OF temp554.
-    DATA temp556 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
-    DATA temp557 LIKE REF TO mo_app->lif_intf_attr~mt_intf.
-    DATA temp558 LIKE REF TO mo_app->mi_state->mv_intf.
+    DATA temp597 TYPE lif_intf_attr=>ty_t_row.
+    DATA temp598 LIKE LINE OF temp597.
+    DATA temp599 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
+    DATA temp600 LIKE REF TO mo_app->lif_intf_attr~mt_intf.
+    DATA temp601 LIKE REF TO mo_app->mi_state->mv_intf.
     DATA li_doc TYPE REF TO z2ui5_cl_ajson.
-    FIELD-SYMBOLS <temp559> LIKE LINE OF mo_app->lif_intf_attr~mt_intf.
-    DATA temp560 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp561> LIKE LINE OF mo_app->lif_intf_attr~mt_intf.
-    DATA temp562 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp602> LIKE LINE OF mo_app->lif_intf_attr~mt_intf.
+    DATA temp603 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp604> LIKE LINE OF mo_app->lif_intf_attr~mt_intf.
+    DATA temp605 LIKE sy-tabix.
 
     mo_app->lif_intf_attr~mv_intf = `out`.
 
-    CLEAR temp554.
+    CLEAR temp597.
 
-    temp555-name = `A`.
-    temp555-qty = 1.
-    INSERT temp555 INTO TABLE temp554.
-    temp555-name = `B`.
-    temp555-qty = 2.
-    INSERT temp555 INTO TABLE temp554.
-    mo_app->lif_intf_attr~mt_intf = temp554.
+    temp598-name = `A`.
+    temp598-qty = 1.
+    INSERT temp598 INTO TABLE temp597.
+    temp598-name = `B`.
+    temp598-qty = 2.
+    INSERT temp598 INTO TABLE temp597.
+    mo_app->lif_intf_attr~mt_intf = temp597.
     mo_app->mi_state->mv_intf = `ref-out`.
 
-    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp556.
-bind( temp556 ).
+    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp599.
+bind( temp599 ).
 
-    GET REFERENCE OF mo_app->lif_intf_attr~mt_intf INTO temp557.
-bind( temp557 ).
+    GET REFERENCE OF mo_app->lif_intf_attr~mt_intf INTO temp600.
+bind( temp600 ).
 
-    GET REFERENCE OF mo_app->mi_state->mv_intf INTO temp558.
-bind( temp558 ).
+    GET REFERENCE OF mo_app->mi_state->mv_intf INTO temp601.
+bind( temp601 ).
 
 
     li_doc = z2ui5_cl_ajson=>parse( model( )->main_json_stringify( ) ).
@@ -10493,33 +11237,33 @@ bind( temp558 ).
                                         act = mo_app->lif_intf_attr~mv_intf ).
 
 
-    temp560 = sy-tabix.
-    READ TABLE mo_app->lif_intf_attr~mt_intf INDEX 2 ASSIGNING <temp559>.
-    sy-tabix = temp560.
+    temp603 = sy-tabix.
+    READ TABLE mo_app->lif_intf_attr~mt_intf INDEX 2 ASSIGNING <temp602>.
+    sy-tabix = temp603.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = 7
-                                        act = <temp559>-qty ).
+                                        act = <temp602>-qty ).
 
 
-    temp562 = sy-tabix.
-    READ TABLE mo_app->lif_intf_attr~mt_intf INDEX 1 ASSIGNING <temp561>.
-    sy-tabix = temp562.
+    temp605 = sy-tabix.
+    READ TABLE mo_app->lif_intf_attr~mt_intf INDEX 1 ASSIGNING <temp604>.
+    sy-tabix = temp605.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = 1
-                                        act = <temp561>-qty ).
+                                        act = <temp604>-qty ).
     cl_abap_unit_assert=>assert_equals( exp = `ref-in`
                                         act = mo_app->mi_state->mv_intf ).
 
   ENDMETHOD.
 
   METHOD intf_namespaced_level.
-    DATA temp563 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
-    FIELD-SYMBOLS <temp564> LIKE LINE OF mo_cont->mt_attri->*.
-    DATA temp565 LIKE sy-tabix.
+    DATA temp606 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
+    FIELD-SYMBOLS <temp607> LIKE LINE OF mo_cont->mt_attri->*.
+    DATA temp608 LIKE sy-tabix.
 
     " a namespaced interface - `/NS/IF~ATTR`, no local interface can be
     " named so - becomes a level of the model like every namespace
@@ -10527,17 +11271,17 @@ bind( temp558 ).
     " given that client name, and the value travels out and back under it
     mo_app->lif_intf_attr~mv_intf = `out`.
 
-    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp563.
-bind( temp563 ).
+    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp606.
+bind( temp606 ).
 
 
-    temp565 = sy-tabix.
-    READ TABLE mo_cont->mt_attri->* WITH KEY name = `LIF_INTF_ATTR~MV_INTF` ASSIGNING <temp564>.
-    sy-tabix = temp565.
+    temp608 = sy-tabix.
+    READ TABLE mo_cont->mt_attri->* WITH KEY name = `LIF_INTF_ATTR~MV_INTF` ASSIGNING <temp607>.
+    sy-tabix = temp608.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    <temp564>-name_client = `/NS/LIF_INTF_ATTR~MV_INTF`.
+    <temp607>-name_client = `/NS/LIF_INTF_ATTR~MV_INTF`.
 
     cl_abap_unit_assert=>assert_equals( exp = `{"NS":{"LIF_INTF_ATTR~MV_INTF":"out"}}`
                                         act = model( )->main_json_stringify( ) ).
@@ -10556,49 +11300,49 @@ bind( temp563 ).
     " attributes (`MV_SHARED`) and the interface spelling is left out
     " (diss_oref_intf, alias_dedupe_by_reference below); the transpiled
     " runtime lists no ALIASES at all, so there it is the interface row
-    DATA temp566 LIKE REF TO mo_app->lif_intf_alias~mv_shared.
+    DATA temp609 LIKE REF TO mo_app->lif_intf_alias~mv_shared.
 DATA lv_path TYPE string.
-    DATA temp567 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
-    DATA temp568 LIKE REF TO mo_app->lif_intf_alias~mv_shared.
+    DATA temp610 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
+    DATA temp611 LIKE REF TO mo_app->lif_intf_alias~mv_shared.
     DATA lv_alias_row TYPE abap_bool.
-    DATA temp128 LIKE sy-subrc.
-    DATA temp130 TYPE xsdboolean.
+    DATA temp138 LIKE sy-subrc.
+    DATA temp133 TYPE xsdboolean.
     DATA lv_intf_row TYPE abap_bool.
-    DATA temp129 LIKE sy-subrc.
-    DATA temp131 TYPE xsdboolean.
+    DATA temp139 LIKE sy-subrc.
+    DATA temp134 TYPE xsdboolean.
     DATA lr_alias TYPE REF TO string.
     DATA lv_member TYPE string.
     DATA li_doc TYPE REF TO z2ui5_cl_ajson.
-    GET REFERENCE OF mo_app->lif_intf_alias~mv_shared INTO temp566.
+    GET REFERENCE OF mo_app->lif_intf_alias~mv_shared INTO temp609.
 
-lv_path = bind( temp566 ).
+lv_path = bind( temp609 ).
     cl_abap_unit_assert=>assert_equals( exp = lv_path
                                         act = bind( alias_ref( ) ) ).
     " with the interface rows on (another interface attribute was looked
     " for), still the same row
 
-    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp567.
-bind( temp567 ).
+    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp610.
+bind( temp610 ).
 
-    GET REFERENCE OF mo_app->lif_intf_alias~mv_shared INTO temp568.
+    GET REFERENCE OF mo_app->lif_intf_alias~mv_shared INTO temp611.
 cl_abap_unit_assert=>assert_equals( exp = lv_path
-                                        act = bind( temp568 ) ).
+                                        act = bind( temp611 ) ).
     cl_abap_unit_assert=>assert_equals( exp = lv_path
                                         act = bind( alias_ref( ) ) ).
 
 
     READ TABLE mo_cont->mt_attri->* WITH KEY name = `MV_SHARED` TRANSPORTING NO FIELDS.
-    temp128 = sy-subrc.
+    temp138 = sy-subrc.
 
-    temp130 = boolc( temp128 = 0 ).
-    lv_alias_row = temp130.
+    temp133 = boolc( temp138 = 0 ).
+    lv_alias_row = temp133.
 
 
     READ TABLE mo_cont->mt_attri->* WITH KEY name = `LIF_INTF_ALIAS~MV_SHARED` TRANSPORTING NO FIELDS.
-    temp129 = sy-subrc.
+    temp139 = sy-subrc.
 
-    temp131 = boolc( temp129 = 0 ).
-    lv_intf_row = temp131.
+    temp134 = boolc( temp139 = 0 ).
+    lv_intf_row = temp134.
     cl_abap_unit_assert=>assert_differs( exp = lv_alias_row
                                          act = lv_intf_row ).
 
@@ -10630,31 +11374,31 @@ cl_abap_unit_assert=>assert_equals( exp = lv_path
     " the class pass wrote the alias's row - the interface spelling of the
     " same data object is not added next to it, another one is
     DATA lt_result TYPE z2ui5_if_ui5_types=>ty_t_attri.
-    DATA temp569 TYPE z2ui5_if_ui5_types=>ty_s_attri.
-    DATA temp570 TYPE abap_attrdescr_tab.
-    DATA temp571 LIKE LINE OF temp570.
-    DATA lt_descr LIKE temp570.
+    DATA temp612 TYPE z2ui5_if_ui5_types=>ty_s_attri.
+    DATA temp613 TYPE abap_attrdescr_tab.
+    DATA temp614 LIKE LINE OF temp613.
+    DATA lt_descr LIKE temp613.
     DATA temp1 TYPE REF TO z2ui5_cl_ui5_srv_model.
-    DATA temp132 TYPE xsdboolean.
-    DATA temp22 LIKE sy-subrc.
-    DATA temp133 TYPE xsdboolean.
-    DATA temp23 LIKE sy-subrc.
-    CLEAR temp569.
-    temp569-name = `MV_SHARED`.
-    INSERT temp569 INTO TABLE lt_result.
+    DATA temp135 TYPE xsdboolean.
+    DATA temp24 LIKE sy-subrc.
+    DATA temp136 TYPE xsdboolean.
+    DATA temp25 LIKE sy-subrc.
+    CLEAR temp612.
+    temp612-name = `MV_SHARED`.
+    INSERT temp612 INTO TABLE lt_result.
 
-    CLEAR temp570.
+    CLEAR temp613.
 
-    temp571-name = `LIF_INTF_ALIAS~MV_SHARED`.
-    temp571-visibility = z2ui5_cl_ui5_util_context=>cv_objectdescr_public.
-    temp571-is_interface = abap_true.
-    INSERT temp571 INTO TABLE temp570.
-    temp571-name = `LIF_INTF_ATTR~MV_INTF`.
-    temp571-visibility = z2ui5_cl_ui5_util_context=>cv_objectdescr_public.
-    temp571-is_interface = abap_true.
-    INSERT temp571 INTO TABLE temp570.
+    temp614-name = `LIF_INTF_ALIAS~MV_SHARED`.
+    temp614-visibility = z2ui5_cl_ui5_util_context=>cv_objectdescr_public.
+    temp614-is_interface = abap_true.
+    INSERT temp614 INTO TABLE temp613.
+    temp614-name = `LIF_INTF_ATTR~MV_INTF`.
+    temp614-visibility = z2ui5_cl_ui5_util_context=>cv_objectdescr_public.
+    temp614-is_interface = abap_true.
+    INSERT temp614 INTO TABLE temp613.
 
-    lt_descr = temp570.
+    lt_descr = temp613.
 
 
     temp1 = model( ).
@@ -10668,28 +11412,28 @@ cl_abap_unit_assert=>assert_equals( exp = lv_path
 
 
     READ TABLE lt_result WITH KEY name = `LIF_INTF_ALIAS~MV_SHARED` TRANSPORTING NO FIELDS.
-    temp22 = sy-subrc.
-    temp132 = boolc( temp22 = 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp132 ).
+    temp24 = sy-subrc.
+    temp135 = boolc( temp24 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp135 ).
 
 
     READ TABLE lt_result WITH KEY name = `LIF_INTF_ATTR~MV_INTF` TRANSPORTING NO FIELDS.
-    temp23 = sy-subrc.
-    temp133 = boolc( temp23 = 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp133 ).
+    temp25 = sy-subrc.
+    temp136 = boolc( temp25 = 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp136 ).
 
   ENDMETHOD.
 
   METHOD intf_survives_refresh.
 
-    DATA temp572 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
+    DATA temp615 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
-    FIELD-SYMBOLS <temp573> LIKE LINE OF mo_cont->mt_attri->*.
-    DATA temp574 LIKE sy-tabix.
-    DATA temp575 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
+    FIELD-SYMBOLS <temp616> LIKE LINE OF mo_cont->mt_attri->*.
+    DATA temp617 LIKE sy-tabix.
+    DATA temp618 LIKE REF TO mo_app->lif_intf_attr~mv_intf.
 DATA lr_row TYPE REF TO z2ui5_if_ui5_types=>ty_s_attri.
-    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp572.
-bind( temp572 ).
+    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp615.
+bind( temp615 ).
 
     " the next roundtrip: a fresh model instance over the draft's rows,
     " rebuilt - the bound interface row is found again, bound
@@ -10698,19 +11442,19 @@ bind( temp572 ).
     lo_model->main_attri_refresh( ).
 
 
-    temp574 = sy-tabix.
-    READ TABLE mo_cont->mt_attri->* WITH KEY name = `LIF_INTF_ATTR~MV_INTF` ASSIGNING <temp573>.
-    sy-tabix = temp574.
+    temp617 = sy-tabix.
+    READ TABLE mo_cont->mt_attri->* WITH KEY name = `LIF_INTF_ATTR~MV_INTF` ASSIGNING <temp616>.
+    sy-tabix = temp617.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals(
         exp = abap_true
-        act = <temp573>-bind ).
+        act = <temp616>-bind ).
 
-    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp575.
+    GET REFERENCE OF mo_app->lif_intf_attr~mv_intf INTO temp618.
 
-lr_row = lo_model->main_attri_search( temp575 ).
+lr_row = lo_model->main_attri_search( temp618 ).
     cl_abap_unit_assert=>assert_equals( exp = `LIF_INTF_ATTR~MV_INTF`
                                         act = lr_row->name ).
 
@@ -10719,8 +11463,8 @@ lr_row = lo_model->main_attri_search( temp575 ).
   METHOD intf_dref_save_load.
 
     FIELD-SYMBOLS <tab> TYPE lif_intf_attr=>ty_t_row.
-    DATA temp576 TYPE lif_intf_attr=>ty_s_row.
-    DATA temp577 LIKE REF TO <tab>.
+    DATA temp619 TYPE lif_intf_attr=>ty_s_row.
+    DATA temp620 LIKE REF TO <tab>.
     DATA lo_model TYPE REF TO z2ui5_cl_ui5_srv_model.
     DATA lv_before TYPE string.
 
@@ -10730,14 +11474,14 @@ lr_row = lo_model->main_attri_search( temp575 ).
     CREATE DATA mo_app->lif_intf_attr~mr_intf LIKE mo_app->lif_intf_attr~mt_intf.
     ASSIGN mo_app->lif_intf_attr~mr_intf->* TO <tab>.
 
-    CLEAR temp576.
-    temp576-name = `R`.
-    temp576-qty = 3.
-    INSERT temp576 INTO TABLE <tab>.
+    CLEAR temp619.
+    temp619-name = `R`.
+    temp619-qty = 3.
+    INSERT temp619 INTO TABLE <tab>.
 
-    GET REFERENCE OF <tab> INTO temp577.
+    GET REFERENCE OF <tab> INTO temp620.
 cl_abap_unit_assert=>assert_equals( exp = `/LIF_INTF_ATTR~MR_INTF/*`
-                                        act = bind( temp577 ) ).
+                                        act = bind( temp620 ) ).
 
     " the draft: the data reference is detached and its payload written,
     " the load puts it back - by the row's name, `~` and all
@@ -10757,20 +11501,20 @@ cl_abap_unit_assert=>assert_equals( exp = `/LIF_INTF_ATTR~MR_INTF/*`
   METHOD no_attribute_still_refused.
 
     DATA lv_local TYPE string.
-        DATA temp578 LIKE REF TO lv_local.
+        DATA temp621 LIKE REF TO lv_local.
         DATA lx TYPE REF TO z2ui5_cx_ui5_util_error.
-        DATA temp134 TYPE xsdboolean.
+        DATA temp137 TYPE xsdboolean.
 
     TRY.
 
-        GET REFERENCE OF lv_local INTO temp578.
-bind( temp578 ).
+        GET REFERENCE OF lv_local INTO temp621.
+bind( temp621 ).
         cl_abap_unit_assert=>fail( `a local variable is no attribute` ).
 
       CATCH z2ui5_cx_ui5_util_error INTO lx.
 
-        temp134 = boolc( lx->get_text( ) CS `BINDING_ERROR` ).
-        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp134
+        temp137 = boolc( lx->get_text( ) CS `BINDING_ERROR` ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp137
                                           msg = lx->get_text( ) ).
     ENDTRY.
 

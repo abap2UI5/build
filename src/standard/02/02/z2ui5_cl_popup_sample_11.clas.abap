@@ -17,20 +17,17 @@ ENDCLASS.
 CLASS z2ui5_cl_popup_sample_11 IMPLEMENTATION.
 
   METHOD on_navigation.
-        DATA lo_prev TYPE REF TO z2ui5_if_app.
-        DATA temp1 TYPE REF TO z2ui5_cl_popup_file_ul.
-        DATA lv_text TYPE z2ui5_cl_popup_file_ul=>ty_s_result-value.
 
-    TRY.
+    " every popup hands its result over through z2ui5_if_popup_result -
+    " value_string( ) of the upload is the content of the last file as text
+    DATA temp1 TYPE REF TO z2ui5_if_popup_result.
+    DATA popup LIKE temp1.
+    temp1 ?= client->get_app_prev( ).
 
-        lo_prev = client->get_app( client->get( )-s_draft-id_prev_app ).
-
-        temp1 ?= lo_prev.
-
-        lv_text = temp1->result( )-value.
-        client->message_box_display( |the input is { lv_text }| ).
-      CATCH cx_root ##NO_HANDLER.
-    ENDTRY.
+    popup = temp1.
+    IF popup->check_confirmed( ) = abap_true.
+      client->message_box_display( |the input is { popup->value_string( ) }| ).
+    ENDIF.
 
   ENDMETHOD.
 
@@ -74,10 +71,13 @@ CLASS z2ui5_cl_popup_sample_11 IMPLEMENTATION.
 
     me->client = client.
 
-    IF client->get( )-check_on_navigated = abap_true.
-
+    IF client->check_on_navigated( ) IS NOT INITIAL.
       view_display( ).
-      on_navigation( ).
+      " true only on the way back from the popup - not on the first start
+      " or on a restore, where get_app_prev( ) is no popup
+      IF client->check_on_nav_back( ) IS NOT INITIAL.
+        on_navigation( ).
+      ENDIF.
       RETURN.
     ENDIF.
 

@@ -823,6 +823,7 @@ CLASS ltcl_conv DEFINITION FINAL FOR TESTING
     METHODS conversion_default FOR TESTING.
     METHODS conversion_alpha_in_browser FOR TESTING.
     METHODS opened_layout_keeps_type FOR TESTING.
+    METHODS opened_layout_own_sub_cols FOR TESTING.
 
     METHODS layout
       RETURNING
@@ -1188,11 +1189,187 @@ DATA positions TYPE temp13.
 
   ENDMETHOD.
 
+  METHOD opened_layout_own_sub_cols.
+
+    DATA head      TYPE z2ui5_t_11.
+    TYPES temp14 TYPE STANDARD TABLE OF z2ui5_t_12 WITH DEFAULT KEY.
+DATA positions TYPE temp14.
+    DATA temp77 LIKE positions.
+    DATA temp78 LIKE LINE OF temp77.
+    DATA before TYPE z2ui5_cl_layo_manager=>ty_t_positions.
+    FIELD-SYMBOLS <id> TYPE z2ui5_cl_layo_manager=>ty_s_positions.
+    DATA temp79 TYPE z2ui5_cl_layo_manager=>ty_t_sub_columns.
+    DATA temp80 LIKE LINE OF temp79.
+    DATA opened TYPE REF TO z2ui5_cl_layo_manager.
+    FIELD-SYMBOLS <temp81> LIKE LINE OF opened->ms_layout-t_layout.
+    DATA temp82 LIKE sy-tabix.
+    DATA nr_sub_col TYPE z2ui5_cl_layo_manager=>ty_t_sub_columns.
+    FIELD-SYMBOLS <temp11> LIKE LINE OF opened->ms_layout-t_layout.
+    DATA temp12 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp83> LIKE LINE OF nr_sub_col.
+    DATA temp84 LIKE sy-tabix.
+
+    cleanup( ).
+
+    CLEAR head.
+    head-guid = c_guid.
+    head-layout = `LTCL`.
+    head-control = z2ui5_cl_layo_manager=>m_table.
+    head-handle03 = `LTCL_CONV`.
+    INSERT z2ui5_t_11 FROM head ##SUBRC_OK.
+
+    CLEAR temp77.
+
+    CLEAR temp78.
+    temp78-guid = c_guid.
+    temp78-pos_guid = 'LTCLCONVPOS000000000000000000001'.
+    temp78-fname = `ID`.
+    temp78-visible = abap_true.
+    INSERT temp78 INTO TABLE temp77.
+    CLEAR temp78.
+    temp78-guid = c_guid.
+    temp78-pos_guid = 'LTCLCONVPOS000000000000000000002'.
+    temp78-fname = `NR`.
+    temp78-visible = abap_true.
+    temp78-subcolumn = `LANGU`.
+    INSERT temp78 INTO TABLE temp77.
+    positions = temp77.
+    INSERT z2ui5_t_12 FROM TABLE positions ##SUBRC_OK.
+
+    " the layout shown before has subcolumns on ID, the opened one on NR only
+
+    before = layout( )->ms_layout-t_layout.
+
+    READ TABLE before WITH KEY fname = `ID` ASSIGNING <id>.
+    <id>-subcolumn = `NR`.
+
+    CLEAR temp79.
+
+    temp80-fname = `NR`.
+    INSERT temp80 INTO TABLE temp79.
+    <id>-t_sub_col = temp79.
+
+
+    opened = z2ui5_cl_layo_manager=>factory_by_guid( layout_guid = c_guid
+                                                           t_comps     = before ).
+
+    cleanup( ).
+
+
+
+    temp82 = sy-tabix.
+    READ TABLE opened->ms_layout-t_layout WITH KEY fname = `ID` ASSIGNING <temp81>.
+    sy-tabix = temp82.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_initial( <temp81>-t_sub_col ).
+
+
+
+    temp12 = sy-tabix.
+    READ TABLE opened->ms_layout-t_layout WITH KEY fname = `NR` ASSIGNING <temp11>.
+    sy-tabix = temp12.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    nr_sub_col = <temp11>-t_sub_col.
+    cl_abap_unit_assert=>assert_equals( exp = 1
+                                        act = lines( nr_sub_col ) ).
+
+
+    temp84 = sy-tabix.
+    READ TABLE nr_sub_col INDEX 1 ASSIGNING <temp83>.
+    sy-tabix = temp84.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `LANGU`
+                                        act = <temp83>-fname ).
+
+  ENDMETHOD.
+
   METHOD cleanup.
 
     DELETE FROM z2ui5_t_11 WHERE guid = c_guid ##SUBRC_OK.
     DELETE FROM z2ui5_t_12 WHERE guid = c_guid ##SUBRC_OK.
     COMMIT WORK.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS ltcl_same_layout DEFINITION FINAL FOR TESTING
+  DURATION SHORT
+  RISK LEVEL HARMLESS.
+
+  PRIVATE SECTION.
+    METHODS same_control_and_handles FOR TESTING.
+    METHODS other_handle FOR TESTING.
+    METHODS other_control FOR TESTING.
+    METHODS unbound FOR TESTING.
+
+    "! a manager with the head the layout popup compares
+    METHODS layout
+      IMPORTING
+        !control      TYPE clike
+        handle04      TYPE clike
+      RETURNING
+        VALUE(result) TYPE REF TO z2ui5_cl_layo_manager.
+ENDCLASS.
+
+
+CLASS ltcl_same_layout IMPLEMENTATION.
+
+  METHOD layout.
+
+    CREATE OBJECT result.
+    result->ms_layout-s_head-control  = control.
+    result->ms_layout-s_head-handle01 = `APP`.
+    result->ms_layout-s_head-handle02 = `TABLE`.
+    result->ms_layout-s_head-handle03 = `X`.
+    result->ms_layout-s_head-handle04 = handle04.
+
+  ENDMETHOD.
+
+  METHOD same_control_and_handles.
+
+    " the guid differs - another variant of the same table is the same layout
+    DATA lo_other TYPE REF TO z2ui5_cl_layo_manager.
+    lo_other = layout( control  = z2ui5_cl_layo_manager=>m_table
+                             handle04 = `4` ).
+    lo_other->ms_layout-s_head-guid = `OTHER`.
+
+    cl_abap_unit_assert=>assert_true( layout( control  = z2ui5_cl_layo_manager=>m_table
+                                              handle04 = `4` )->is_same_layout( lo_other ) ).
+
+  ENDMETHOD.
+
+  METHOD other_handle.
+
+    cl_abap_unit_assert=>assert_false( layout( control  = z2ui5_cl_layo_manager=>m_table
+                                               handle04 = `4` )->is_same_layout(
+                                         layout( control  = z2ui5_cl_layo_manager=>m_table
+                                                 handle04 = `5` ) ) ).
+
+  ENDMETHOD.
+
+  METHOD other_control.
+
+    cl_abap_unit_assert=>assert_false( layout( control  = z2ui5_cl_layo_manager=>m_table
+                                               handle04 = `4` )->is_same_layout(
+                                         layout( control  = z2ui5_cl_layo_manager=>ui_simpleform
+                                                 handle04 = `4` ) ) ).
+
+  ENDMETHOD.
+
+  METHOD unbound.
+
+    DATA lo_none TYPE REF TO z2ui5_cl_layo_manager.
+
+    cl_abap_unit_assert=>assert_false( layout( control  = z2ui5_cl_layo_manager=>m_table
+                                               handle04 = `4` )->is_same_layout( lo_none ) ).
 
   ENDMETHOD.
 

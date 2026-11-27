@@ -6,7 +6,10 @@
 "! T100 is reached by name only (dynamic FROM), so the class also compiles on
 "! ABAP Cloud, where it is not released - there the popup shows that the
 "! search is not available.
-CLASS z2ui5_cl_popup_msg_search DEFINITION PUBLIC.
+CLASS z2ui5_cl_popup_msg_search DEFINITION PUBLIC
+  " z2ui5_cl_popup_dtel_srch is the same popup over data elements - it takes
+  " the languages and the LIKE pattern from the static helpers below
+  GLOBAL FRIENDS z2ui5_cl_popup_dtel_srch.
 
   PUBLIC SECTION.
     " abap2ui5lint-disable unbound-public-attribute -- a popup's attributes are its interface to the app that called it, which reads them once the popup returns
@@ -157,6 +160,31 @@ CLASS z2ui5_cl_popup_msg_search DEFINITION PUBLIC.
         VALUE(result) TYPE string.
 
   PRIVATE SECTION.
+    "! T002T in the logon language and the installed languages (T002C) -
+    "! both empty when not readable
+    CLASS-METHODS read_t002
+      EXPORTING
+        t002t     TYPE ty_t_t002t
+        installed TYPE string_table.
+
+    "! get_language_list( ) for the languages chosen
+    CLASS-METHODS language_list
+      IMPORTING
+        t002t         TYPE ty_t_t002t
+        installed     TYPE string_table
+        langu         TYPE string
+        langu2        TYPE string
+      RETURNING
+        VALUE(result) TYPE ty_t_langu.
+
+    "! get_like_pattern( )
+    CLASS-METHODS like_pattern
+      IMPORTING
+        val           TYPE string
+        contains      TYPE abap_bool DEFAULT abap_true
+      RETURNING
+        VALUE(result) TYPE string.
+
 ENDCLASS.
 
 
@@ -329,8 +357,18 @@ CLASS z2ui5_cl_popup_msg_search IMPLEMENTATION.
 
   METHOD read_languages.
 
-    DATA lt_t002t TYPE ty_t_t002t.
+    DATA lt_t002t     TYPE ty_t_t002t.
     DATA lt_installed TYPE string_table.
+
+    read_t002( IMPORTING t002t     = lt_t002t
+                         installed = lt_installed ).
+
+    mt_langu = get_language_list( t002t     = lt_t002t
+                                  installed = lt_installed ).
+
+  ENDMETHOD.
+
+  METHOD read_t002.
         DATA lv_tabname TYPE string.
 TYPES BEGIN OF ty_s_t002c.
 TYPES spras TYPE c LENGTH 1.
@@ -342,11 +380,13 @@ DATA lt_t002c TYPE temp1.
     DATA t002c LIKE LINE OF lt_t002c.
       DATA temp12 LIKE LINE OF temp51.
 
+    CLEAR: t002t, installed.
+
     TRY.
 
         lv_tabname = `T002T`.
         SELECT sprsl sptxt
-          FROM (lv_tabname) INTO CORRESPONDING FIELDS OF TABLE lt_t002t
+          FROM (lv_tabname) INTO CORRESPONDING FIELDS OF TABLE t002t
           WHERE spras = sy-langu
           ORDER BY sprsl
           .
@@ -378,14 +418,20 @@ DATA lt_t002c TYPE temp1.
       temp12 = t002c-spras.
       INSERT temp12 INTO TABLE temp51.
     ENDLOOP.
-    lt_installed = temp51.
-
-    mt_langu = get_language_list( t002t     = lt_t002t
-                                  installed = lt_installed ).
+    installed = temp51.
 
   ENDMETHOD.
 
   METHOD get_language_list.
+
+    result = language_list( t002t     = t002t
+                            installed = installed
+                            langu     = mv_langu
+                            langu2    = mv_langu2 ).
+
+  ENDMETHOD.
+
+  METHOD language_list.
 
     " English, German, the logon language and the languages selected now are
     " always offered, also when T002C does not flag them - the defaults are E
@@ -423,8 +469,8 @@ DATA lr_installed TYPE temp2.
 
     temp13 = sy-langu.
     INSERT temp13 INTO TABLE temp53.
-    INSERT mv_langu INTO TABLE temp53.
-    INSERT mv_langu2 INTO TABLE temp53.
+    INSERT langu INTO TABLE temp53.
+    INSERT langu2 INTO TABLE temp53.
 
     lt_always = temp53.
 
@@ -816,6 +862,13 @@ DATA lt_r_msgnr TYPE temp5.
   ENDMETHOD.
 
   METHOD get_like_pattern.
+
+    result = like_pattern( val      = val
+                           contains = contains ).
+
+  ENDMETHOD.
+
+  METHOD like_pattern.
 
     result = val.
     result = replace( val = result sub = `#` with = `##` occ = 0 ).

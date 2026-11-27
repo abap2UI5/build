@@ -26,6 +26,7 @@ CLASS ltcl_test DEFINITION FINAL
     METHODS test_required_stays     FOR TESTING RAISING cx_static_check.
     METHODS test_confirm_values     FOR TESTING RAISING cx_static_check.
     METHODS test_cancel             FOR TESTING RAISING cx_static_check.
+    METHODS test_client_cannot_redefine FOR TESTING RAISING cx_static_check.
 
 ENDCLASS.
 
@@ -199,11 +200,145 @@ CLASS ltcl_test IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD test_client_cannot_redefine.
+
+    " mt_field is bound: a crafted request can change a read-only value,
+    " clear REQUIRED or pick a key the listbox does not offer - none of it
+    " reaches the result
+    DATA temp15 TYPE z2ui5_cl_popup_get_values=>ty_t_field.
+    DATA temp16 LIKE LINE OF temp15.
+    DATA temp6 TYPE z2ui5_cl_popup_get_values=>ty_t_listbox.
+    DATA temp7 LIKE LINE OF temp6.
+    DATA lo_pop TYPE REF TO z2ui5_cl_popup_get_values.
+    FIELD-SYMBOLS <temp17> LIKE LINE OF lo_pop->mt_field.
+    DATA temp18 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp19> LIKE LINE OF lo_pop->mt_field.
+    DATA temp20 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp21> LIKE LINE OF lo_pop->mt_field.
+    DATA temp22 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp23> LIKE LINE OF lo_pop->mt_field.
+    DATA temp24 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp25> LIKE LINE OF lo_pop->mt_field.
+    DATA temp26 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp27> LIKE LINE OF lo_pop->mt_field.
+    DATA temp28 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp29> LIKE LINE OF lo_pop->mt_field.
+    DATA temp30 LIKE sy-tabix.
+    CLEAR temp15.
+
+    CLEAR temp16.
+    temp16-name = `CARRID`.
+    temp16-text = `Airline`.
+    temp16-required = abap_true.
+    INSERT temp16 INTO TABLE temp15.
+    CLEAR temp16.
+    temp16-name = `CURR`.
+    temp16-text = `Currency`.
+    temp16-value = `EUR`.
+    temp16-read_only = abap_true.
+    INSERT temp16 INTO TABLE temp15.
+    CLEAR temp16.
+    temp16-name = `CLASS`.
+    temp16-text = `Class`.
+    temp16-kind = z2ui5_cl_popup_get_values=>cs_kind-listbox.
+    INSERT temp16 INTO TABLE temp15.
+
+    CLEAR temp6.
+
+    temp7-name = `CLASS`.
+    temp7-key = `Y`.
+    temp7-text = `Economy`.
+    INSERT temp7 INTO TABLE temp6.
+
+    lo_pop = z2ui5_cl_popup_get_values=>factory(
+        i_fields  = temp15
+        i_listbox = temp6 ).
+
+
+    temp18 = sy-tabix.
+    READ TABLE lo_pop->mt_field INDEX 1 ASSIGNING <temp17>.
+    sy-tabix = temp18.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    <temp17>-required = abap_false.
+
+
+    temp20 = sy-tabix.
+    READ TABLE lo_pop->mt_field INDEX 2 ASSIGNING <temp19>.
+    sy-tabix = temp20.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    <temp19>-value = `USD`.
+
+
+    temp22 = sy-tabix.
+    READ TABLE lo_pop->mt_field INDEX 2 ASSIGNING <temp21>.
+    sy-tabix = temp22.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    <temp21>-read_only = abap_false.
+
+
+    temp24 = sy-tabix.
+    READ TABLE lo_pop->mt_field INDEX 3 ASSIGNING <temp23>.
+    sy-tabix = temp24.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    <temp23>-value = `F`.
+    roundtrip_event( io_app   = lo_pop
+                     iv_event = `BUTTON_CONFIRM` ).
+
+    cl_abap_unit_assert=>assert_false( lo_pop->result( )-check_confirmed ).
+    cl_abap_unit_assert=>assert_false( popup_destroyed( ) ).
+
+
+
+    temp26 = sy-tabix.
+    READ TABLE lo_pop->mt_field INDEX 1 ASSIGNING <temp25>.
+    sy-tabix = temp26.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    <temp25>-value = `LH`.
+
+
+    temp28 = sy-tabix.
+    READ TABLE lo_pop->mt_field INDEX 2 ASSIGNING <temp27>.
+    sy-tabix = temp28.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    <temp27>-value = `USD`.
+
+
+    temp30 = sy-tabix.
+    READ TABLE lo_pop->mt_field INDEX 3 ASSIGNING <temp29>.
+    sy-tabix = temp30.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    <temp29>-value = `F`.
+    roundtrip_event( io_app   = lo_pop
+                     iv_event = `BUTTON_CONFIRM` ).
+
+    cl_abap_unit_assert=>assert_true( lo_pop->result( )-check_confirmed ).
+    cl_abap_unit_assert=>assert_equals( exp = `LH`
+                                        act = lo_pop->result_value( `CARRID` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = `EUR`
+                                        act = lo_pop->result_value( `CURR` ) ).
+    cl_abap_unit_assert=>assert_initial( lo_pop->result_value( `CLASS` ) ).
+
+  ENDMETHOD.
+
   METHOD client_create.
 
-    DATA temp6 TYPE REF TO z2ui5_cl_ui5_handler.
-    CREATE OBJECT temp6 TYPE z2ui5_cl_ui5_handler EXPORTING VAL = ``.
-    CREATE OBJECT mo_action EXPORTING VAL = temp6.
+    DATA temp8 TYPE REF TO z2ui5_cl_ui5_handler.
+    CREATE OBJECT temp8 TYPE z2ui5_cl_ui5_handler EXPORTING VAL = ``.
+    CREATE OBJECT mo_action EXPORTING VAL = temp8.
     mo_action->mo_app->mo_app = io_app.
     CREATE OBJECT mi_client TYPE z2ui5_cl_ui5_client EXPORTING ACTION = mo_action.
 
@@ -230,12 +365,12 @@ CLASS ltcl_test IMPLEMENTATION.
 
   METHOD popup_destroyed.
 
-    DATA temp15 LIKE sy-subrc.
+    DATA temp31 LIKE sy-subrc.
     DATA temp10 TYPE xsdboolean.
     READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = z2ui5_if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
-    temp15 = sy-subrc.
+    temp31 = sy-subrc.
 
-    temp10 = boolc( temp15 = 0 ).
+    temp10 = boolc( temp31 = 0 ).
     result = temp10.
 
   ENDMETHOD.
@@ -268,39 +403,39 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
     " a roundtrip with an event, after the first one - as the button press
     " of the user
-    DATA temp7 TYPE REF TO z2ui5_cl_ui5_handler.
-    DATA temp16 TYPE REF TO z2ui5_cl_ui5_client.
-    CREATE OBJECT temp7 TYPE z2ui5_cl_ui5_handler EXPORTING VAL = ``.
-    CREATE OBJECT mo_action EXPORTING VAL = temp7.
+    DATA temp9 TYPE REF TO z2ui5_cl_ui5_handler.
+    DATA temp32 TYPE REF TO z2ui5_cl_ui5_client.
+    CREATE OBJECT temp9 TYPE z2ui5_cl_ui5_handler EXPORTING VAL = ``.
+    CREATE OBJECT mo_action EXPORTING VAL = temp9.
     mo_action->mo_app->mo_app = io_app.
     mo_action->mo_app->mv_check_initialized = abap_true.
     mo_action->ms_actual-event = iv_event.
     mo_action->ms_actual-t_event_arg = it_arg.
 
-    CREATE OBJECT temp16 TYPE z2ui5_cl_ui5_client EXPORTING ACTION = mo_action.
-    io_app->main( temp16 ).
+    CREATE OBJECT temp32 TYPE z2ui5_cl_ui5_client EXPORTING ACTION = mo_action.
+    io_app->main( temp32 ).
 
   ENDMETHOD.
 
   METHOD test_initial_not_confirmed.
 
-    DATA temp17 TYPE z2ui5_cl_popup_get_values=>ty_t_field.
-    DATA temp18 LIKE LINE OF temp17.
+    DATA temp33 TYPE z2ui5_cl_popup_get_values=>ty_t_field.
+    DATA temp34 LIKE LINE OF temp33.
     DATA lo_pop TYPE REF TO z2ui5_cl_popup_get_values.
-    DATA temp19 TYPE REF TO z2ui5_if_popup_result.
-    DATA li_result LIKE temp19.
-    CLEAR temp17.
+    DATA temp35 TYPE REF TO z2ui5_if_popup_result.
+    DATA li_result LIKE temp35.
+    CLEAR temp33.
 
-    temp18-name = `CARRID`.
-    temp18-text = `Airline`.
-    temp18-value = `LH`.
-    INSERT temp18 INTO TABLE temp17.
+    temp34-name = `CARRID`.
+    temp34-text = `Airline`.
+    temp34-value = `LH`.
+    INSERT temp34 INTO TABLE temp33.
 
-    lo_pop = z2ui5_cl_popup_get_values=>factory( temp17 ).
+    lo_pop = z2ui5_cl_popup_get_values=>factory( temp33 ).
 
-    temp19 ?= lo_pop.
+    temp35 ?= lo_pop.
 
-    li_result = temp19.
+    li_result = temp35.
 
     cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
 
@@ -308,70 +443,70 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD test_confirmed.
 
-    DATA temp20 TYPE z2ui5_cl_popup_get_values=>ty_t_field.
-    DATA temp21 LIKE LINE OF temp20.
+    DATA temp36 TYPE z2ui5_cl_popup_get_values=>ty_t_field.
+    DATA temp37 LIKE LINE OF temp36.
     DATA lo_pop TYPE REF TO z2ui5_cl_popup_get_values.
-    DATA temp22 TYPE REF TO z2ui5_if_popup_result.
-    DATA li_result LIKE temp22.
-    DATA temp23 TYPE REF TO z2ui5_cl_popup_get_values=>ty_t_field.
-    DATA lr_fields LIKE temp23.
-    FIELD-SYMBOLS <temp24> LIKE LINE OF lr_fields->*.
-    DATA temp25 LIKE sy-tabix.
-    CLEAR temp20.
+    DATA temp38 TYPE REF TO z2ui5_if_popup_result.
+    DATA li_result LIKE temp38.
+    DATA temp39 TYPE REF TO z2ui5_cl_popup_get_values=>ty_t_field.
+    DATA lr_fields LIKE temp39.
+    FIELD-SYMBOLS <temp40> LIKE LINE OF lr_fields->*.
+    DATA temp41 LIKE sy-tabix.
+    CLEAR temp36.
 
-    temp21-name = `CARRID`.
-    temp21-text = `Airline`.
-    temp21-value = `LH`.
-    INSERT temp21 INTO TABLE temp20.
+    temp37-name = `CARRID`.
+    temp37-text = `Airline`.
+    temp37-value = `LH`.
+    INSERT temp37 INTO TABLE temp36.
 
-    lo_pop = z2ui5_cl_popup_get_values=>factory( temp20 ).
+    lo_pop = z2ui5_cl_popup_get_values=>factory( temp36 ).
     roundtrip( io_app   = lo_pop
                iv_event = `BUTTON_CONFIRM` ).
 
-    temp22 ?= lo_pop.
+    temp38 ?= lo_pop.
 
-    li_result = temp22.
+    li_result = temp38.
 
     cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
 
-    temp23 ?= li_result->value( ).
+    temp39 ?= li_result->value( ).
 
-    lr_fields = temp23.
+    lr_fields = temp39.
 
 
-    temp25 = sy-tabix.
-    READ TABLE lr_fields->* WITH KEY name = `CARRID` ASSIGNING <temp24>.
-    sy-tabix = temp25.
+    temp41 = sy-tabix.
+    READ TABLE lr_fields->* WITH KEY name = `CARRID` ASSIGNING <temp40>.
+    sy-tabix = temp41.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `LH`
-                                        act = <temp24>-value ).
+                                        act = <temp40>-value ).
     cl_abap_unit_assert=>assert_initial( li_result->value_string( ) ).
 
   ENDMETHOD.
 
   METHOD test_cancelled.
 
-    DATA temp26 TYPE z2ui5_cl_popup_get_values=>ty_t_field.
-    DATA temp27 LIKE LINE OF temp26.
+    DATA temp42 TYPE z2ui5_cl_popup_get_values=>ty_t_field.
+    DATA temp43 LIKE LINE OF temp42.
     DATA lo_pop TYPE REF TO z2ui5_cl_popup_get_values.
-    DATA temp28 TYPE REF TO z2ui5_if_popup_result.
-    DATA li_result LIKE temp28.
-    CLEAR temp26.
+    DATA temp44 TYPE REF TO z2ui5_if_popup_result.
+    DATA li_result LIKE temp44.
+    CLEAR temp42.
 
-    temp27-name = `CARRID`.
-    temp27-text = `Airline`.
-    temp27-value = `LH`.
-    INSERT temp27 INTO TABLE temp26.
+    temp43-name = `CARRID`.
+    temp43-text = `Airline`.
+    temp43-value = `LH`.
+    INSERT temp43 INTO TABLE temp42.
 
-    lo_pop = z2ui5_cl_popup_get_values=>factory( temp26 ).
+    lo_pop = z2ui5_cl_popup_get_values=>factory( temp42 ).
     roundtrip( io_app   = lo_pop
                iv_event = `BUTTON_CANCEL` ).
 
-    temp28 ?= lo_pop.
+    temp44 ?= lo_pop.
 
-    li_result = temp28.
+    li_result = temp44.
 
     cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
 

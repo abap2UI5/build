@@ -93,6 +93,11 @@ CLASS z2ui5_cl_popup_textedit IMPLEMENTATION.
     IF client->check_on_init( ) IS NOT INITIAL.
       display( ).
       RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft (browser Forward, a reload): the popup went with
+      " the page - show it again
+      display( ).
+      RETURN.
     ENDIF.
 
     CASE client->get( )-event.

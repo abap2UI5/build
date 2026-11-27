@@ -176,8 +176,10 @@ CLASS z2ui5_cl_popup_sample_14 IMPLEMENTATION.
 
 
   METHOD z2ui5_if_app~main.
-          DATA temp3 TYPE REF TO z2ui5_cl_popup_get_ranges.
-          DATA lo_value_help LIKE temp3.
+      DATA temp3 TYPE REF TO z2ui5_if_popup_result.
+      DATA popup LIKE temp3.
+        DATA temp4 TYPE REF TO z2ui5_cl_popup_context=>ty_t_filter_multi.
+        DATA lr_filter LIKE temp4.
 
     me->client = client.
 
@@ -186,27 +188,30 @@ CLASS z2ui5_cl_popup_sample_14 IMPLEMENTATION.
       mt_filter = z2ui5_cl_popup_context=>filter_get_multi_by_data( mt_table ).
       DELETE mt_filter WHERE name = `SELKZ`.
       view_display( ).
-      RETURN.
-    ENDIF.
 
-    IF client->get( )-check_on_navigated = abap_true.
-      TRY.
+    ELSEIF client->check_on_nav_back( ) IS NOT INITIAL.
 
-          temp3 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+      " back from the filter popup: every popup hands its result over through
+      " z2ui5_if_popup_result, value( ) is a reference to the ranges per field
 
-          lo_value_help = temp3.
+      temp3 ?= client->get_app_prev( ).
 
-          IF lo_value_help->result( )-check_confirmed = abap_true.
+      popup = temp3.
+      IF popup->check_confirmed( ) = abap_true.
 
-            mt_filter = lo_value_help->result( )-t_filter.
-            set_data( ).
-          ENDIF.
-        CATCH cx_root ##NO_HANDLER.
-      ENDTRY.
-      RETURN.
-    ENDIF.
+        temp4 ?= popup->value( ).
 
-    IF client->get( )-event IS NOT INITIAL.
+        lr_filter = temp4.
+        mt_filter = lr_filter->*.
+        set_data( ).
+      ENDIF.
+      view_display( ).
+
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft - the view is shown again
+      view_display( ).
+
+    ELSEIF client->get( )-event IS NOT INITIAL.
       on_event( ).
     ENDIF.
 

@@ -133,15 +133,26 @@ CLASS z2ui5_cl_popup_to_decide IMPLEMENTATION.
     IF client->check_on_init( ).
       view_display( ).
       RETURN.
+    ELSEIF client->check_on_navigated( ).
+      " a restored draft (browser Forward, a reload): the popup went with
+      " the page - show it again
+      view_display( ).
+      RETURN.
     ENDIF.
 
     DATA(lv_event) = client->get( )-event.
     CASE lv_event.
       WHEN `BUTTON_CANCEL`.
+        IF check_cancel = abap_false.
+          " the caller asked for a decision: no Cancel button - but the
+          " dialog still closes on Escape (afterClose), and a request can
+          " send the event as well; open the question again
+          view_display( ).
+          RETURN.
+        ENDIF.
         answer = cs_answer-cancel.
         client->popup_destroy( ).
-        client->nav_app_leave( app   = client->get_app_prev( )
-                               event = event_canceled ).
+        client->nav_app_leave( event = event_canceled ).
 
       WHEN OTHERS.
         IF strlen( lv_event ) <= strlen( cv_event_option ) OR lv_event NP |{ cv_event_option }*|.
@@ -149,14 +160,17 @@ CLASS z2ui5_cl_popup_to_decide IMPLEMENTATION.
         ENDIF.
         DATA(lv_number) = substring( val = lv_event
                                      off = strlen( cv_event_option ) ).
-        " only a button of the popup - the event comes from the browser
-        IF lv_number CN `0123456789` OR CONV i( lv_number ) < 1 OR CONV i( lv_number ) > lines( options ).
+        " only a button of the popup - the event comes from the browser; a
+        " number of more than four digits is none and overflowed CONV i
+        IF    lv_number CN `0123456789`
+           OR strlen( lv_number ) > 4
+           OR CONV i( lv_number ) < 1
+           OR CONV i( lv_number ) > lines( options ).
           RETURN.
         ENDIF.
         answer = lv_number.
         client->popup_destroy( ).
-        client->nav_app_leave( app   = client->get_app_prev( )
-                               event = event_decided ).
+        client->nav_app_leave( event = event_decided ).
     ENDCASE.
 
   ENDMETHOD.

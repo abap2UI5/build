@@ -48,6 +48,39 @@ CLASS z2ui5_cl_tm_001 DEFINITION
       RETURNING
         VALUE(result) TYPE REF TO z2ui5_cl_tm_001.
 
+    "! A text of data element roll - or fallback where the data element is
+    "! not on the system or has no text (an EWM or S/4HANA system may lack
+    "! the data elements the texts are borrowed from). The app and its popup
+    "! (z2ui5_cl_tm_pop) take their texts from here.
+    "! @parameter roll     | the data element
+    "! @parameter type     | L, M, S or H - the long, medium, short or heading
+    "!                       text; any other value: the short text
+    "! @parameter fallback | the text where the data element has none
+    CLASS-METHODS get_text_by_dtel
+      IMPORTING
+        roll          TYPE clike
+        !type         TYPE clike  OPTIONAL
+        fallback      TYPE string OPTIONAL
+      RETURNING
+        VALUE(result) TYPE string.
+
+    "! The text of message no of class id - or fallback where the message
+    "! class or number is not on the system (an EWM or S/4HANA system may
+    "! lack the classes the texts are borrowed from; a missing message
+    "! answers with its own class and number, or nothing)
+    "! @parameter id       | the message class
+    "! @parameter no       | the message number
+    "! @parameter v1       | the first placeholder
+    "! @parameter fallback | the text where the message is missing
+    CLASS-METHODS get_text_by_msg
+      IMPORTING
+        !id           TYPE clike
+        !no           TYPE clike
+        v1            TYPE clike OPTIONAL
+        fallback      TYPE string
+      RETURNING
+        VALUE(result) TYPE string.
+
   PROTECTED SECTION.
     TYPES:
       BEGIN OF ty_s_keys,
@@ -60,10 +93,7 @@ CLASS z2ui5_cl_tm_001 DEFINITION
     DATA mt_dfies          TYPE z2ui5_cl_tm_context=>ty_t_dfies.
     DATA client            TYPE REF TO z2ui5_if_client.
     DATA check_initialized TYPE abap_bool.
-    DATA mv_f4_fname       TYPE string.
-    DATA mv_shlpfield      TYPE string.
     DATA mv_multi_edit     TYPE abap_bool.
-    DATA mv_key_error      TYPE abap_bool.
 
     DATA mv_ucomm_tmp      TYPE string.
     " the edit lock is held in a stateful session, from the first change
@@ -82,13 +112,17 @@ CLASS z2ui5_cl_tm_001 DEFINITION
 
     METHODS get_dfies.
 
+    "! The DDIC field list of ABAP Cloud has no data types: the client
+    "! column gets the type CLNT here, so that it is left out of the keys,
+    "! the row hash and the duplicate check and cannot be edited - as on
+    "! Standard ABAP
+    METHODS set_client_field.
+
     METHODS row_select.
 
     METHODS render_main.
 
-    "! A text of data element roll - or fallback where the data element is
-    "! not on the system or has no text (an EWM or S/4HANA system may lack
-    "! the data elements the texts are borrowed from)
+    "! A text of data element roll - or fallback, see get_text_by_dtel
     METHODS get_txt
       IMPORTING
         roll          TYPE string
@@ -97,10 +131,7 @@ CLASS z2ui5_cl_tm_001 DEFINITION
       RETURNING
         VALUE(result) TYPE string.
 
-    "! The text of message no of class id - or fallback where the message
-    "! class or number is not on the system (an EWM or S/4HANA system may
-    "! lack the classes the texts are borrowed from; a missing message
-    "! answers with its own class and number, or nothing)
+    "! The text of message no of class id - or fallback, see get_text_by_msg
     METHODS get_msg
       IMPORTING
         !id           TYPE clike
@@ -175,6 +206,13 @@ CLASS z2ui5_cl_tm_001 DEFINITION
     "! DEQUEUE_E_TABLE, the counterpart of lock( )
     METHODS unlock.
 
+    "! The VARKEY of lock( ) and unlock( ): the logon client for a
+    "! client-dependent table, typed RSTABLE-VARKEY - unbound for a table
+    "! without a client, which is locked as a whole
+    METHODS get_lock_varkey
+      RETURNING
+        VALUE(result) TYPE REF TO data.
+
     "! The lock for the changes that start now (add, edit, multi-edit): taken
     "! once and kept in a stateful session until the changes are saved or
     "! dropped. result is abap_false if another user holds it.
@@ -226,6 +264,16 @@ CLASS z2ui5_cl_tm_001 DEFINITION
 
     METHODS transport_all.
 
+    "! The logon client's change option for this table (SCC4,
+    "! T000-CCCORACTIV) as SM30 applies it - `1` automatic recording, `2` no
+    "! changes allowed, `3` no transports; empty when it does not apply:
+    "! ABAP Cloud, a cross-client table (T000-CCNOCLIIND is not checked) or
+    "! a table that is no customizing table (delivery class other than C or
+    "! G), or when T000 or DD02L cannot be read
+    METHODS get_client_change_option
+      RETURNING
+        VALUE(result) TYPE string.
+
     METHODS on_event_transport.
 
     METHODS render_ui_table
@@ -250,6 +298,23 @@ ENDCLASS.
 CLASS z2ui5_cl_tm_001 IMPLEMENTATION.
 
   METHOD get_txt.
+
+    result = get_text_by_dtel( roll     = roll
+                               type     = type
+                               fallback = fallback ).
+
+  ENDMETHOD.
+
+  METHOD get_msg.
+
+    result = get_text_by_msg( id       = id
+                              no       = no
+                              v1       = v1
+                              fallback = fallback ).
+
+  ENDMETHOD.
+
+  METHOD get_text_by_dtel.
         DATA texts TYPE z2ui5_cl_tm_context=>ty_s_data_element_text.
 
     TRY.
@@ -279,7 +344,7 @@ CLASS z2ui5_cl_tm_001 IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD get_msg.
+  METHOD get_text_by_msg.
 
     TRY.
         result = z2ui5_cl_tm_context=>msg_get_by_msg( id = id
@@ -309,6 +374,10 @@ DATA key_set     TYPE temp11.
     FIELD-SYMBOLS <del_org> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <del>     TYPE any.
     FIELD-SYMBOLS <saved>   TYPE STANDARD TABLE.
+
+    " the client setting first, as SM30 does: a client that allows no
+    " changes to customizing takes none from here either
+    DATA lv_client_option TYPE string.
       DATA keys TYPE z2ui5_cl_tm_001=>ty_t_keys.
       DATA key LIKE LINE OF keys.
       DATA comp TYPE abap_component_tab.
@@ -333,6 +402,31 @@ DATA key_set     TYPE temp11.
           DATA lx_db TYPE REF TO cx_root.
           DATA lx_tr TYPE REF TO cx_root.
       DATA db TYPE REF TO data.
+    lv_client_option = get_client_change_option( ).
+    IF lv_client_option = `2`.
+      CLEAR mv_ucomm_tmp.
+      client->message_box_display( text = |Client { sy-mandt } allows no changes to customizing (SCC4) - the changes to { mv_table } were not saved.|
+                                   type = `error` ).
+      RETURN.
+    ENDIF.
+
+    " ABAP Cloud records nothing on a request (popups' bus_tr_add( ) has no
+    " Cloud branch, and its request list stays empty) - no popup to ask for
+    " one that would not be written
+    IF ms_transport IS INITIAL AND z2ui5_cl_tm_context=>check_abap_cloud( ) = abap_true.
+      ms_transport-locl = abap_true.
+    ENDIF.
+
+    " a client that records its customizing changes automatically: a
+    " request is required, No Transport is not enough
+    IF lv_client_option = `1` AND ms_transport-locl = abap_true.
+      CLEAR ms_transport.
+      client->message_toast_display( |Client { sy-mandt } records customizing changes automatically (SCC4) - choose a transport request.| ).
+      mv_ucomm_tmp = `BUTTON_SAVE`.
+      client->nav_app_call( app           = z2ui5_cl_popup_show_tr=>factory( )
+                            keep_messages = abap_true ).
+      RETURN.
+    ENDIF.
 
     IF ms_transport IS INITIAL.
 
@@ -612,15 +706,81 @@ DATA key_set     TYPE temp11.
 
   ENDMETHOD.
 
+  METHOD get_client_change_option.
+
+    DATA lv_contflag TYPE c LENGTH 1.
+    DATA lv_option   TYPE c LENGTH 1.
+    DATA temp9 LIKE sy-subrc.
+    DATA temp10 LIKE sy-subrc.
+    DATA lv_dd02l TYPE string.
+    DATA lv_t000 TYPE string.
+        DATA lv_where TYPE string.
+
+    IF z2ui5_cl_tm_context=>check_abap_cloud( ) = abap_true.
+      RETURN.
+    ENDIF.
+
+    " the client-specific setting covers client-dependent tables only
+
+
+    temp10 = sy-subrc.
+    READ TABLE mt_dfies WITH KEY keyflag = abap_true datatype = 'CLNT' TRANSPORTING NO FIELDS.
+    temp9 = sy-subrc.
+    sy-subrc = temp10.
+    IF NOT temp9 = 0.
+      RETURN.
+    ENDIF.
+
+    " by name: neither T000 nor DD02L is released for ABAP Cloud, where the
+    " class has to compile as well
+
+    lv_dd02l = `DD02L`.
+
+    lv_t000  = `T000`.
+    TRY.
+        " customizing only (delivery class C or G) - application data is
+        " not what the client's change option is about
+        SELECT SINGLE contflag
+          FROM (lv_dd02l) INTO lv_contflag
+          WHERE tabname  = mv_table
+            AND as4local = 'A'
+            AND as4vers  = '0000'
+          .
+        IF sy-subrc <> 0 OR ( lv_contflag <> 'C' AND lv_contflag <> 'G' ).
+          RETURN.
+        ENDIF.
+
+        " T000 is cross-client: its MANDT is the key to read, not the
+        " client handling of the statement - a dynamic condition, as for a
+        " dynamic table
+
+        lv_where = |MANDT = '{ sy-mandt }'|.
+        SELECT SINGLE cccoractiv
+          FROM (lv_t000) INTO lv_option
+          WHERE (lv_where)
+          .
+        IF sy-subrc = 0.
+          result = lv_option.
+        ENDIF.
+
+      CATCH cx_root.
+        " not readable here - the save goes on as before
+        CLEAR result.
+    ENDTRY.
+
+  ENDMETHOD.
+
   METHOD transport_all.
 
     DATA t_table TYPE REF TO data.
 
     FIELD-SYMBOLS <tab>     TYPE STANDARD TABLE.
     FIELD-SYMBOLS <tab_org> TYPE STANDARD TABLE.
+      DATA db TYPE REF TO data.
       DATA comp TYPE abap_component_tab.
           DATA struct_desc TYPE REF TO cl_abap_structdescr.
           DATA table_desc TYPE REF TO cl_abap_tabledescr.
+      DATA text TYPE string.
 
     IF ms_transport IS INITIAL.
 
@@ -635,13 +795,18 @@ DATA key_set     TYPE temp11.
 
       CLEAR mv_ucomm_tmp.
 
-      " outside multi-edit a search leaves only its hits in mt_table - all
-      " rows are in mt_table_tmp, which is what the save writes as well
-      IF mv_multi_edit = abap_true.
-        ASSIGN mt_table->* TO <tab>.
-      ELSE.
-        ASSIGN mt_table_tmp->* TO <tab>.
+      " the entries as they are in the database - not the rows on the
+      " screen: a row added or changed and not yet saved is no entry the
+      " request can carry, and one deleted and not yet saved still is
+
+      db = get_db_rows( ).
+      IF db IS NOT BOUND.
+        client->message_toast_display( get_msg( id       = '42'
+                                                no       = `316`
+                                                fallback = `Transport request error` ) ).
+        RETURN.
       ENDIF.
+      ASSIGN db->* TO <tab>.
 
 
       comp = z2ui5_cl_tm_context=>rtti_get_t_attri_by_table_name( mv_table ).
@@ -667,8 +832,7 @@ DATA key_set     TYPE temp11.
       ENDTRY.
       TRY.
           " the entries of the table only - deletions reach the transport
-          " with the save that executes them; pending ones are not in the
-          " database, and a request must not delete what is still there
+          " with the save that executes them
           z2ui5_cl_popup_show_tr=>add_data_to_tranport( ir_data      = t_table
                                                       iv_tabname   = mv_table
                                                       is_transport = ms_transport ).
@@ -681,10 +845,15 @@ DATA key_set     TYPE temp11.
           RETURN.
       ENDTRY.
       " MESSAGE s215(rmps_general) WITH ms_transport-transport INTO msg. "Transporteintrag erfolgreich geschrieben (&1)
-      client->message_toast_display( get_msg( id       = 'rmps_general'
-                                              no       = `215`
-                                              v1       = ms_transport-transport
-                                              fallback = |Transport entries written ({ ms_transport-transport })| ) ).
+
+      text = get_msg( id       = 'rmps_general'
+                            no       = `215`
+                            v1       = ms_transport-transport
+                            fallback = |Transport entries written ({ ms_transport-transport })| ).
+      IF mv_change_active = abap_true.
+        text = |{ text } - the changes not saved yet are not on the request|.
+      ENDIF.
+      client->message_toast_display( text ).
 
     ENDIF.
   ENDMETHOD.
@@ -693,16 +862,16 @@ DATA key_set     TYPE temp11.
     DATA id    TYPE c LENGTH 32.
     DATA selkz TYPE abap_bool.
         DATA comp TYPE abap_component_tab.
-        DATA temp9 LIKE sy-subrc.
+        DATA temp11 LIKE sy-subrc.
         DATA temp1 TYPE xsdboolean.
-          DATA temp10 TYPE cl_abap_structdescr=>component_table.
-          DATA temp11 LIKE LINE OF temp10.
-          DATA temp15 TYPE REF TO cl_abap_datadescr.
-        DATA temp12 LIKE sy-subrc.
+          DATA temp12 TYPE cl_abap_structdescr=>component_table.
+          DATA temp13 LIKE LINE OF temp12.
+          DATA temp17 TYPE REF TO cl_abap_datadescr.
+        DATA temp14 LIKE sy-subrc.
         DATA temp2 TYPE xsdboolean.
-          DATA temp13 TYPE cl_abap_structdescr=>component_table.
-          DATA temp14 LIKE LINE OF temp13.
-          DATA temp16 TYPE REF TO cl_abap_datadescr.
+          DATA temp15 TYPE cl_abap_structdescr=>component_table.
+          DATA temp16 LIKE LINE OF temp15.
+          DATA temp18 TYPE REF TO cl_abap_datadescr.
 
     TRY.
 
@@ -711,35 +880,35 @@ DATA key_set     TYPE temp11.
 
 
         READ TABLE comp WITH KEY name = mc_row_id TRANSPORTING NO FIELDS.
-        temp9 = sy-subrc.
+        temp11 = sy-subrc.
 
-        temp1 = boolc( temp9 = 0 ).
+        temp1 = boolc( temp11 = 0 ).
         IF temp1 = abap_false.
 
-          CLEAR temp10.
+          CLEAR temp12.
 
-          temp11-name = mc_row_id.
+          temp13-name = mc_row_id.
 
-          temp15 ?= cl_abap_datadescr=>describe_by_data( id ).
-          temp11-type = temp15.
-          INSERT temp11 INTO TABLE temp10.
-          INSERT LINES OF temp10 INTO TABLE result.
+          temp17 ?= cl_abap_datadescr=>describe_by_data( id ).
+          temp13-type = temp17.
+          INSERT temp13 INTO TABLE temp12.
+          INSERT LINES OF temp12 INTO TABLE result.
         ENDIF.
 
         READ TABLE comp WITH KEY name = 'SELKZ' TRANSPORTING NO FIELDS.
-        temp12 = sy-subrc.
+        temp14 = sy-subrc.
 
-        temp2 = boolc( temp12 = 0 ).
+        temp2 = boolc( temp14 = 0 ).
         IF temp2 = abap_false.
 
-          CLEAR temp13.
+          CLEAR temp15.
 
-          temp14-name = 'SELKZ'.
+          temp16-name = 'SELKZ'.
 
-          temp16 ?= cl_abap_datadescr=>describe_by_data( selkz ).
-          temp14-type = temp16.
-          INSERT temp14 INTO TABLE temp13.
-          INSERT LINES OF temp13 INTO TABLE result.
+          temp18 ?= cl_abap_datadescr=>describe_by_data( selkz ).
+          temp16-type = temp18.
+          INSERT temp16 INTO TABLE temp15.
+          INSERT LINES OF temp15 INTO TABLE result.
 
         ENDIF.
 
@@ -816,25 +985,25 @@ DATA key_set     TYPE temp11.
     DATA hash TYPE string.
 
     DATA comp LIKE LINE OF t_comp.
-      DATA temp15 LIKE sy-subrc.
-    DATA temp16 TYPE abap_componentdescr.
-    DATA temp17 TYPE REF TO cl_abap_datadescr.
+      DATA temp17 LIKE sy-subrc.
+    DATA temp18 TYPE abap_componentdescr.
+    DATA temp19 TYPE REF TO cl_abap_datadescr.
     LOOP AT t_comp INTO comp.
 
       READ TABLE mt_dfies WITH KEY fieldname = comp-name keyflag = abap_true TRANSPORTING NO FIELDS.
-      temp15 = sy-subrc.
-      IF temp15 = 0.
+      temp17 = sy-subrc.
+      IF temp17 = 0.
         INSERT comp INTO TABLE result.
       ENDIF.
     ENDLOOP.
 
 
-    CLEAR temp16.
-    temp16-name = mc_row_hash.
+    CLEAR temp18.
+    temp18-name = mc_row_hash.
 
-    temp17 ?= cl_abap_datadescr=>describe_by_data( hash ).
-    temp16-type = temp17.
-    INSERT temp16 INTO TABLE result.
+    temp19 ?= cl_abap_datadescr=>describe_by_data( hash ).
+    temp18-type = temp19.
+    INSERT temp18 INTO TABLE result.
 
   ENDMETHOD.
 
@@ -940,15 +1109,15 @@ DATA state_snapshot TYPE temp13.
     DATA db TYPE REF TO data.
     DATA keys TYPE z2ui5_cl_tm_001=>ty_t_keys.
     FIELD-SYMBOLS <line> TYPE ANY.
-      DATA temp17 TYPE z2ui5_cl_tm_001=>ty_s_keys.
-      DATA temp18 TYPE z2ui5_cl_tm_001=>ty_s_keys.
-      DATA key LIKE temp17.
-      DATA temp19 LIKE LINE OF state_db.
-    FIELD-SYMBOLS <line_org> TYPE ANY.
+      DATA temp19 TYPE z2ui5_cl_tm_001=>ty_s_keys.
       DATA temp20 TYPE z2ui5_cl_tm_001=>ty_s_keys.
-      DATA temp21 TYPE z2ui5_cl_tm_001=>ty_s_keys.
+      DATA key LIKE temp19.
+      DATA temp21 LIKE LINE OF state_db.
+    FIELD-SYMBOLS <line_org> TYPE ANY.
+      DATA temp22 TYPE z2ui5_cl_tm_001=>ty_s_keys.
+      DATA temp23 TYPE z2ui5_cl_tm_001=>ty_s_keys.
       FIELD-SYMBOLS <hash> TYPE any.
-        DATA temp22 LIKE LINE OF state_snapshot.
+        DATA temp24 LIKE LINE OF state_snapshot.
     DATA temp3 TYPE xsdboolean.
     db = get_db_rows( ).
     ASSIGN mt_table_org->* TO <org>.
@@ -965,36 +1134,36 @@ DATA state_snapshot TYPE temp13.
     LOOP AT <db> ASSIGNING <line>.
       " get_keys( ) returns one key per row, in the order of the rows
 
-      CLEAR temp17.
+      CLEAR temp19.
 
-      READ TABLE keys INTO temp18 INDEX sy-tabix.
+      READ TABLE keys INTO temp20 INDEX sy-tabix.
       IF sy-subrc = 0.
-        temp17 = temp18.
+        temp19 = temp20.
       ENDIF.
 
-      key = temp17.
+      key = temp19.
 
-      temp19 = |{ key-key }#{ get_row_hash( <line> ) }|.
-      INSERT temp19 INTO TABLE state_db.
+      temp21 = |{ key-key }#{ get_row_hash( <line> ) }|.
+      INSERT temp21 INTO TABLE state_db.
     ENDLOOP.
 
     keys = get_keys( <org> ).
 
     LOOP AT <org> ASSIGNING <line_org>.
 
-      CLEAR temp20.
+      CLEAR temp22.
 
-      READ TABLE keys INTO temp21 INDEX sy-tabix.
+      READ TABLE keys INTO temp23 INDEX sy-tabix.
       IF sy-subrc = 0.
-        temp20 = temp21.
+        temp22 = temp23.
       ENDIF.
-      key = temp20.
+      key = temp22.
 
       ASSIGN COMPONENT mc_row_hash OF STRUCTURE <line_org> TO <hash>.
       IF sy-subrc = 0.
 
-        temp22 = |{ key-key }#{ <hash> }|.
-        INSERT temp22 INTO TABLE state_snapshot.
+        temp24 = |{ key-key }#{ <hash> }|.
+        INSERT temp24 INTO TABLE state_snapshot.
       ENDIF.
     ENDLOOP.
 
@@ -1012,8 +1181,6 @@ DATA state_snapshot TYPE temp13.
     DATA lv_tabname TYPE c LENGTH 30.
     DATA lr_varkey  TYPE REF TO data.
     FIELD-SYMBOLS <varkey> TYPE any.
-    DATA temp23 LIKE sy-subrc.
-    DATA temp24 LIKE sy-subrc.
         DATA subrc LIKE sy-subrc.
         DATA temp25 TYPE string.
         DATA user LIKE temp25.
@@ -1026,24 +1193,9 @@ DATA state_snapshot TYPE temp13.
     ENDIF.
 
     lv_tabname = mv_table.
-    " a client-dependent table is locked in the logon client only
-
-
-    temp24 = sy-subrc.
-    READ TABLE mt_dfies WITH KEY keyflag = abap_true datatype = 'CLNT' TRANSPORTING NO FIELDS.
-    temp23 = sy-subrc.
-    sy-subrc = temp24.
-    IF temp23 = 0.
-      " VARKEY is passed by reference and must have the exact type of the
-      " module's parameter (RSTABLE-VARKEY - its length differs between
-      " releases); created by name, so the class also compiles on ABAP Cloud
-      TRY.
-          CREATE DATA lr_varkey TYPE (`RSTABLE-VARKEY`).
-          ASSIGN lr_varkey->* TO <varkey>.
-          <varkey> = sy-mandt.
-        CATCH cx_root ##NO_HANDLER.
-          " no such type: the whole table is locked, as without a client
-      ENDTRY.
+    lr_varkey = get_lock_varkey( ).
+    IF lr_varkey IS BOUND.
+      ASSIGN lr_varkey->* TO <varkey>.
     ENDIF.
 
     " called by name, so the class compiles where the module does not exist
@@ -1118,27 +1270,15 @@ DATA state_snapshot TYPE temp13.
     DATA lv_tabname TYPE c LENGTH 30.
     DATA lr_varkey  TYPE REF TO data.
     FIELD-SYMBOLS <varkey> TYPE any.
-    DATA temp27 LIKE sy-subrc.
 
     IF z2ui5_cl_tm_context=>check_abap_cloud( ) = abap_true.
       RETURN.
     ENDIF.
 
     lv_tabname = mv_table.
-
-    READ TABLE mt_dfies WITH KEY keyflag = abap_true datatype = 'CLNT' TRANSPORTING NO FIELDS.
-    temp27 = sy-subrc.
-    IF temp27 = 0.
-      " VARKEY is passed by reference and must have the exact type of the
-      " module's parameter (RSTABLE-VARKEY - its length differs between
-      " releases); created by name, so the class also compiles on ABAP Cloud
-      TRY.
-          CREATE DATA lr_varkey TYPE (`RSTABLE-VARKEY`).
-          ASSIGN lr_varkey->* TO <varkey>.
-          <varkey> = sy-mandt.
-        CATCH cx_root ##NO_HANDLER.
-          " no such type: the whole table is locked, as without a client
-      ENDTRY.
+    lr_varkey = get_lock_varkey( ).
+    IF lr_varkey IS BOUND.
+      ASSIGN lr_varkey->* TO <varkey>.
     ENDIF.
 
     TRY.
@@ -1164,6 +1304,32 @@ DATA state_snapshot TYPE temp13.
         ENDIF.
       CATCH cx_root ##NO_HANDLER.
         " a lock that cannot be released goes with the session
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD get_lock_varkey.
+
+    FIELD-SYMBOLS <varkey> TYPE any.
+
+    " a client-dependent table is locked in the logon client only
+    DATA temp27 LIKE sy-subrc.
+    READ TABLE mt_dfies WITH KEY keyflag = abap_true datatype = 'CLNT' TRANSPORTING NO FIELDS.
+    temp27 = sy-subrc.
+    IF NOT temp27 = 0.
+      RETURN.
+    ENDIF.
+
+    " VARKEY is passed by reference and must have the exact type of the
+    " module's parameter (RSTABLE-VARKEY - its length differs between
+    " releases); created by name, so the class also compiles on ABAP Cloud
+    TRY.
+        CREATE DATA result TYPE (`RSTABLE-VARKEY`).
+        ASSIGN result->* TO <varkey>.
+        <varkey> = sy-mandt.
+      CATCH cx_root.
+        " no such type: the whole table is locked, as without a client
+        CLEAR result.
     ENDTRY.
 
   ENDMETHOD.
@@ -1217,10 +1383,24 @@ DATA state_snapshot TYPE temp13.
   ENDMETHOD.
 
   METHOD get_dfies.
-    DATA temp28 LIKE LINE OF mt_dfies.
-    DATA dfies LIKE REF TO temp28.
+    DATA temp28 LIKE sy-subrc.
+    DATA temp29 LIKE sy-subrc.
+    DATA temp30 LIKE LINE OF mt_dfies.
+    DATA dfies LIKE REF TO temp30.
 
     mt_dfies = z2ui5_cl_tm_context=>rtti_get_t_dfies_by_table_name( mv_table ).
+
+    " every check of the app and of the popup finds the client column by its
+    " data type CLNT - ABAP Cloud answers the fields without one
+
+
+    temp29 = sy-subrc.
+    READ TABLE mt_dfies WITH KEY datatype = 'CLNT' TRANSPORTING NO FIELDS.
+    temp28 = sy-subrc.
+    sy-subrc = temp29.
+    IF NOT temp28 = 0.
+      set_client_field( ).
+    ENDIF.
 
     " Check if the DB for the F4 Help is released
 
@@ -1239,6 +1419,51 @@ DATA state_snapshot TYPE temp13.
           CLEAR dfies->checktable.
       ENDTRY.
     ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD set_client_field.
+
+    DATA descr        TYPE REF TO cl_abap_typedescr.
+    DATA struct_descr TYPE REF TO cl_abap_structdescr.
+    DATA comp_descr   TYPE REF TO cl_abap_datadescr.
+    DATA elem_descr   TYPE REF TO cl_abap_elemdescr.
+
+    " the client is the first key field - on ABAP Cloud a column CLIENT (or
+    " MANDT) of the built-in type CLNT, which RTTI shows as a CHAR 3
+    " ASSIGN, not REF #( ... OPTIONAL ): the 702 downport drops the OPTIONAL
+    FIELD-SYMBOLS <dfies> TYPE z2ui5_cl_tm_context=>ty_s_dfies.
+    READ TABLE mt_dfies WITH KEY keyflag = abap_true ASSIGNING <dfies>.
+    IF <dfies> IS NOT ASSIGNED OR <dfies>-datatype IS NOT INITIAL.
+      RETURN.
+    ENDIF.
+    IF <dfies>-fieldname <> 'CLIENT' AND <dfies>-fieldname <> 'MANDT'.
+      RETURN.
+    ENDIF.
+
+    cl_abap_typedescr=>describe_by_name( EXPORTING  p_name         = mv_table
+                                         RECEIVING  p_descr_ref    = descr
+                                         EXCEPTIONS type_not_found = 1
+                                                    OTHERS         = 2 ).
+    IF sy-subrc <> 0 OR descr->kind <> cl_abap_typedescr=>kind_struct.
+      RETURN.
+    ENDIF.
+
+    struct_descr ?= descr.
+    struct_descr->get_component_type( EXPORTING  p_name                 = <dfies>-fieldname
+                                      RECEIVING  p_descr_ref            = comp_descr
+                                      EXCEPTIONS component_not_found    = 1
+                                                 unsupported_input_type = 2
+                                                 OTHERS                 = 3 ).
+    IF sy-subrc <> 0 OR comp_descr->kind <> cl_abap_typedescr=>kind_elem
+        OR comp_descr->type_kind <> cl_abap_typedescr=>typekind_char.
+      RETURN.
+    ENDIF.
+
+    elem_descr ?= comp_descr.
+    IF elem_descr->output_length = 3.
+      <dfies>-datatype = 'CLNT'.
+    ENDIF.
 
   ENDMETHOD.
 
@@ -1264,31 +1489,35 @@ DATA state_snapshot TYPE temp13.
   ENDMETHOD.
 
   METHOD get_table_name.
-      DATA tab TYPE string.
-        DATA startup_params TYPE z2ui5_if_client=>ty_t_name_value.
-        DATA temp29 TYPE string.
-        DATA temp30 TYPE z2ui5_if_client=>ty_s_name_value.
+      DATA startup_params TYPE z2ui5_if_client=>ty_t_name_value.
+      DATA temp31 TYPE string.
+      DATA temp32 TYPE z2ui5_if_client=>ty_s_name_value.
+      DATA tab LIKE temp31.
     DATA descr TYPE REF TO cl_abap_typedescr.
+        DATA lt_comp TYPE abap_component_tab.
+    DATA temp33 LIKE sy-subrc.
+    DATA temp20 LIKE sy-subrc.
 
     " a table set by factory( ) or set_app_data( ) is checked as well
     IF mv_table IS INITIAL.
 
-      " TABLE per Parameter?
+      " the launchpad startup parameter first: a tile's table is the scope
+      " the administrator gave it, which a URL parameter the user adds must
+      " not change; without a tile (no startup parameter) the URL names it
 
-      tab = z2ui5_cl_tm_context=>url_param_get( val = 'table'
-                                                url = client->get( )-s_config-search ).
+      startup_params = client->get( )-t_comp_params.
 
+      CLEAR temp31.
+
+      READ TABLE startup_params INTO temp32 WITH KEY n = 'table'.
+      IF sy-subrc = 0.
+        temp31 = temp32-v.
+      ENDIF.
+
+      tab = temp31.
       IF tab IS INITIAL.
-
-        startup_params = client->get( )-t_comp_params.
-
-        CLEAR temp29.
-
-        READ TABLE startup_params INTO temp30 WITH KEY n = 'table'.
-        IF sy-subrc = 0.
-          temp29 = temp30-v.
-        ENDIF.
-        tab = temp29.
+        tab = z2ui5_cl_tm_context=>url_param_get( val = 'table'
+                                                url = client->get( )-s_config-search ).
       ENDIF.
 
       " no fallback table: without the parameter the app asks for one
@@ -1309,6 +1538,31 @@ DATA state_snapshot TYPE temp13.
                                                     OTHERS         = 2 ).
     IF sy-subrc <> 0 OR descr->kind <> cl_abap_typedescr=>kind_struct.
       client->message_toast_display( |Table { mv_table } does not exist.| ).
+      mv_table_input = mv_table.
+      CLEAR mv_table.
+      RETURN.
+    ENDIF.
+
+    " ROW_ID and SELKZ are the app's technical columns - the row id and the
+    " multi-edit selection. A table with a column of either name of its own
+    " had it taken over: the row ids overwrote the real ROW_ID values (and
+    " every save was refused as changed in the database), and Delete and
+    " Copy acted on the stored SELKZ values. Such a table is refused
+    TRY.
+
+        lt_comp = z2ui5_cl_tm_context=>rtti_get_t_attri_by_table_name( mv_table ).
+      CATCH cx_root ##NO_HANDLER.
+    ENDTRY.
+
+    READ TABLE lt_comp WITH KEY name = mc_row_id TRANSPORTING NO FIELDS.
+    temp33 = sy-subrc.
+
+    READ TABLE lt_comp WITH KEY name = `SELKZ` TRANSPORTING NO FIELDS.
+    temp20 = sy-subrc.
+    IF temp33 = 0 OR temp20 = 0.
+      client->message_box_display( text = |Table { mv_table } has a column { mc_row_id } or SELKZ of its own, | &&
+                                          |which this app uses for itself - it cannot be maintained here.|
+                                   type = `error` ).
       mv_table_input = mv_table.
       CLEAR mv_table.
     ENDIF.
@@ -1340,17 +1594,17 @@ DATA state_snapshot TYPE temp13.
     DATA table TYPE REF TO z2ui5_cl_ui5_view_builder.
     DATA headder TYPE REF TO z2ui5_cl_ui5_view_builder.
     DATA columns TYPE REF TO z2ui5_cl_ui5_view_builder.
-    DATA temp31 LIKE LINE OF mo_layout->ms_layout-t_layout.
-    DATA layout LIKE REF TO temp31.
+    DATA temp34 LIKE LINE OF mo_layout->ms_layout-t_layout.
+    DATA layout LIKE REF TO temp34.
       DATA lv_index LIKE sy-tabix.
     DATA cells TYPE REF TO z2ui5_cl_ui5_view_builder.
         DATA sub_col TYPE string.
         DATA index TYPE i.
         DATA line LIKE LINE OF mo_layout->ms_layout-t_layout.
         DATA subcol LIKE LINE OF layout->t_sub_col.
-          DATA temp32 LIKE sy-subrc.
-            FIELD-SYMBOLS <temp33> LIKE LINE OF mo_layout->ms_layout-t_layout.
-            DATA temp34 LIKE sy-tabix.
+          DATA temp35 LIKE sy-subrc.
+            FIELD-SYMBOLS <temp36> LIKE LINE OF mo_layout->ms_layout-t_layout.
+            DATA temp37 LIKE sy-tabix.
           DATA column TYPE string.
       DATA cell TYPE string.
     ASSIGN mt_table->* TO <tab>.
@@ -1434,17 +1688,17 @@ DATA state_snapshot TYPE temp13.
           " a subcolumn that names no position keeps the previous one
 
           READ TABLE mo_layout->ms_layout-t_layout WITH KEY fname = subcol-fname TRANSPORTING NO FIELDS.
-          temp32 = sy-subrc.
-          IF temp32 = 0.
+          temp35 = sy-subrc.
+          IF temp35 = 0.
 
 
-            temp34 = sy-tabix.
-            READ TABLE mo_layout->ms_layout-t_layout WITH KEY fname = subcol-fname ASSIGNING <temp33>.
-            sy-tabix = temp34.
+            temp37 = sy-tabix.
+            READ TABLE mo_layout->ms_layout-t_layout WITH KEY fname = subcol-fname ASSIGNING <temp36>.
+            sy-tabix = temp37.
             IF sy-subrc <> 0.
               ASSERT 1 = 0.
             ENDIF.
-            line = <temp33>.
+            line = <temp36>.
           ENDIF.
 
           " relative to the row: a namespaced column (/CWM/XCWMAT) is a
@@ -1483,7 +1737,7 @@ DATA state_snapshot TYPE temp13.
 
   METHOD render_main_head.
       DATA view TYPE REF TO z2ui5_cl_ui5_view_builder.
-        DATA temp35 TYPE string_table.
+        DATA temp38 TYPE string_table.
     IF mo_parent_view IS INITIAL.
 
 
@@ -1503,11 +1757,11 @@ DATA state_snapshot TYPE temp13.
         " inside the launchpad the shell header carries the title, set once
         " the response has been rendered
 
-        CLEAR temp35.
-        INSERT mv_table INTO TABLE temp35.
+        CLEAR temp38.
+        INSERT mv_table INTO TABLE temp38.
         client->follow_up_action(
             val   = z2ui5_if_client=>cs_event-set_title_launchpad
-            t_arg = temp35 ).
+            t_arg = temp38 ).
 
       ELSE.
         result = view->ele( `Page`
@@ -1533,6 +1787,7 @@ DATA state_snapshot TYPE temp13.
 
   METHOD render_main_footer.
     DATA footer TYPE REF TO z2ui5_cl_ui5_view_builder.
+    DATA menu TYPE REF TO z2ui5_cl_ui5_view_builder.
     footer = page->ele( `footer`
                        )->ele( `OverflowToolbar`
                        )->tag( `ToolbarSpacer` ).
@@ -1577,19 +1832,25 @@ DATA state_snapshot TYPE temp13.
         )->a( n = `press` v = client->_event( 'BUTTON_SAVE' )
         )->a( n = `type` v = 'Success' ).
 
-    footer->ele( `MenuButton`
+
+    menu = footer->ele( `MenuButton`
         )->a( n = `activeIcon` v = 'sap-icon://action-settings'
         )->ele( `menu`
-        )->ele( `Menu`
-        )->tag( `MenuItem`
-        )->a( n = `icon`  v = 'sap-icon://shipping-status'
-        )->a( n = `text`  v = get_txt( roll = 'ALLES_FUB' fallback = `Transport All Entries` )
-        )->a( n = `press` v = client->_event( 'TRANSPORT_ALL' )
-        )->tag( `MenuItem`
-        )->a( n = `icon`  v = 'sap-icon://shipping-status'
-        )->a( n = `text`  v = get_txt( roll = 'FUNCCHANGE' fallback = `Change Transport Request` )
-        )->a( n = `press` v = client->_event( 'TRANSPORT_CHANGE' )
-        )->tag( `MenuItem`
+        )->ele( `Menu` ).
+
+    " ABAP Cloud records nothing on a transport request - no menu for it
+    IF z2ui5_cl_tm_context=>check_abap_cloud( ) = abap_false.
+      menu->tag( `MenuItem`
+          )->a( n = `icon`  v = 'sap-icon://shipping-status'
+          )->a( n = `text`  v = get_txt( roll = 'ALLES_FUB' fallback = `Transport All Entries` )
+          )->a( n = `press` v = client->_event( 'TRANSPORT_ALL' )
+          )->tag( `MenuItem`
+          )->a( n = `icon`  v = 'sap-icon://shipping-status'
+          )->a( n = `text`  v = get_txt( roll = 'FUNCCHANGE' fallback = `Change Transport Request` )
+          )->a( n = `press` v = client->_event( 'TRANSPORT_CHANGE' ) ).
+    ENDIF.
+
+    menu->tag( `MenuItem`
         )->a( n = `icon`  v = 'sap-icon://key-user-settings'
         )->a( n = `text`  v = get_txt( roll = 'POWL_ADMIN_TY' fallback = `Multi-Edit` )
         )->a( n = `press` v = client->_event( 'BUTTON_EDIT' ) ).
@@ -1614,28 +1875,28 @@ DATA state_snapshot TYPE temp13.
   METHOD row_select.
 
     DATA lt_arg TYPE string_table.
-    DATA temp37 LIKE sy-subrc.
+    DATA temp40 LIKE sy-subrc.
     DATA ls_arg LIKE LINE OF lt_arg.
-    FIELD-SYMBOLS <temp18> LIKE LINE OF lt_arg.
-    DATA temp19 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp21> LIKE LINE OF lt_arg.
+    DATA temp22 LIKE sy-tabix.
     DATA read_only LIKE ms_config-read_only.
     lt_arg = client->get( )-t_event_arg.
 
     READ TABLE lt_arg INDEX 1 TRANSPORTING NO FIELDS.
-    temp37 = sy-subrc.
-    IF NOT temp37 = 0.
+    temp40 = sy-subrc.
+    IF NOT temp40 = 0.
       RETURN.
     ENDIF.
 
 
 
-    temp19 = sy-tabix.
-    READ TABLE lt_arg INDEX 1 ASSIGNING <temp18>.
-    sy-tabix = temp19.
+    temp22 = sy-tabix.
+    READ TABLE lt_arg INDEX 1 ASSIGNING <temp21>.
+    sy-tabix = temp22.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    ls_arg = <temp18>.
+    ls_arg = <temp21>.
 
     " the row is shown in any case - read-only while another user edits
     " the table (edit_lock has said who)
@@ -1658,9 +1919,14 @@ DATA state_snapshot TYPE temp13.
   METHOD search.
     FIELD-SYMBOLS <tab>     TYPE STANDARD TABLE.
     FIELD-SYMBOLS <tab_tmp> TYPE STANDARD TABLE.
+    DATA temp41 TYPE string_table.
+    DATA fields LIKE temp41.
+    DATA dfies LIKE LINE OF mt_dfies.
+        FIELD-SYMBOLS <layout> LIKE LINE OF mo_layout->ms_layout-t_layout.
+      DATA temp42 LIKE LINE OF fields.
     FIELD-SYMBOLS <f_row> TYPE ANY.
       DATA lv_row TYPE string.
-      DATA lv_index TYPE i.
+      DATA field LIKE LINE OF fields.
         FIELD-SYMBOLS <field> TYPE any.
 
     ASSIGN mt_table->* TO <tab>.
@@ -1674,21 +1940,41 @@ DATA state_snapshot TYPE temp13.
       RETURN.
     ENDIF.
 
+    " the fields of the table that are shown - not the technical columns
+    " ROW_ID (a UUID) and SELKZ, not the client, not a hidden column - each
+    " on a line of its own, so a hit never spans two fields
+
+    CLEAR temp41.
+
+    fields = temp41.
+
+    LOOP AT mt_dfies INTO dfies WHERE datatype <> 'CLNT' AND fieldname <> 'MANDT'.
+      IF mo_layout IS BOUND.
+
+        UNASSIGN <layout>.
+        READ TABLE mo_layout->ms_layout-t_layout WITH KEY fname = dfies-fieldname ASSIGNING <layout>.
+        IF <layout> IS ASSIGNED AND <layout>-visible = abap_false.
+          CONTINUE.
+        ENDIF.
+      ENDIF.
+
+      temp42 = dfies-fieldname.
+      INSERT temp42 INTO TABLE fields.
+    ENDLOOP.
+
 
     LOOP AT <tab> ASSIGNING <f_row>.
 
       lv_row = ``.
 
-      lv_index = 1.
-      DO.
+      LOOP AT fields INTO field.
 
-        ASSIGN COMPONENT lv_index OF STRUCTURE <f_row> TO <field>.
+        ASSIGN COMPONENT field OF STRUCTURE <f_row> TO <field>.
         IF sy-subrc <> 0.
-          EXIT.
+          CONTINUE.
         ENDIF.
-        lv_row = lv_row && <field>.
-        lv_index = lv_index + 1.
-      ENDDO.
+        lv_row = |{ lv_row }{ <field> }{ cl_abap_char_utilities=>newline }|.
+      ENDLOOP.
 
       IF lv_row NS mv_search_value.
         DELETE <tab>.
@@ -1874,31 +2160,38 @@ DATA state_snapshot TYPE temp13.
 
   METHOD get_config_by_url.
 
-    DATA value TYPE string.
-      DATA startup_params TYPE z2ui5_if_client=>ty_t_name_value.
-      DATA temp38 TYPE string.
-      DATA temp39 TYPE z2ui5_if_client=>ty_s_name_value.
-    value = z2ui5_cl_tm_context=>url_param_get( val = 'readonly'
-                                                      url = client->get( )-s_config-search ).
-    IF value IS INITIAL.
+    " only ever switched on here, by either source: a URL must not lift the
+    " read-only mode a caller or a launchpad tile configured - a URL value
+    " that is not X used to hide the tile's startup parameter
+    DATA startup_params TYPE z2ui5_if_client=>ty_t_name_value.
+    DATA temp43 TYPE string_table.
+    DATA temp23 TYPE string.
+    DATA temp24 TYPE z2ui5_if_client=>ty_s_name_value.
+    DATA lt_value LIKE temp43.
+    DATA value LIKE LINE OF lt_value.
+    startup_params = client->get( )-t_comp_params.
 
-      startup_params = client->get( )-t_comp_params.
+    CLEAR temp43.
+    INSERT z2ui5_cl_tm_context=>url_param_get( val = 'readonly'
+url = client->get( )-s_config-search ) INTO TABLE temp43.
 
-      CLEAR temp38.
+    CLEAR temp23.
 
-      READ TABLE startup_params INTO temp39 WITH KEY n = 'readonly'.
-      IF sy-subrc = 0.
-        temp38 = temp39-v.
+    READ TABLE startup_params INTO temp24 WITH KEY n = 'readonly'.
+    IF sy-subrc = 0.
+      temp23 = temp24-v.
+    ENDIF.
+    INSERT temp23 INTO TABLE temp43.
+
+    lt_value = temp43.
+
+
+    LOOP AT lt_value INTO value.
+      value = to_upper( condense( value ) ).
+      IF value = `X` OR value = `TRUE` OR value = `1`.
+        ms_config-read_only = abap_true.
       ENDIF.
-      value = temp38.
-    ENDIF.
-
-    " only ever switched on here: a URL must not lift the read-only mode a
-    " caller configured
-    value = to_upper( condense( value ) ).
-    IF value = `X` OR value = `TRUE` OR value = `1`.
-      ms_config-read_only = abap_true.
-    ENDIF.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -1923,8 +2216,8 @@ DATA state_snapshot TYPE temp13.
   ENDMETHOD.
 
   METHOD on_after_layout.
-        DATA temp40 TYPE REF TO z2ui5_cl_layo_pop.
-        DATA app LIKE temp40.
+        DATA temp45 TYPE REF TO z2ui5_cl_layo_pop.
+        DATA app LIKE temp45.
 
     " Kommen wir aus einer anderen APP
     IF client->get( )-check_on_navigated = abap_false.
@@ -1934,9 +2227,9 @@ DATA state_snapshot TYPE temp13.
     TRY.
 
 
-        temp40 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+        temp45 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
 
-        app = temp40.
+        app = temp45.
 
         mo_layout = app->mo_layout.
 
@@ -1972,8 +2265,8 @@ DATA state_snapshot TYPE temp13.
   ENDMETHOD.
 
   METHOD on_after_transport.
-        DATA temp41 TYPE REF TO z2ui5_cl_popup_show_tr.
-        DATA app LIKE temp41.
+        DATA temp46 TYPE REF TO z2ui5_cl_popup_show_tr.
+        DATA app LIKE temp46.
     " Kommen wir aus einer anderen APP
     IF client->get( )-check_on_navigated = abap_false.
       RETURN.
@@ -1982,9 +2275,9 @@ DATA state_snapshot TYPE temp13.
     TRY.
         " War es das Layout?
 
-        temp41 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+        temp46 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
 
-        app = temp41.
+        app = temp46.
 
         " a cancelled popup returns no request - the one chosen before stays
         IF app->ms_transport IS NOT INITIAL.
@@ -2041,11 +2334,11 @@ DATA state_snapshot TYPE temp13.
     DATA table TYPE REF TO z2ui5_cl_ui5_view_builder.
     DATA toolbar TYPE REF TO z2ui5_cl_ui5_view_builder.
     DATA columns TYPE REF TO z2ui5_cl_ui5_view_builder.
-    DATA temp42 LIKE LINE OF mo_layout->ms_layout-t_layout.
-    DATA layout LIKE REF TO temp42.
+    DATA temp47 LIKE LINE OF mo_layout->ms_layout-t_layout.
+    DATA layout LIKE REF TO temp47.
       DATA lv_index LIKE sy-tabix.
       DATA path TYPE string.
-      DATA temp43 TYPE string.
+      DATA temp48 TYPE string.
       DATA col TYPE REF TO z2ui5_cl_ui5_view_builder.
     READ TABLE mo_layout->ms_layout-t_layout WITH KEY fname = 'SELKZ' ASSIGNING <selkz_column>.
     IF <selkz_column> IS ASSIGNED.
@@ -2090,16 +2383,16 @@ DATA state_snapshot TYPE temp13.
 
 
       IF layout->width IS NOT INITIAL.
-        temp43 = client->_bind( val = layout->width tab = mo_layout->ms_layout-t_layout tab_index = lv_index ).
+        temp48 = client->_bind( val = layout->width tab = mo_layout->ms_layout-t_layout tab_index = lv_index ).
       ELSE.
-        CLEAR temp43.
+        CLEAR temp48.
       ENDIF.
 
       col = columns->ele( n = `Column` ns = `table`
                       )->a( n = `visible` v = client->_bind( val       = layout->visible
                                                       tab       = mo_layout->ms_layout-t_layout
                                                       tab_index = lv_index )
-                      )->a( n = `width` v = temp43
+                      )->a( n = `width` v = temp48
                       )->a( n = `sortProperty` v = path
                       )->a( n = `filterProperty` v = path
                       )->tag( `Text`
@@ -2185,13 +2478,10 @@ DATA state_snapshot TYPE temp13.
   ENDMETHOD.
 
   METHOD check_input.
+
     FIELD-SYMBOLS <mt_table_tmp> TYPE data.
     FIELD-SYMBOLS <mt_table> TYPE data.
       DATA temp7 TYPE xsdboolean.
-
-    CLEAR mv_key_error.
-
-
     ASSIGN mt_table_tmp->* TO <mt_table_tmp>.
 
     ASSIGN mt_table->* TO <mt_table>.
@@ -2261,8 +2551,8 @@ DATA state_snapshot TYPE temp13.
     FIELD-SYMBOLS <tab>         TYPE STANDARD TABLE.
     FIELD-SYMBOLS <tab_tmp>     TYPE STANDARD TABLE.
     FIELD-SYMBOLS <tab_changed> TYPE STANDARD TABLE.
-        DATA temp44 TYPE REF TO z2ui5_cl_tm_pop.
-        DATA app LIKE temp44.
+        DATA temp49 TYPE REF TO z2ui5_cl_tm_pop.
+        DATA app LIKE temp49.
         FIELD-SYMBOLS <app_tab> TYPE data.
           FIELD-SYMBOLS <line> TYPE ANY.
             FIELD-SYMBOLS <row> TYPE any.
@@ -2279,9 +2569,9 @@ DATA state_snapshot TYPE temp13.
 
     TRY.
 
-        temp44 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+        temp49 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
 
-        app = temp44.
+        app = temp49.
 
         ASSIGN mt_table->* TO <tab>.
 

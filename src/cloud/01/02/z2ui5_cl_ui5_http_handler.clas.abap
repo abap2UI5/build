@@ -281,6 +281,15 @@ CLASS z2ui5_cl_ui5_http_handler DEFINITION PUBLIC.
       RETURNING
         VALUE(result) TYPE ty_s_http_res.
 
+    " the bodyless 304 for a request whose If-None-Match (sv_if_none_match,
+    " consumed here) holds iv_etag - initial when it does not, and the GET
+    " assembles its body
+    CLASS-METHODS _http_not_modified
+      IMPORTING
+        iv_etag       TYPE string
+      RETURNING
+        VALUE(result) TYPE ty_s_http_res.
+
     " the validator of a bundle response: the frontend bundle's, the
     " devtools bundle's, which changes with the devtools files alone, or
     " the custom controls bundle's, which changes with the controls alone
@@ -326,6 +335,16 @@ CLASS z2ui5_cl_ui5_http_handler DEFINITION PUBLIC.
         !method       TYPE clike
       RETURNING
         VALUE(result) TYPE ty_s_http_res.
+
+    " Whether an exception chain carries the draft store's 'not found'
+    " (NO_DRAFT_ENTRY_OF_PREVIOUS_REQUEST_FOUND, z2ui5_cl_ui5_srv_draft=>read)
+    " - the draft a request continued from expired, was cleaned up, or is
+    " another user's. Answered as a 410 (_error_response)
+    CLASS-METHODS _check_draft_gone
+      IMPORTING
+        !val          TYPE REF TO cx_root
+      RETURNING
+        VALUE(result) TYPE abap_bool.
 
     "! the extra attributes of the bootstrap script tag from the exit's
     "! t_add_config - a row whose name is no attribute name is left out
@@ -953,13 +972,8 @@ CLASS z2ui5_cl_ui5_http_handler IMPLEMENTATION.
     sv_get_etag     = lv_etag.
     sv_get_etag_key = lv_cache_key.
 
-    " consumed once - see sv_if_none_match
-    DATA(lv_if_none_match) = sv_if_none_match.
-    CLEAR sv_if_none_match.
-    IF z2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
-                                                         etag          = lv_etag ) = abap_true.
-      result-status_code   = 304.
-      result-status_reason = `Not Modified`.
+    result = _http_not_modified( lv_etag ).
+    IF result IS NOT INITIAL.
       RETURN.
     ENDIF.
 
@@ -1152,6 +1166,19 @@ CLASS z2ui5_cl_ui5_http_handler IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD _http_not_modified.
+
+    " consumed once - see sv_if_none_match
+    DATA(lv_if_none_match) = sv_if_none_match.
+    CLEAR sv_if_none_match.
+    IF z2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
+                                                         etag          = iv_etag ) = abap_true.
+      result-status_code   = 304.
+      result-status_reason = `Not Modified`.
+    ENDIF.
+
+  ENDMETHOD.
+
   METHOD _http_get_devtools.
 
     " GET <node>?z2ui5-bundle=devtools - the developer tools as a script of
@@ -1170,13 +1197,8 @@ CLASS z2ui5_cl_ui5_http_handler IMPLEMENTATION.
     " and this is a file. No user or app data, the same for everybody.
     DATA(lv_etag) = _bundle_etag( abap_true ).
 
-    " consumed once - see sv_if_none_match
-    DATA(lv_if_none_match) = sv_if_none_match.
-    CLEAR sv_if_none_match.
-    IF z2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
-                                                         etag          = lv_etag ) = abap_true.
-      result-status_code   = 304.
-      result-status_reason = `Not Modified`.
+    result = _http_not_modified( lv_etag ).
+    IF result IS NOT INITIAL.
       RETURN.
     ENDIF.
 
@@ -1203,13 +1225,8 @@ CLASS z2ui5_cl_ui5_http_handler IMPLEMENTATION.
     DATA(lv_etag) = _bundle_etag( iv_devtools = abap_false
                                   iv_cc       = abap_true ).
 
-    " consumed once - see sv_if_none_match
-    DATA(lv_if_none_match) = sv_if_none_match.
-    CLEAR sv_if_none_match.
-    IF z2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
-                                                         etag          = lv_etag ) = abap_true.
-      result-status_code   = 304.
-      result-status_reason = `Not Modified`.
+    result = _http_not_modified( lv_etag ).
+    IF result IS NOT INITIAL.
       RETURN.
     ENDIF.
 
@@ -1266,13 +1283,8 @@ CLASS z2ui5_cl_ui5_http_handler IMPLEMENTATION.
     " bundle's own.
     DATA(lv_etag) = _get_etag( c_bundle_param ).
 
-    " consumed once - see sv_if_none_match
-    DATA(lv_if_none_match) = sv_if_none_match.
-    CLEAR sv_if_none_match.
-    IF z2ui5_cl_ui5_util_context=>http_check_etag_match( if_none_match = lv_if_none_match
-                                                         etag          = lv_etag ) = abap_true.
-      result-status_code   = 304.
-      result-status_reason = `Not Modified`.
+    result = _http_not_modified( lv_etag ).
+    IF result IS NOT INITIAL.
       RETURN.
     ENDIF.
 
@@ -1374,6 +1386,11 @@ CLASS z2ui5_cl_ui5_http_handler IMPLEMENTATION.
     " text/html from rendering a reflected app name / exception text as markup
     " (reflected-XSS). Success bodies are HTML for the GET shell, JavaScript
     " for the bundles and JSON for the POST roundtrip.
+    " nosniff is set here, not left to the exit's security headers alone: an
+    " exit that ASSIGNS its own t_security_header instead of appending to it
+    " (or one that raises, which costs its headers) dropped it from every
+    " response, the 500 bodies with exception text included. It is never
+    " wrong for any of these bodies; the exit's headers below still follow.
     DATA(lv_content_type) = COND string(
         WHEN ms_res-status_code >= 400 THEN `text/plain; charset=UTF-8`
         WHEN lv_bundle = abap_true     THEN `application/javascript; charset=UTF-8`
@@ -1381,6 +1398,8 @@ CLASS z2ui5_cl_ui5_http_handler IMPLEMENTATION.
         ELSE `application/json; charset=UTF-8` ).
     mo_server->set_header_field( n = `content-type`
                                  v = lv_content_type ).
+    mo_server->set_header_field( n = `X-Content-Type-Options`
+                                 v = `nosniff` ).
 
     " Ask the ICF runtime to gzip the response when the client accepts it.
     " Every body this handler sends is text (the frontend bundle, about
@@ -1623,6 +1642,21 @@ CLASS z2ui5_cl_ui5_http_handler IMPLEMENTATION.
 
   METHOD _error_response.
 
+    " The draft is gone: the routine end of every session left idle past
+    " the expiry (draft_exp_time_in_hours), or one whose user changed. Not
+    " a defect, so not the dump of one - a 410 the frontend recognizes and
+    " answers with "session expired - restart" instead of the fatal
+    " overlay with its source positions (core/Server.js, SESSION_EXPIRED).
+    " The body is a fixed text, the same with or without hidden error
+    " details: it names nothing of the system
+    IF _check_draft_gone( val ) = abap_true.
+      result = VALUE #( body          = `NO_DRAFT_ENTRY_OF_PREVIOUS_REQUEST_FOUND - the session expired: ` &&
+                                       `the state of the previous request is no longer on the server. Restart the app`
+                        status_code   = 410
+                        status_reason = `Gone` ).
+      RETURN.
+    ENDIF.
+
     " In hardened installations the exit sets check_hide_error_details, so the
     " raw exception text (RTTI/class/DDIC names, dynamic-call failures, and the
     " system/user context the full dump carries) is replaced by a generic
@@ -1668,6 +1702,29 @@ CLASS z2ui5_cl_ui5_http_handler IMPLEMENTATION.
     result = VALUE #( body          = lv_body
                       status_code   = 500
                       status_reason = `Internal Server Error` ).
+
+  ENDMETHOD.
+
+  METHOD _check_draft_gone.
+
+    " the whole chain: the store's error arrives wrapped by whoever re-raised
+    " it on the way up (the handler's request context among them). Guarded
+    " like everything this runs for - it runs inside a CATCH block
+    DATA(lx) = val.
+    DO 20 TIMES.
+      IF lx IS NOT BOUND.
+        RETURN.
+      ENDIF.
+      TRY.
+          IF lx->get_text( ) = `NO_DRAFT_ENTRY_OF_PREVIOUS_REQUEST_FOUND`.
+            result = abap_true.
+            RETURN.
+          ENDIF.
+        CATCH cx_root.
+          RETURN.
+      ENDTRY.
+      lx = lx->previous.
+    ENDDO.
 
   ENDMETHOD.
 

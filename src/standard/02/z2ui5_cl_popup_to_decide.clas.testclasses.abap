@@ -26,6 +26,7 @@ CLASS ltcl_test DEFINITION FINAL
     METHODS test_option_answers     FOR TESTING RAISING cx_static_check.
     METHODS test_cancel             FOR TESTING RAISING cx_static_check.
     METHODS test_unknown_option     FOR TESTING RAISING cx_static_check.
+    METHODS test_no_cancel_reopens FOR TESTING RAISING cx_static_check.
 
 ENDCLASS.
 
@@ -120,6 +121,38 @@ CLASS ltcl_test IMPLEMENTATION.
                                         act = lo_pop->result( ) ).
     cl_abap_unit_assert=>assert_false( popup_destroyed( ) ).
 
+    " a number beyond any integer - no CX_SY_CONVERSION_OVERFLOW
+    roundtrip_event( io_app   = lo_pop
+                     iv_event = `OPTION_99999999999999999999` ).
+
+    cl_abap_unit_assert=>assert_equals( exp = z2ui5_cl_popup_to_decide=>cs_answer-cancel
+                                        act = lo_pop->result( ) ).
+    cl_abap_unit_assert=>assert_false( popup_destroyed( ) ).
+
+  ENDMETHOD.
+
+  METHOD test_no_cancel_reopens.
+
+    " without a Cancel button the dialog still closes on Escape and raises
+    " BUTTON_CANCEL - the popup opens again instead of answering cancel
+    DATA temp9 TYPE string_table.
+    DATA lo_pop TYPE REF TO z2ui5_cl_popup_to_decide.
+    DATA temp5 TYPE xsdboolean.
+    CLEAR temp9.
+    INSERT `A` INTO TABLE temp9.
+
+    lo_pop = z2ui5_cl_popup_to_decide=>factory( i_question_text = `Q`
+                                                      i_options       = temp9
+                                                      i_cancel        = abap_false ).
+    roundtrip_event( io_app   = lo_pop
+                     iv_event = `BUTTON_CANCEL` ).
+
+    cl_abap_unit_assert=>assert_false( popup_destroyed( ) ).
+    cl_abap_unit_assert=>assert_not_bound( mo_action->ms_next-o_app_leave ).
+
+    temp5 = boolc( popup_xml( ) CS `OPTION_1` ).
+    cl_abap_unit_assert=>assert_true( temp5 ).
+
   ENDMETHOD.
 
   METHOD client_create.
@@ -153,13 +186,13 @@ CLASS ltcl_test IMPLEMENTATION.
 
   METHOD popup_destroyed.
 
-    DATA temp9 LIKE sy-subrc.
-    DATA temp5 TYPE xsdboolean.
+    DATA temp11 LIKE sy-subrc.
+    DATA temp6 TYPE xsdboolean.
     READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = z2ui5_if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
-    temp9 = sy-subrc.
+    temp11 = sy-subrc.
 
-    temp5 = boolc( temp9 = 0 ).
-    result = temp5.
+    temp6 = boolc( temp11 = 0 ).
+    result = temp6.
 
   ENDMETHOD.
 
@@ -192,7 +225,7 @@ CLASS ltcl_popup_result IMPLEMENTATION.
     " a roundtrip with an event, after the first one - as the button press
     " of the user
     DATA temp2 TYPE REF TO z2ui5_cl_ui5_handler.
-    DATA temp10 TYPE REF TO z2ui5_cl_ui5_client.
+    DATA temp12 TYPE REF TO z2ui5_cl_ui5_client.
     CREATE OBJECT temp2 TYPE z2ui5_cl_ui5_handler EXPORTING VAL = ``.
     CREATE OBJECT mo_action EXPORTING VAL = temp2.
     mo_action->mo_app->mo_app = io_app.
@@ -200,27 +233,27 @@ CLASS ltcl_popup_result IMPLEMENTATION.
     mo_action->ms_actual-event = iv_event.
     mo_action->ms_actual-t_event_arg = it_arg.
 
-    CREATE OBJECT temp10 TYPE z2ui5_cl_ui5_client EXPORTING ACTION = mo_action.
-    io_app->main( temp10 ).
+    CREATE OBJECT temp12 TYPE z2ui5_cl_ui5_client EXPORTING ACTION = mo_action.
+    io_app->main( temp12 ).
 
   ENDMETHOD.
 
   METHOD test_initial_not_confirmed.
 
-    DATA temp11 TYPE string_table.
+    DATA temp13 TYPE string_table.
     DATA lo_pop TYPE REF TO z2ui5_cl_popup_to_decide.
-    DATA temp13 TYPE REF TO z2ui5_if_popup_result.
-    DATA li_result LIKE temp13.
-    CLEAR temp11.
-    INSERT `Save` INTO TABLE temp11.
-    INSERT `Discard` INTO TABLE temp11.
+    DATA temp15 TYPE REF TO z2ui5_if_popup_result.
+    DATA li_result LIKE temp15.
+    CLEAR temp13.
+    INSERT `Save` INTO TABLE temp13.
+    INSERT `Discard` INTO TABLE temp13.
 
     lo_pop = z2ui5_cl_popup_to_decide=>factory( i_question_text = `Save?`
-                                                     i_options       = temp11 ).
+                                                     i_options       = temp13 ).
 
-    temp13 ?= lo_pop.
+    temp15 ?= lo_pop.
 
-    li_result = temp13.
+    li_result = temp15.
 
     cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
 
@@ -228,32 +261,32 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD test_confirmed.
 
-    DATA temp14 TYPE string_table.
+    DATA temp16 TYPE string_table.
     DATA lo_pop TYPE REF TO z2ui5_cl_popup_to_decide.
-    DATA temp16 TYPE REF TO z2ui5_if_popup_result.
-    DATA li_result LIKE temp16.
-    DATA temp17 TYPE REF TO string.
-    DATA lr_value LIKE temp17.
-    CLEAR temp14.
-    INSERT `Save` INTO TABLE temp14.
-    INSERT `Discard` INTO TABLE temp14.
+    DATA temp18 TYPE REF TO z2ui5_if_popup_result.
+    DATA li_result LIKE temp18.
+    DATA temp19 TYPE REF TO string.
+    DATA lr_value LIKE temp19.
+    CLEAR temp16.
+    INSERT `Save` INTO TABLE temp16.
+    INSERT `Discard` INTO TABLE temp16.
 
     lo_pop = z2ui5_cl_popup_to_decide=>factory( i_question_text = `Save?`
-                                                     i_options       = temp14 ).
+                                                     i_options       = temp16 ).
     roundtrip( io_app   = lo_pop
                iv_event = `OPTION_2` ).
 
-    temp16 ?= lo_pop.
+    temp18 ?= lo_pop.
 
-    li_result = temp16.
+    li_result = temp18.
 
     cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
     cl_abap_unit_assert=>assert_equals( exp = `2`
                                         act = li_result->value_string( ) ).
 
-    temp17 ?= li_result->value( ).
+    temp19 ?= li_result->value( ).
 
-    lr_value = temp17.
+    lr_value = temp19.
     cl_abap_unit_assert=>assert_equals( exp = `2`
                                         act = lr_value->* ).
 
@@ -261,22 +294,22 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD test_cancelled.
 
-    DATA temp18 TYPE string_table.
+    DATA temp20 TYPE string_table.
     DATA lo_pop TYPE REF TO z2ui5_cl_popup_to_decide.
-    DATA temp20 TYPE REF TO z2ui5_if_popup_result.
-    DATA li_result LIKE temp20.
-    CLEAR temp18.
-    INSERT `Save` INTO TABLE temp18.
-    INSERT `Discard` INTO TABLE temp18.
+    DATA temp22 TYPE REF TO z2ui5_if_popup_result.
+    DATA li_result LIKE temp22.
+    CLEAR temp20.
+    INSERT `Save` INTO TABLE temp20.
+    INSERT `Discard` INTO TABLE temp20.
 
     lo_pop = z2ui5_cl_popup_to_decide=>factory( i_question_text = `Save?`
-                                                     i_options       = temp18 ).
+                                                     i_options       = temp20 ).
     roundtrip( io_app   = lo_pop
                iv_event = `BUTTON_CANCEL` ).
 
-    temp20 ?= lo_pop.
+    temp22 ?= lo_pop.
 
-    li_result = temp20.
+    li_result = temp22.
 
     cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
     cl_abap_unit_assert=>assert_initial( li_result->value_string( ) ).

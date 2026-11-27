@@ -1,6 +1,10 @@
 CLASS z2ui5_cl_popup_value_help DEFINITION
   PUBLIC FINAL
-  CREATE PUBLIC.
+  CREATE PUBLIC
+  " z2ui5_cl_popup_shlp shows a search help the same way - it takes the
+  " columns, the pressed row and the return from the layout popup from the
+  " static helpers below
+  GLOBAL FRIENDS z2ui5_cl_popup_shlp.
 
   PUBLIC SECTION.
     " abap2ui5lint-disable unbound-public-attribute -- a popup's attributes are its interface to the app that called it, which reads them once the popup returns
@@ -18,7 +22,9 @@ CLASS z2ui5_cl_popup_value_help DEFINITION
     DATA mv_field        TYPE string.
     DATA mv_value        TYPE string.
     DATA mv_return_value TYPE string.
-    DATA mv_rows         TYPE int1 VALUE '50'.
+    " the number of rows read - typed in the dialog, cut to 1 to
+    " cv_max_rows when read (an INT1 overflowed above 255, 0 read all rows)
+    DATA mv_rows         TYPE i VALUE 50.
     DATA mt_dfies        TYPE z2ui5_cl_popup_context=>ty_t_dfies.
 
     CLASS-METHODS factory
@@ -31,6 +37,8 @@ CLASS z2ui5_cl_popup_value_help DEFINITION
     " abap2ui5lint-enable unbound-public-attribute
 
   PROTECTED SECTION.
+    CONSTANTS cv_max_rows TYPE i VALUE 999.
+
     DATA client             TYPE REF TO z2ui5_if_client.
     DATA mv_check_tab_field TYPE string.
     DATA mv_check_tab       TYPE string.
@@ -57,6 +65,40 @@ CLASS z2ui5_cl_popup_value_help DEFINITION
     METHODS get_layout.
 
     METHODS create_objects.
+
+  PRIVATE SECTION.
+    "! the columns and the row template of the table of a value or search
+    "! help - one column per position of the layout, the row pressed raises
+    "! event with the row id
+    "! @parameter label_by_rollname | the column header is the long text of
+    "!                    the data element, not the label of the layout
+    CLASS-METHODS render_columns
+      IMPORTING
+        !table            TYPE REF TO z2ui5_cl_ui5_view_builder
+        client            TYPE REF TO z2ui5_if_client
+        layout            TYPE REF TO z2ui5_cl_layo_manager
+        !event            TYPE string
+        label_by_rollname TYPE abap_bool DEFAULT abap_false.
+
+    "! the value of component fname of the row the user pressed; its index is
+    "! the first event argument, which comes from the client
+    CLASS-METHODS read_row_value
+      IMPORTING
+        !data  TYPE REF TO data
+        t_arg  TYPE string_table
+        fname  TYPE clike
+      EXPORTING
+        !value TYPE string
+        found  TYPE abap_bool.
+
+    "! the layout of the layout popup the app returns from - unbound for any
+    "! other roundtrip
+    CLASS-METHODS get_layout_back
+      IMPORTING
+        client        TYPE REF TO z2ui5_if_client
+      RETURNING
+        VALUE(result) TYPE REF TO z2ui5_cl_layo_manager.
+
 ENDCLASS.
 
 
@@ -73,6 +115,8 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
         RETURN.
       ENDIF.
       render_view( ).
+      " the first roundtrip has no event - it reached the layout events
+      RETURN.
 
     ENDIF.
 
@@ -148,6 +192,12 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
 
     FIELD-SYMBOLS <table> TYPE STANDARD TABLE.
 
+    IF mv_rows < 1.
+      mv_rows = 1.
+    ELSEIF mv_rows > cv_max_rows.
+      mv_rows = cv_max_rows.
+    ENDIF.
+
     TRY.
         ASSIGN mt_data->* TO <table>.
 
@@ -181,11 +231,6 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
     FIELD-SYMBOLS <table> TYPE data.
     DATA table TYPE REF TO z2ui5_cl_ui5_view_builder.
     DATA header TYPE REF TO z2ui5_cl_ui5_view_builder.
-    DATA columns TYPE REF TO z2ui5_cl_ui5_view_builder.
-    DATA temp13 LIKE LINE OF mo_layout->ms_layout-t_layout.
-    DATA layout LIKE REF TO temp13.
-      DATA lv_index LIKE sy-tabix.
-    DATA cells TYPE REF TO z2ui5_cl_ui5_view_builder.
     popup = z2ui5_cl_ui5_view_builder=>factory(
                       )->ele( n = `FragmentDefinition` ns = `core`
                       )->a( n = `xmlns` v = `sap.m`
@@ -264,46 +309,10 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
                                                         client = client
                                                         layout = mo_layout ).
 
-
-    columns = table->ele( `columns` ).
-
-
-
-    LOOP AT mo_layout->ms_layout-t_layout REFERENCE INTO layout.
-
-      lv_index = sy-tabix.
-
-      columns->ele( `Column`
-          )->a( n = `visible` v = client->_bind( val       = layout->visible
-                                                        tab       = mo_layout->ms_layout-t_layout
-                                                        tab_index = lv_index )
-          )->a( n = `mergeDuplicates` v = client->_bind( val       = layout->merge
-                                                        tab       = mo_layout->ms_layout-t_layout
-                                                        tab_index = lv_index )
-          )->a( n = `minScreenWidth` v = client->_bind( val       = layout->width
-                                                        tab       = mo_layout->ms_layout-t_layout
-                                                        tab_index = lv_index )
-          )->tag( `Text`
-          )->a( n = `text` v = layout->tlabel ).
-
-    ENDLOOP.
-
-
-    cells = columns->end(
-                      )->ele( `items`
-                      )->ele( `ColumnListItem`
-                      )->a( n = `vAlign` v = `Middle`
-                      )->a( n = `type` v = `Navigation`
-                      )->a( n = `press` v = client->_event( val   = 'F4_ROW_SELECT'
-                                                                    arg   = `${ROW_ID}` )
-                      )->ele( `cells` ).
-
-    LOOP AT mo_layout->ms_layout-t_layout REFERENCE INTO layout.
-
-      cells->ele( `ObjectIdentifier`
-          )->a( n = `text` v = |\{{ z2ui5_cl_ui5_view_builder=>component_path( layout->fname ) }\}| ).
-
-    ENDLOOP.
+    render_columns( table  = table
+                    client = client
+                    layout = mo_layout
+                    event  = `F4_ROW_SELECT` ).
 
     client->popup_display( popup->stringify( ) ).
 
@@ -311,12 +320,8 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
 
   METHOD on_event.
 
-    FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
-        DATA lt_arg TYPE string_table.
-        FIELD-SYMBOLS <row> TYPE any.
-        FIELD-SYMBOLS <temp1> LIKE LINE OF lt_arg.
-        DATA temp2 LIKE sy-tabix.
-        FIELD-SYMBOLS <value> TYPE any.
+    DATA lv_value TYPE string.
+    DATA lv_found TYPE abap_bool.
         DATA result TYPE string.
 
     CASE client->get( )-event.
@@ -325,47 +330,25 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
 
         client->popup_destroy( ).
 
-        client->nav_app_leave( client->get_app( client->get( )-s_draft-id_prev_app_stack ) ).
+        client->nav_app_leave( ).
 
       WHEN `F4_ROW_SELECT`.
 
-
-        lt_arg = client->get( )-t_event_arg.
-        " an event without the row index raised CX_SY_ITAB_LINE_NOT_FOUND
-        IF lt_arg IS INITIAL.
+        read_row_value( EXPORTING data  = mt_data
+                                  t_arg = client->get( )-t_event_arg
+                                  fname = mv_check_tab_field
+                        IMPORTING value = lv_value
+                                  found = lv_found ).
+        IF lv_found = abap_false.
           RETURN.
         ENDIF.
 
-        ASSIGN mt_data->* TO <tab>.
-
-
-
-
-        temp2 = sy-tabix.
-        READ TABLE lt_arg INDEX 1 ASSIGNING <temp1>.
-        sy-tabix = temp2.
-        IF sy-subrc <> 0.
-          ASSERT 1 = 0.
-        ENDIF.
-        READ TABLE <tab> INDEX <temp1> ASSIGNING <row>.
-        " the index comes from the client - a row that is not there must not
-        " reach ASSIGN COMPONENT on an unassigned field symbol
-        IF <row> IS NOT ASSIGNED.
-          RETURN.
-        ENDIF.
-
-
-        ASSIGN COMPONENT mv_check_tab_field OF STRUCTURE <row> TO <value>.
-        IF sy-subrc <> 0.
-          RETURN.
-        ENDIF.
-
-        mv_return_value = <value>.
+        mv_return_value = lv_value.
         mv_check_confirmed = abap_true.
 
         client->popup_destroy( ).
 
-        client->nav_app_leave( client->get_app( client->get( )-s_draft-id_prev_app_stack ) ).
+        client->nav_app_leave( ).
 
       WHEN 'F4_INPUT_DONE'.
 
@@ -422,11 +405,11 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
 
     DATA t_dfies TYPE z2ui5_cl_popup_context=>ty_t_dfies.
     FIELD-SYMBOLS <dfies> TYPE z2ui5_cl_popup_context=>ty_s_dfies.
+    DATA temp13 TYPE string.
     DATA temp14 TYPE string.
-    DATA temp15 TYPE string.
-    DATA temp16 TYPE z2ui5_cl_popup_context=>ty_s_dfies.
-      DATA temp17 TYPE string.
-      DATA temp18 TYPE z2ui5_cl_popup_context=>ty_s_dfies.
+    DATA temp15 TYPE z2ui5_cl_popup_context=>ty_s_dfies.
+      DATA temp16 TYPE string.
+      DATA temp17 TYPE z2ui5_cl_popup_context=>ty_s_dfies.
     t_dfies = z2ui5_cl_popup_context=>rtti_get_t_dfies_by_table_name( mv_table ).
 
 
@@ -434,7 +417,7 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
     IF <dfies> IS NOT ASSIGNED.
 
       client->popup_destroy( ).
-      client->nav_app_leave( client->get_app( client->get( )-s_draft-id_prev_app_stack ) ).
+      client->nav_app_leave( ).
       RETURN.
 
     ENDIF.
@@ -443,34 +426,34 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
     " caller, as for an unknown field: staying here without a view left the
     " caller's screen on display with every event routed to this popup
     IF <dfies>-checktable IS INITIAL.
-      client->nav_app_leave( client->get_app( client->get( )-s_draft-id_prev_app_stack ) ).
+      client->nav_app_leave( ).
       RETURN.
     ENDIF.
 
 
-    temp14 = <dfies>-checktable.
-    mt_dfies = z2ui5_cl_popup_context=>rtti_get_t_dfies_by_table_name( temp14 ).
+    temp13 = <dfies>-checktable.
+    mt_dfies = z2ui5_cl_popup_context=>rtti_get_t_dfies_by_table_name( temp13 ).
 
     " determine the field of the check table, first via the data element
 
-    CLEAR temp15.
+    CLEAR temp14.
 
-    READ TABLE mt_dfies INTO temp16 WITH KEY rollname = <dfies>-rollname.
+    READ TABLE mt_dfies INTO temp15 WITH KEY rollname = <dfies>-rollname.
     IF sy-subrc = 0.
-      temp15 = temp16-fieldname.
+      temp14 = temp15-fieldname.
     ENDIF.
-    mv_check_tab_field = temp15.
+    mv_check_tab_field = temp14.
 
     " as a fallback, try to find it via the domain
     IF mv_check_tab_field IS INITIAL.
 
-      CLEAR temp17.
+      CLEAR temp16.
 
-      READ TABLE mt_dfies INTO temp18 WITH KEY domname = <dfies>-domname.
+      READ TABLE mt_dfies INTO temp17 WITH KEY domname = <dfies>-domname.
       IF sy-subrc = 0.
-        temp17 = temp18-fieldname.
+        temp16 = temp17-fieldname.
       ENDIF.
-      mv_check_tab_field = temp17.
+      mv_check_tab_field = temp16.
     ENDIF.
     mv_check_tab = <dfies>-checktable.
 
@@ -478,8 +461,8 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
 
   METHOD prefill_inputs.
 
-    DATA temp19 LIKE LINE OF mt_dfies.
-    DATA dfies LIKE REF TO temp19.
+    DATA temp18 LIKE LINE OF mt_dfies.
+    DATA dfies LIKE REF TO temp18.
       FIELD-SYMBOLS <row> TYPE data.
       FIELD-SYMBOLS <val> TYPE any.
     LOOP AT mt_dfies REFERENCE INTO dfies.
@@ -508,27 +491,21 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD on_after_layout.
-        DATA temp20 TYPE REF TO z2ui5_cl_layo_pop.
-        DATA app LIKE temp20.
+    DATA layout TYPE REF TO z2ui5_cl_layo_manager.
 
-    " only relevant when returning from another app
-    IF client->get( )-check_on_navigated = abap_false.
+    " only relevant when returning from another app - or on a restored draft
+    IF client->check_on_navigated( ) = abap_false OR mv_check_tab IS INITIAL.
       RETURN.
     ENDIF.
 
-    TRY.
-        " check if the previous app was the layout popup
 
-        temp20 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
-
-        app = temp20.
-
-        mo_layout = app->mo_layout.
-
-        render_view( ).
-
-      CATCH cx_root ##NO_HANDLER.
-    ENDTRY.
+    layout = get_layout_back( client ).
+    IF layout IS BOUND.
+      mo_layout = layout.
+    ENDIF.
+    " back from the layout popup, or a restored draft (browser Forward, a
+    " reload) whose popup went with the page - show it (again)
+    render_view( ).
 
   ENDMETHOD.
 
@@ -537,11 +514,137 @@ CLASS z2ui5_cl_popup_value_help IMPLEMENTATION.
     DATA class TYPE string.
     class = z2ui5_cl_popup_context=>rtti_get_classname_by_ref( me ).
 
+    " the layout belongs to the check table whose rows it shows - under the
+    " table of the field, the fields of one table with different check
+    " tables shared one layout of different columns
     mo_layout = z2ui5_cl_layo_manager=>factory( control  = z2ui5_cl_layo_manager=>m_table
                                                 data     = mt_data
                                                 handle01 = class
-                                                handle02 = mv_table
+                                                handle02 = mv_check_tab
                                                 handle03 = 'F4'  ).
+
+  ENDMETHOD.
+
+  METHOD render_columns.
+
+    DATA columns TYPE REF TO z2ui5_cl_ui5_view_builder.
+    DATA temp19 LIKE LINE OF layout->ms_layout-t_layout.
+    DATA position LIKE REF TO temp19.
+      DATA lv_index LIKE sy-tabix.
+      DATA temp20 TYPE string.
+    DATA cells TYPE REF TO z2ui5_cl_ui5_view_builder.
+    columns = table->ele( `columns` ).
+
+
+
+    LOOP AT layout->ms_layout-t_layout REFERENCE INTO position.
+
+      lv_index = sy-tabix.
+
+
+      IF label_by_rollname = abap_true.
+        temp20 = z2ui5_cl_popup_context=>rtti_get_data_element_text_l( position->rollname ).
+      ELSE.
+        temp20 = position->tlabel.
+      ENDIF.
+      columns->ele( `Column`
+          )->a( n = `visible` v = client->_bind( val       = position->visible
+                                                        tab       = layout->ms_layout-t_layout
+                                                        tab_index = lv_index )
+          )->a( n = `mergeDuplicates` v = client->_bind( val       = position->merge
+                                                        tab       = layout->ms_layout-t_layout
+                                                        tab_index = lv_index )
+          )->a( n = `minScreenWidth` v = client->_bind( val       = position->width
+                                                        tab       = layout->ms_layout-t_layout
+                                                        tab_index = lv_index )
+          )->tag( `Text`
+          )->a( n = `text` v = temp20 ).
+
+    ENDLOOP.
+
+
+    cells = columns->end(
+                      )->ele( `items`
+                      )->ele( `ColumnListItem`
+                      )->a( n = `vAlign` v = `Middle`
+                      )->a( n = `type` v = `Navigation`
+                      )->a( n = `press` v = client->_event( val   = event
+                                                                    arg   = `${ROW_ID}` )
+                      )->ele( `cells` ).
+
+    LOOP AT layout->ms_layout-t_layout REFERENCE INTO position.
+
+      cells->ele( `ObjectIdentifier`
+          )->a( n = `text` v = |\{{ z2ui5_cl_ui5_view_builder=>component_path( position->fname ) }\}| ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD read_row_value.
+
+    FIELD-SYMBOLS <tab>   TYPE STANDARD TABLE.
+    FIELD-SYMBOLS <row>   TYPE any.
+    FIELD-SYMBOLS <value> TYPE any.
+    DATA temp21 TYPE string.
+    DATA temp22 TYPE string.
+    DATA lv_arg LIKE temp21.
+    DATA temp4 TYPE i.
+
+    CLEAR: value, found.
+
+    " the index comes from the client: an event without it raised
+    " CX_SY_ITAB_LINE_NOT_FOUND, one that is no number a conversion error,
+    " and a row that is not there must not reach ASSIGN COMPONENT
+
+    CLEAR temp21.
+
+    READ TABLE t_arg INTO temp22 INDEX 1.
+    IF sy-subrc = 0.
+      temp21 = temp22.
+    ENDIF.
+
+    lv_arg = temp21.
+    IF lv_arg IS INITIAL OR lv_arg CN `0123456789` OR strlen( lv_arg ) > 9.
+      RETURN.
+    ENDIF.
+
+    ASSIGN data->* TO <tab>.
+
+    temp4 = lv_arg.
+    READ TABLE <tab> INDEX temp4 ASSIGNING <row>.
+    IF <row> IS NOT ASSIGNED.
+      RETURN.
+    ENDIF.
+
+    ASSIGN COMPONENT fname OF STRUCTURE <row> TO <value>.
+    IF sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+    value = <value>.
+    found = abap_true.
+
+  ENDMETHOD.
+
+  METHOD get_layout_back.
+        DATA temp23 TYPE REF TO z2ui5_cl_layo_pop.
+        DATA app LIKE temp23.
+
+    " only relevant when returning from another app
+    IF client->get( )-check_on_navigated = abap_false.
+      RETURN.
+    ENDIF.
+
+    TRY.
+        " the previous app was the layout popup - or any other, then nothing
+
+        temp23 ?= client->get_app( client->get( )-s_draft-id_prev_app ).
+
+        app = temp23.
+        result = app->mo_layout.
+      CATCH cx_root ##NO_HANDLER.
+    ENDTRY.
 
   ENDMETHOD.
 

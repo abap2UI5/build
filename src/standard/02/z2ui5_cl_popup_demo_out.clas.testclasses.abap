@@ -134,6 +134,7 @@ CLASS ltcl_test_roundtrip DEFINITION FINAL
     METHODS test_toggle_fullscreen   FOR TESTING RAISING cx_static_check.
     METHODS test_confirm_closes      FOR TESTING RAISING cx_static_check.
     METHODS test_braces_escaped_once FOR TESTING RAISING cx_static_check.
+    METHODS test_style_in_content    FOR TESTING RAISING cx_static_check.
 
 ENDCLASS.
 
@@ -232,6 +233,36 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD test_style_in_content.
+
+    " the popup's CSS travels in the core:HTML content - a ZZPLAIN pseudo-tag
+    " is an element of its own for the view builder, and the CSS was lost
+    DATA lo_pop TYPE REF TO z2ui5_cl_popup_demo_out.
+    DATA temp9 TYPE REF TO lcl_output_stub.
+    DATA lv_xml TYPE string.
+    DATA temp4 TYPE xsdboolean.
+    DATA temp5 TYPE xsdboolean.
+    DATA temp6 TYPE xsdboolean.
+    CREATE OBJECT temp9 TYPE lcl_output_stub.
+    lo_pop = z2ui5_cl_popup_demo_out=>factory( temp9 ).
+    client_create( lo_pop ).
+
+    lo_pop->z2ui5_if_app~main( mi_client ).
+
+
+    lv_xml = popup_xml( ).
+
+    temp4 = boolc( lv_xml CS `&lt;/style&gt;` ).
+    cl_abap_unit_assert=>assert_true( temp4 ).
+
+    temp5 = boolc( lv_xml CS `span.heading1 \{` ).
+    cl_abap_unit_assert=>assert_true( temp5 ).
+
+    temp6 = boolc( lv_xml CS `ZZPLAIN` ).
+    cl_abap_unit_assert=>assert_false( temp6 ).
+
+  ENDMETHOD.
+
   METHOD popup_xml.
 
     DATA ls_action LIKE LINE OF mo_action->ms_next-t_action_front.
@@ -245,12 +276,12 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
   METHOD popup_destroyed.
 
     DATA temp1 LIKE sy-subrc.
-    DATA temp4 TYPE xsdboolean.
+    DATA temp7 TYPE xsdboolean.
     READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = z2ui5_if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
     temp1 = sy-subrc.
 
-    temp4 = boolc( temp1 = 0 ).
-    result = temp4.
+    temp7 = boolc( temp1 = 0 ).
+    result = temp7.
 
   ENDMETHOD.
 
@@ -281,11 +312,11 @@ CLASS ltcl_popup_result IMPLEMENTATION.
   METHOD test_closed_is_confirmed.
 
     DATA lo_pop TYPE REF TO z2ui5_cl_popup_demo_out.
-    DATA temp9 TYPE REF TO lcl_output_stub.
+    DATA temp10 TYPE REF TO lcl_output_stub.
     DATA temp2 TYPE REF TO z2ui5_if_popup_result.
     DATA li_result LIKE temp2.
-    CREATE OBJECT temp9 TYPE lcl_output_stub.
-    lo_pop = z2ui5_cl_popup_demo_out=>factory( temp9 ).
+    CREATE OBJECT temp10 TYPE lcl_output_stub.
+    lo_pop = z2ui5_cl_popup_demo_out=>factory( temp10 ).
 
     temp2 ?= lo_pop.
 

@@ -97,33 +97,35 @@ CLASS z2ui5_cl_tm_002 IMPLEMENTATION.
     DATA lt_name TYPE string_table.
     DATA lv_name TYPE string.
 
-    DATA lv_tables TYPE string.
+    " the launchpad startup parameter first: a tile's tables are the scope
+    " the administrator gave it, which a URL parameter the user adds must
+    " not widen; without a tile (no startup parameter) the URL names them
     DATA lt_startup TYPE z2ui5_if_client=>ty_t_name_value.
-      DATA temp1 TYPE string.
-      DATA temp2 TYPE z2ui5_if_client=>ty_s_name_value.
+    DATA temp1 TYPE string.
+    DATA temp2 TYPE z2ui5_if_client=>ty_s_name_value.
+    DATA lv_tables LIKE temp1.
       DATA temp3 TYPE string.
       DATA temp4 TYPE z2ui5_if_client=>ty_s_name_value.
       DATA temp5 LIKE sy-subrc.
       DATA temp6 TYPE z2ui5_cl_tm_002=>ty_s_table.
     DATA temp7 TYPE string.
     DATA temp8 TYPE z2ui5_cl_tm_002=>ty_s_table.
-    lv_tables = z2ui5_cl_tm_context=>url_param_get( val = `tables`
-                                                        url = client->get( )-s_config-search ).
+    lt_startup = client->get( )-t_comp_params.
+
+    CLEAR temp1.
+
+    READ TABLE lt_startup INTO temp2 WITH KEY n = `tables`.
+    IF sy-subrc = 0.
+      temp1 = temp2-v.
+    ENDIF.
+
+    lv_tables = temp1.
+    IF lv_tables IS INITIAL.
+      lv_tables = z2ui5_cl_tm_context=>url_param_get( val = `tables`
+                                                    url = client->get( )-s_config-search ).
+    ENDIF.
     mv_title = z2ui5_cl_tm_context=>url_param_get( val = `title`
                                                  url = client->get( )-s_config-search ).
-
-
-    lt_startup = client->get( )-t_comp_params.
-    IF lv_tables IS INITIAL.
-
-      CLEAR temp1.
-
-      READ TABLE lt_startup INTO temp2 WITH KEY n = `tables`.
-      IF sy-subrc = 0.
-        temp1 = temp2-v.
-      ENDIF.
-      lv_tables = temp1.
-    ENDIF.
     IF mv_title IS INITIAL.
 
       CLEAR temp3.
@@ -193,9 +195,36 @@ CLASS z2ui5_cl_tm_002 IMPLEMENTATION.
   METHOD run_sub_app.
 
     DATA lv_new TYPE abap_bool.
+
+    " mv_selected_key is bound to the tab bar, so a request can carry any
+    " table name - only a table of the cluster (mt_table, read from the
+    " parameters on the server at the start) is opened
+    DATA temp9 LIKE sy-subrc.
+      DATA temp10 TYPE string.
+        FIELD-SYMBOLS <temp1> LIKE LINE OF mt_table.
+        DATA temp2 LIKE sy-tabix.
         FIELD-SYMBOLS <left> TYPE z2ui5_cl_tm_002=>ty_s_table.
     DATA page TYPE REF TO z2ui5_cl_ui5_view_builder.
         DATA lx TYPE REF TO cx_root.
+    READ TABLE mt_table WITH KEY tabname = mv_selected_key TRANSPORTING NO FIELDS.
+    temp9 = sy-subrc.
+    IF NOT temp9 = 0.
+
+      IF mv_shown_key IS NOT INITIAL.
+        temp10 = mv_shown_key.
+      ELSE.
+
+
+        temp2 = sy-tabix.
+        READ TABLE mt_table INDEX 1 ASSIGNING <temp1>.
+        sy-tabix = temp2.
+        IF sy-subrc <> 0.
+          ASSERT 1 = 0.
+        ENDIF.
+        temp10 = <temp1>-tabname.
+      ENDIF.
+      mv_selected_key = temp10.
+    ENDIF.
 
     IF mv_selected_key <> mv_shown_key.
 
@@ -262,7 +291,7 @@ CLASS z2ui5_cl_tm_002 IMPLEMENTATION.
   METHOD render_page.
 
     DATA view TYPE REF TO z2ui5_cl_ui5_view_builder.
-      DATA temp9 TYPE string_table.
+      DATA temp11 TYPE string_table.
     DATA items TYPE REF TO z2ui5_cl_ui5_view_builder.
     DATA ls_table LIKE LINE OF mt_table.
     view = z2ui5_cl_ui5_view_builder=>factory(
@@ -278,10 +307,10 @@ CLASS z2ui5_cl_tm_002 IMPLEMENTATION.
       result = view->ele( `Page`
           )->a( n = `showHeader` b = abap_false ).
 
-      CLEAR temp9.
-      INSERT mv_title INTO TABLE temp9.
+      CLEAR temp11.
+      INSERT mv_title INTO TABLE temp11.
       client->follow_up_action( val   = z2ui5_if_client=>cs_event-set_title_launchpad
-                                t_arg = temp9 ).
+                                t_arg = temp11 ).
     ELSE.
       result = view->ele( `Page`
           )->a( n = `title` t = mv_title ).

@@ -54,6 +54,7 @@ CLASS ltcl_test DEFINITION FINAL
     METHODS test_first_start_no_app_start FOR TESTING RAISING cx_static_check.
     METHODS test_first_start_error  FOR TESTING RAISING cx_static_check.
     METHODS test_first_start_not_an_app FOR TESTING RAISING cx_static_check.
+    METHODS test_first_start_absolute_name FOR TESTING RAISING cx_static_check.
     METHODS test_first_start_draft_gone FOR TESTING RAISING cx_static_check.
     METHODS test_first_start_draft_broken FOR TESTING RAISING cx_static_check.
     METHODS test_app_start_safe      FOR TESTING RAISING cx_static_check.
@@ -328,6 +329,37 @@ CLASS ltcl_test IMPLEMENTATION.
 
         temp3 = boolc( lx->get_text( ) CS `does not implement z2ui5_if_app` ).
         cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp3 ).
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD test_first_start_absolute_name.
+
+    " an absolute type name reaches a local class of any program - a start
+    " names a global class only, and anything else is refused before the
+    " type lookup
+    DATA lv_payload TYPE string.
+    DATA lo_http TYPE REF TO z2ui5_cl_ui5_handler.
+    DATA lo_action TYPE REF TO z2ui5_cl_ui5_action.
+    DATA lx TYPE REF TO z2ui5_cx_ui5_util_error.
+        DATA temp4 TYPE xsdboolean.
+    lv_payload = `{"value":{"S_FRONT":{"ORIGIN":"O","PATHNAME":"/p","SEARCH":"",` &&
+                 `"ROUTE":{"APP":"\\CLASS=Z2UI5_CL_UI5_APP_HI_WORLD"}}}}`.
+
+    CREATE OBJECT lo_http EXPORTING val = lv_payload.
+    lo_http->ms_request = lo_http->request_json_to_abap( lv_payload ).
+    cl_abap_unit_assert=>assert_equals( exp = `\CLASS=Z2UI5_CL_UI5_APP_HI_WORLD`
+                                        act = lo_http->ms_request-s_control-app_start ).
+    CREATE OBJECT lo_action EXPORTING val = lo_http.
+
+    TRY.
+        lo_action->factory_first_start( ).
+        cl_abap_unit_assert=>fail( `Expected exception for an absolute type name` ).
+
+      CATCH z2ui5_cx_ui5_util_error INTO lx.
+
+        temp4 = boolc( lx->get_text( ) CS `does not exist in the system` ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp4 ).
     ENDTRY.
 
   ENDMETHOD.
@@ -791,10 +823,10 @@ CLASS ltcl_test IMPLEMENTATION.
     DATA temp24 LIKE sy-tabix.
     FIELD-SYMBOLS <temp25> LIKE LINE OF lo_result->ms_next-s_action-t_custom.
     DATA temp26 LIKE sy-tabix.
-    DATA temp4 TYPE xsdboolean.
+    DATA temp5 TYPE xsdboolean.
     FIELD-SYMBOLS <temp27> LIKE LINE OF lo_result->ms_next-s_action-t_custom.
     DATA temp28 LIKE sy-tabix.
-    DATA temp5 TYPE xsdboolean.
+    DATA temp6 TYPE xsdboolean.
     CREATE OBJECT temp1 TYPE z2ui5_cl_ui5_handler EXPORTING val = ``.
     CREATE OBJECT lo_action TYPE z2ui5_cl_ui5_action EXPORTING val = temp1.
     CREATE OBJECT lo_action->mo_app->mo_app TYPE ltcl_test_app.
@@ -849,8 +881,8 @@ CLASS ltcl_test IMPLEMENTATION.
       ASSERT 1 = 0.
     ENDIF.
 
-    temp4 = boolc( <temp25>-o_json->stringify( ) CS `["MESSAGE_BOX","warning","Check the quantity."` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp4 ).
+    temp5 = boolc( <temp25>-o_json->stringify( ) CS `["MESSAGE_BOX","warning","Check the quantity."` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp5 ).
 
 
     temp28 = sy-tabix.
@@ -860,8 +892,8 @@ CLASS ltcl_test IMPLEMENTATION.
       ASSERT 1 = 0.
     ENDIF.
 
-    temp5 = boolc( <temp27>-o_json->stringify( ) CS `"MESSAGE_TOAST","show","Also kept."` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp5 ).
+    temp6 = boolc( <temp27>-o_json->stringify( ) CS `"MESSAGE_TOAST","show","Also kept."` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp6 ).
     " the flag belongs to the hop - the target starts without it
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = lo_result->ms_next-keep_messages ).
 
