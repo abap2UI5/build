@@ -125,7 +125,7 @@ CLASS /z2ui5/cl_layo_sample_05 IMPLEMENTATION.
     DATA temp3 TYPE /z2ui5/cl_layo_sample_05=>ty_s_data.
     DATA temp4 TYPE /z2ui5/cl_layo_sample_05=>ty_s_data.
 
-    SELECT * FROM /z2ui5/t_11 ORDER BY PRIMARY KEY INTO TABLE mt_table UP TO 5 ROWS ##SUBRC_OK.
+    SELECT * FROM /z2ui5/t_11 UP TO 5 ROWS INTO TABLE mt_table ORDER BY PRIMARY KEY   ##SUBRC_OK.
 
 
     CLEAR temp3.
