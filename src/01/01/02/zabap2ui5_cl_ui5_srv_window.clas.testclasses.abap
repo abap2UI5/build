@@ -129,6 +129,26 @@ CLASS ltcl_test IMPLEMENTATION.
                                                                                          ( path = `ID` ) )
                                         act = lt_sort ).
 
+    " eleven sorters keep the order they came in - ajson names the array
+    " members as text, and `10` sorts before `2` there
+    DATA(lv_json) = `[`.
+    DO 11 TIMES.
+      IF sy-index > 1.
+        lv_json = lv_json && `,`.
+      ENDIF.
+      lv_json = lv_json && |\{"PATH":"C{ sy-index }"\}|.
+    ENDDO.
+    lv_json = lv_json && `]`.
+    lt_sort = zabap2ui5_cl_ui5_srv_window=>parse_sort( lv_json ).
+    cl_abap_unit_assert=>assert_equals( exp = 11
+                                        act = lines( lt_sort ) ).
+    cl_abap_unit_assert=>assert_equals( exp = `C2`
+                                        act = lt_sort[ 2 ]-path ).
+    cl_abap_unit_assert=>assert_equals( exp = `C10`
+                                        act = lt_sort[ 10 ]-path ).
+    cl_abap_unit_assert=>assert_equals( exp = `C11`
+                                        act = lt_sort[ 11 ]-path ).
+
   ENDMETHOD.
 
   METHOD parse_filter.
@@ -141,6 +161,22 @@ CLASS ltcl_test IMPLEMENTATION.
                   ( group = 1 path = `NAME`  operator = `EQ`       value1 = `x` )
                   ( group = 2 path = `PRICE` operator = `BT`       value1 = `1` value2 = `9.5` ) )
         act = lt_filter ).
+
+    " path and operator are the browser's and end up in the app's WHERE:
+    " a path that cannot name a component and an operator off the list are
+    " dropped, the rest of the filter stays
+    lt_filter = zabap2ui5_cl_ui5_srv_window=>parse_filter(
+        `[[["NAME) OR (1 = 1","EQ","x"],["NAME","EQ' OR 'x","y"],["NAME","EQ","z"]],` &&
+        `[["","GT",1],["/NS/F","GE",2]]]` ).
+    cl_abap_unit_assert=>assert_equals(
+        exp = VALUE zabap2ui5_if_client=>ty_t_bind_tab_filter(
+                  ( group = 1 path = `NAME`  operator = `EQ` value1 = `z` )
+                  ( group = 2 path = `/NS/F` operator = `GE` value1 = `2` ) )
+        act = lt_filter ).
+
+    DATA(lt_sort) = zabap2ui5_cl_ui5_srv_window=>parse_sort( `[{"PATH":"NAME DESCENDING, (SELECT"},{"PATH":"id"}]` ).
+    cl_abap_unit_assert=>assert_equals( exp = VALUE zabap2ui5_if_client=>ty_t_bind_tab_sort( ( path = `ID` ) )
+                                        act = lt_sort ).
 
   ENDMETHOD.
 

@@ -9,10 +9,10 @@ Every `z2ui5_*` object is renamed to `zabap2ui5_*`, in all of it:
 
 | Folder | Content | Source |
 |---|---|---|
-| `src/01` | abap2UI5 - the framework and, in `src/01/03`, HTTP service `ZABAP2UI5`, handler `zabap2ui5_cl_ui5_icf_handler` | [abap2UI5/abap2UI5](https://github.com/abap2UI5/abap2UI5)@ed0ce48 (branch `cloud`) |
-| `src/02` | popups | [abap2UI5-addons/popups](https://github.com/abap2UI5-addons/popups)@2bb0e85 (branch `main`) |
-| `src/03` | layout | [abap2UI5-addons/layout-management](https://github.com/abap2UI5-addons/layout-management)@dea6c1d (branch `main`) |
-| `src/04` | table-maintenance | [abap2UI5-addons/table-maintenance](https://github.com/abap2UI5-addons/table-maintenance)@bd5c578 (branch `main`) |
+| `src/01` | abap2UI5 - the framework and, in `src/01/03`, HTTP service `ZABAP2UI5`, handler `zabap2ui5_cl_ui5_icf_handler` | [abap2UI5/abap2UI5](https://github.com/abap2UI5/abap2UI5)@ee5e513 (branch `cloud`) |
+| `src/02` | popups | [abap2UI5-addons/popups](https://github.com/abap2UI5-addons/popups)@78bbf0b (branch `main`) |
+| `src/03` | layout | [abap2UI5-addons/layout-management](https://github.com/abap2UI5-addons/layout-management)@3c044cc (branch `main`) |
+| `src/04` | table-maintenance | [abap2UI5-addons/table-maintenance](https://github.com/abap2UI5-addons/table-maintenance)@f2f71ab (branch `main`) |
 
 ## Install
 
