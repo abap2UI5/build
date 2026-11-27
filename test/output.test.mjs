@@ -25,10 +25,10 @@ test("the renamed src of a checkout below a folder named src", () => {
   }
 });
 
-// main: one abaplint and one abap2UI5-linter config per variant, each
+// main: one abaplint and one abap2UI5-linter config per folder, each
 // pointing at its folder and at nothing else
 test("the lint configs of main point at their folder only", () => {
-  for (const variant of Object.keys(VARIANTS)) {
+  for (const variant of Object.values(VARIANTS)) {
     const abaplint = strip(readFileSync(join(root, `abaplint.${variant}.jsonc`), "utf8"));
     assert.equal(abaplint.global.files, `/src/${variant}/**/*.*`);
     assert.equal(abaplint.syntax.errorNamespace, ".");
@@ -43,7 +43,7 @@ test("the lint config of a delivery", () => {
   for (const variant of Object.keys(VARIANTS)) {
     const cfg = JSON.parse(lintConfig(variant));
     assert.equal(cfg.global.files, "/src/**/*.*");
-    assert.deepEqual(cfg.rules, strip(readFileSync(join(root, `abaplint.${variant}.jsonc`), "utf8")).rules);
+    assert.deepEqual(cfg.rules, strip(readFileSync(join(root, `abaplint.${VARIANTS[variant]}.jsonc`), "utf8")).rules);
   }
 });
 

@@ -1,35 +1,36 @@
 # build
 
-[abap2UI5](https://github.com/abap2UI5/abap2UI5) in its three variants on
-`main`, and from them **renamed installations** on delivery branches - each one
-an abapGit repository to pull, for a parallel installation next to an existing
-abap2UI5 or for a system that installs everything under a registered namespace.
+[abap2UI5](https://github.com/abap2UI5/abap2UI5) in its two delivery variants
+on `main`, and from them **renamed installations** on delivery branches - each
+one an abapGit repository to pull, for a parallel installation next to an
+existing abap2UI5 or for a system that installs everything under a registered
+namespace.
 
 ## main
 
-| Folder | Source | For |
-|---|---|---|
-| `src/standard` | `src/` of abap2UI5 `main` | Standard ABAP from 7.50: framework, ICF node, handler, BSP |
-| `src/702` | `src/` of the branch `702` | the same downported to 7.02, without the BSP |
-| `src/cloud` | `src/` of the branch `cloud` | ABAP Cloud: an HTTP service in place of the ICF node |
+| Folder | Source | Variant | For |
+|---|---|---|---|
+| `src/702` | `src/` of abap2UI5's branch `702` | `standard` | every Standard ABAP system from 7.02: framework, ICF node, handler |
+| `src/cloud` | `src/` of the branch `cloud` | `cloud` | ABAP Cloud: an HTTP service in place of the ICF node |
+
+A delivery needs no new syntax, so the downported sources are the standard
+ones: one code line for every on-premise release.
 
 Nothing in `src/` or `upstream/` is edited here - `node build.mjs sync`
 replaces it, and `sources.json` names the commits it was taken from.
 `upstream/` is what a rename needs of abap2UI5's own tooling (its rename
-config, `rename-literal-gate`, `tools/bsp_rename`), from the same commit as
-`src/standard`.
+config, `rename-literal-gate`, `tools/bsp_rename`).
 
 Each folder has its own two lint configurations, pointing at that folder only:
 
 | Folder | abaplint | abap2UI5-linter |
 |---|---|---|
-| `src/standard` | `abaplint.standard.jsonc` (v750) | `abap2ui5lint.standard.jsonc` |
 | `src/702` | `abaplint.702.jsonc` (v702) | `abap2ui5lint.702.jsonc` |
 | `src/cloud` | `abaplint.cloud.jsonc` (Cloud) | `abap2ui5lint.cloud.jsonc` |
 
 ```bash
 npm ci
-npm run lint            # all three, or lint:standard / lint:702 / lint:cloud
+npm run lint            # both, or lint:702 / lint:cloud
 npm test
 ```
 
@@ -51,8 +52,8 @@ steps, `src/` and the `abaplint.jsonc` it is checked with; the outcome is the
 badge of its README.
 
 ```bash
-node build.mjs deliver zabap2ui5 standard     # -> out/zabap2ui5-standard
-node build.mjs deliver /kro/ cloud            # -> out/#kro#-cloud
+node build.mjs deliver zabap2ui5 standard     # src/702   -> out/zabap2ui5-standard
+node build.mjs deliver /kro/ cloud            # src/cloud -> out/#kro#-cloud
 ```
 
 What a delivery is made of:
@@ -67,8 +68,8 @@ What a delivery is made of:
 2. `src/03`, the service package:
    - **standard**: abap2UI5's `tools/bsp_rename` - the ICF node becomes
      `/sap/bc/<name>` (`/sap/bc/<ns>/ui5` for a namespace, with its namespace
-     nodes), the BSP `<NAME>` (`/NS/UI5`), and the handler calls the renamed
-     framework.
+     node), and the handler calls the renamed framework. The branch `702`
+     comes without the launchpad BSP, and so does a standard delivery.
    - **cloud**: the HTTP service becomes `<NAME>` (`/NS/UI5`), with its
      inbound service, communication scenario and handler. Not carried: the
      SUSH of the HTTP service (its object name is a hash the system derives,
@@ -88,6 +89,6 @@ Install one or the other in a system.
 ## Workflow
 
 [`build`](.github/workflows/build.yaml) runs daily, on a push to `main` and by
-hand: it syncs `main` from abap2UI5, lints the three folders and pushes every
+hand: it syncs `main` from abap2UI5, lints the two folders and pushes every
 delivery branch that changed. On a pull request it lints and builds, and pushes
 nothing. To add a delivery, add its name to `deliveries.json`.

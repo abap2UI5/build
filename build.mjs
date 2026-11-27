@@ -2,22 +2,23 @@
 // build.mjs - the abap2UI5 sources in their three variants on main, and the
 // renamed installations derived from them on delivery branches.
 //
-//   node build.mjs sync                       src/standard, src/702, src/cloud and upstream/ from abap2UI5/abap2UI5
+//   node build.mjs sync                       src/702, src/cloud and upstream/ from abap2UI5/abap2UI5
 //   node build.mjs deliver zabap2ui5 standard out/zabap2ui5-standard   (branch zabap2ui5-standard)
 //   node build.mjs deliver /kro/ cloud        out/#kro#-cloud          (branch #kro#-cloud)
 //   node build.mjs matrix                     the deliveries of deliveries.json, as a workflow matrix
 //
 // main holds:
-//   src/standard   src/ of abap2UI5 main     Standard ABAP from 7.50: ICF node, handler, BSP
-//   src/702        src/ of the branch 702    the same downported to 7.02, without the BSP
-//   src/cloud      src/ of the branch cloud  ABAP Cloud: an HTTP service in place of the node
+//   src/702        src/ of abap2UI5's branch 702    the variant "standard": the downported
+//                  sources, for every Standard ABAP system from 7.02 - ICF node and handler
+//   src/cloud      src/ of the branch cloud         the variant "cloud": ABAP Cloud, an HTTP
+//                  service in place of the node
 //   upstream/      what a rename needs of abap2UI5's tooling (its rename
 //                  config, rename-literal-gate, tools/bsp_rename), LICENSE and
-//                  .abapgit.xml - taken from the same commit as src/standard
+//                  .abapgit.xml - taken from the branch 702
 //   sources.json   the commits all of that was taken from
 // Nothing in there is edited here: `sync` replaces it.
 //
-// deliver <name> <variant> turns src/<variant> into an abapGit repository
+// deliver <name> <variant> turns the folder of that variant into an abapGit repository
 // under a new name:
 //   1. src/00..02 by `abaplint --rename` with abap2UI5's own rename config
 //      (every z2ui5_* class, interface and table and every reference), then
@@ -41,7 +42,7 @@
 // Options:
 //   --out <dir>           deliver: where the result goes (default: out/<branch>)
 //   --abap2ui5 <path>     sync: an existing clone of abap2UI5/abap2UI5 with
-//                         origin/main, origin/702 and origin/cloud fetched,
+//                         origin/702 and origin/cloud fetched,
 //                         instead of fetching them into work/
 //   --abaplint <path>     the abaplint binary (default: node_modules/.bin/abaplint)
 //
@@ -56,8 +57,10 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const UPSTREAM = "https://github.com/abap2UI5/abap2UI5.git";
 const OLD = "z2ui5";
-// variant -> the branch of abap2UI5 its src/ is taken from
-export const VARIANTS = { standard: "main", 702: "702", cloud: "cloud" };
+// the folder of main and the branch of abap2UI5 its content is src/ of, by
+// variant: a delivery needs no new syntax, so the downported sources serve
+// every Standard ABAP system
+export const VARIANTS = { standard: "702", cloud: "cloud" };
 // what a rename needs of abap2UI5 besides src/, kept at its own path
 const TOOLING = [
   ".github/abaplint/rename.jsonc",
@@ -188,7 +191,7 @@ export function renamedSrc(output, checkout) {
 }
 
 // ---------------------------------------------------------------------------
-// sync: abap2UI5 -> src/<variant>, upstream/, sources.json
+// sync: abap2UI5 -> src/<branch>, upstream/, sources.json
 // ---------------------------------------------------------------------------
 function sync(o) {
   const git = (dir, ...args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", maxBuffer: 1 << 28 }).trim();
@@ -196,16 +199,16 @@ function sync(o) {
   const ref = {};
   if (o.abap2ui5) {
     repo = resolve(o.abap2ui5);
-    for (const [variant, branch] of Object.entries(VARIANTS)) ref[variant] = `origin/${branch}`;
+    for (const branch of Object.values(VARIANTS)) ref[branch] = `origin/${branch}`;
   } else {
     repo = join(here, "work/abap2UI5");
     rmSync(repo, { recursive: true, force: true });
     mkdirSync(repo, { recursive: true });
     git(repo, "init", "-q");
-    for (const [variant, branch] of Object.entries(VARIANTS)) {
+    for (const branch of Object.values(VARIANTS)) {
       console.log(`fetch ${UPSTREAM} ${branch}`);
       run("git", ["-C", repo, "fetch", "-q", "--depth", "1", UPSTREAM, `refs/heads/${branch}:refs/sync/${branch}`]);
-      ref[variant] = `refs/sync/${branch}`;
+      ref[branch] = `refs/sync/${branch}`;
     }
   }
   // a path of a commit, extracted to <target> (the path's own content, not the path)
@@ -217,32 +220,41 @@ function sync(o) {
     execFileSync("tar", ["-x", "-C", target, `--strip-components=${depth}`], { input: tar });
   };
 
+  // abap2UI5 regenerates both branches on every change of its main, as a new
+  // commit also when src/ comes out the same: an entry whose src/ did not
+  // change keeps the commit it was first seen at, so nothing downstream moves
+  const known = existsSync(join(here, "sources.json")) ? JSON.parse(readFileSync(join(here, "sources.json"), "utf8")).branches ?? {} : {};
   const sources = {};
   for (const [variant, branch] of Object.entries(VARIANTS)) {
-    const commit = git(repo, "rev-parse", ref[variant]);
-    extract(commit, "src", join(here, "src", variant));
-    sources[variant] = { branch, commit, date: git(repo, "log", "-1", "--format=%cI", commit) };
-    console.log(`src/${variant}: abap2UI5 ${branch} ${commit.slice(0, 7)}, ${[...walk(join(here, "src", variant))].length} files`);
+    const commit = git(repo, "rev-parse", ref[branch]);
+    extract(commit, "src", join(here, "src", branch));
+    const tree = git(repo, "rev-parse", `${commit}:src`);
+    sources[branch] = known[branch]?.tree === tree && existsSync(join(here, "upstream"))
+      ? known[branch]
+      : { variant, commit, tree, date: git(repo, "log", "-1", "--format=%cI", commit) };
+    console.log(`src/${branch}: abap2UI5 ${branch} ${commit.slice(0, 7)}, ${[...walk(join(here, "src", branch))].length} files`);
   }
-  // the tooling comes with the standard sources: one commit, one way to rename
+  // the tooling comes with the standard sources (the branch is the whole
+  // tree of abap2UI5): one commit, one way to rename
   const upstream = join(here, "upstream");
+  const tooling = git(repo, "rev-parse", ref[VARIANTS.standard]);
   rmSync(upstream, { recursive: true, force: true });
   for (const file of TOOLING) {
     mkdirSync(dirname(join(upstream, file)), { recursive: true });
-    writeFileSync(join(upstream, file), execFileSync("git", ["-C", repo, "show", `${sources.standard.commit}:${file}`], { maxBuffer: 1 << 28 }));
+    writeFileSync(join(upstream, file), execFileSync("git", ["-C", repo, "show", `${tooling}:${file}`], { maxBuffer: 1 << 28 }));
   }
-  writeFileSync(join(here, "sources.json"), `${JSON.stringify({ repository: "abap2UI5/abap2UI5", variants: sources }, null, 2)}\n`);
+  writeFileSync(join(here, "sources.json"), `${JSON.stringify({ repository: "abap2UI5/abap2UI5", branches: sources }, null, 2)}\n`);
 }
 
 // ---------------------------------------------------------------------------
 // deliver 1+2: src/00..02
 // ---------------------------------------------------------------------------
 // a checkout of abap2UI5 as far as its rename tooling needs one: upstream/
-// at its own paths and src/<variant> as src/
+// at its own paths and the folder of the variant as src/
 function stage(variant, work) {
   rmSync(work, { recursive: true, force: true });
   cpSync(join(here, "upstream"), work, { recursive: true });
-  cpSync(join(here, "src", variant), join(work, "src"), { recursive: true });
+  cpSync(join(here, "src", VARIANTS[variant]), join(work, "src"), { recursive: true });
   return work;
 }
 
@@ -523,15 +535,17 @@ function assemble(N, variant, out, src, checkout) {
   writeFileSync(join(out, "abaplint.jsonc"), lintConfig(variant));
 
   const branch = branchOf(N, variant);
-  const source = JSON.parse(readFileSync(join(here, "sources.json"), "utf8")).variants[variant];
+  const folder = VARIANTS[variant];
+  const source = JSON.parse(readFileSync(join(here, "sources.json"), "utf8")).branches[folder];
   const raw = `https://raw.githubusercontent.com/${REPOSITORY}/${encodeURIComponent(branch)}/.badges/abaplint.json`;
   const badgeUrl = `https://img.shields.io/endpoint?url=${encodeURIComponent(raw)}`;
-  const system = { standard: "Standard ABAP from 7.50", 702: "Standard ABAP from 7.02", cloud: "ABAP Cloud" }[variant];
+  const system = { standard: "Standard ABAP from 7.02", cloud: "ABAP Cloud" }[variant];
   const namespace = N.kind === "namespace"
     ? `1. The namespace \`${N.label}\` has to exist in the system (SE03, changeable, with a developer license) and a package of that namespace to pull into.\n`
     : "1. Create a package to pull into.\n";
   const pull = `2. abapGit: New Online, this repository, branch \`${branch}\`, that package, Pull. The packages are named \`<package>_00\` .. \`<package>_03\` and below - abapGit's PREFIX folder logic.\n`;
-  const nodes = variant === "standard" ? N.nodes : N.nodes.slice(0, 1);
+  // the downported sources come without the BSP: the handler's node is the installation
+  const nodes = N.nodes.slice(0, 1);
   const run = variant === "cloud"
     ? `3. Open the URL the HTTP service \`${N.service}\` shows in ADT (\`${N.serviceUrl}\`).
 
@@ -541,21 +555,21 @@ original installation; for a tile, create an IAM app for the HTTP service
 \`${N.service}\` and assign it to a business catalog of yours in ADT.
 `
     : `3. SICF: activate ${nodes.join(", ")}${N.namespaceNodes ? ` (below the namespace nodes ${N.namespaceNodes.slice(0, nodes.length).join(", ")}, which the pull creates)` : ""}.
-4. Open \`${variant === "standard" ? N.index : N.endpoint}\`.
+4. Open \`${N.endpoint}\`.
 `;
   const service = variant === "cloud"
     ? `HTTP service \`${N.service}\`, handler \`${N.prefix}cl_ui5_icf_handler\``
-    : `ICF node \`${N.endpoint}\`, handler \`${N.prefix}cl_ui5_icf_handler\`${variant === "standard" ? `, BSP \`${N.bsp}\`` : ""}`;
+    : `ICF node \`${N.endpoint}\`, handler \`${N.prefix}cl_ui5_icf_handler\``;
   writeFileSync(join(out, "README.md"), `# abap2UI5 as ${N.label} - ${variant}
 
 [![abaplint](${badgeUrl})](https://github.com/${REPOSITORY}/actions/workflows/build.yaml)
 
 [abap2UI5](https://github.com/abap2UI5/abap2UI5) under the name \`${N.label}\`, for ${system}.
-Generated by [${REPOSITORY}](https://github.com/${REPOSITORY}) from \`src/${variant}\` of its main branch - do not edit, the build replaces it.
+Generated by [${REPOSITORY}](https://github.com/${REPOSITORY}) from \`src/${folder}\` of its main branch - do not edit, the build replaces it.
 
 | | |
 |---|---|
-| source | abap2UI5/abap2UI5@${source.commit} (branch \`${source.branch}\`) |
+| source | abap2UI5/abap2UI5@${source.commit} (branch \`${folder}\`) |
 | \`src/00\` .. \`src/02\` | the framework, every \`z2ui5_*\` object renamed to \`${N.prefix}*\` |
 | \`src/03\` | ${service} |
 
@@ -569,9 +583,9 @@ ${namespace}${pull}${run}`);
 // deliver 5: abaplint on the result
 // ---------------------------------------------------------------------------
 // the config the result is checked with, on the branch next to src/: the
-// main config of the variant (abaplint.<variant>.jsonc), pointed at src/
+// main config of the variant's folder (abaplint.<folder>.jsonc), pointed at src/
 export function lintConfig(variant) {
-  const text = readFileSync(join(here, `abaplint.${variant}.jsonc`), "utf8");
+  const text = readFileSync(join(here, `abaplint.${VARIANTS[variant]}.jsonc`), "utf8");
   const cfg = JSON.parse(text.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n"));
   cfg.global.files = "/src/**/*.*";
   delete cfg.global.noIssues;
@@ -618,7 +632,7 @@ function deliver(o) {
   if (!(variant in VARIANTS)) fail(`the variant is one of ${Object.keys(VARIANTS).join(", ")} - got '${variant ?? ""}'`);
   const abaplint = o.abaplint ? resolve(o.abaplint) : join(here, "node_modules/.bin/abaplint");
   if (!existsSync(abaplint)) fail(`${abaplint} not found - run npm ci here first`);
-  if (!existsSync(join(here, "src", variant, "03")) || !existsSync(join(here, "upstream/tools"))) fail(`src/${variant} or upstream/ missing - run: node build.mjs sync`);
+  if (!existsSync(join(here, "src", VARIANTS[variant], "03")) || !existsSync(join(here, "upstream/tools"))) fail(`src/${VARIANTS[variant]} or upstream/ missing - run: node build.mjs sync`);
 
   const branch = branchOf(N, variant);
   console.log(`abap2UI5 ${variant} as ${N.label}  (${OLD}_ -> ${N.prefix}, branch ${branch})`);

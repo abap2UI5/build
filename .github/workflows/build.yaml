@@ -1,13 +1,14 @@
 name: build
 
-# main holds abap2UI5 in its three variants - src/standard, src/702,
-# src/cloud - and every delivery branch is one of them under another name
+# main holds abap2UI5 in its two variants - src/702 for every Standard ABAP
+# system, src/cloud for ABAP Cloud - and every delivery branch is one of
+# them under another name
 # (deliveries.json: every name in every variant, branch <name>-<variant>).
 #
-#   sources   takes src/ of abap2UI5's main, 702 and cloud and the rename
-#             tooling of its main (build.mjs sync) and commits what changed
+#   sources   takes src/ of abap2UI5's branches 702 and cloud and the rename
+#             tooling (build.mjs sync) and commits what changed
 #             to main. On a pull request nothing is synced: the head is built
-#   lint      per variant: abaplint and the abap2UI5-linter, each with the
+#   lint      per folder: abaplint and the abap2UI5-linter, each with the
 #             config that points at that folder only
 #   deliver   per delivery: build.mjs deliver, then the branch is pushed -
 #             one commit per change, parented on the previous one. abaplint
@@ -60,10 +61,10 @@ jobs:
             echo "abap2UI5 unchanged"
             exit 0
           fi
-          short() { node -p "require('./sources.json').variants['$1'].commit.slice(0, 7)"; }
+          short() { node -p "require('./sources.json').branches['$1'].commit.slice(0, 7)"; }
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git commit -q -m "sync: abap2UI5 main $(short standard), 702 $(short 702), cloud $(short cloud)"
+          git commit -q -m "sync: abap2UI5 702 $(short 702), cloud $(short cloud)"
           git push origin "HEAD:${GITHUB_REF_NAME}"
           echo "SYNCED=true" >> "$GITHUB_ENV"
       - name: State
@@ -84,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [standard, "702", cloud]
+        folder: ["702", cloud]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -94,10 +95,10 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: abaplint src/${{ matrix.variant }}
-        run: npx abaplint "abaplint.${{ matrix.variant }}.jsonc"
-      - name: abap2UI5-linter src/${{ matrix.variant }}
-        run: npx abap2ui5lint --config "abap2ui5lint.${{ matrix.variant }}.jsonc"
+      - name: abaplint src/${{ matrix.folder }}
+        run: npx abaplint "abaplint.${{ matrix.folder }}.jsonc"
+      - name: abap2UI5-linter src/${{ matrix.folder }}
+        run: npx abap2ui5lint --config "abap2ui5lint.${{ matrix.folder }}.jsonc"
 
   deliver:
     needs: [sources, lint]
@@ -148,7 +149,7 @@ jobs:
             echo "$BRANCH: no changes"
             exit 0
           fi
-          source=$(node -p "require('./sources.json').variants['$VARIANT'].commit.slice(0, 7)")
+          source=$(node -p "Object.values(require('./sources.json').branches).find((b) => b.variant === '$VARIANT').commit.slice(0, 7)")
           commit=$(git commit-tree "$tree" ${parent:+-p "$parent"} -m "build: $NAME $VARIANT (abap2UI5 $source)")
           git push origin "$commit:refs/heads/$BRANCH"
           echo "$BRANCH: pushed $commit"

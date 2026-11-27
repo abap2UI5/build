@@ -2,7 +2,7 @@
   "name": "abap2ui5-build",
   "private": true,
   "version": "0.1.0",
-  "description": "abap2UI5 in its three variants (standard, 702, cloud) and renamed installations of it on delivery branches",
+  "description": "abap2UI5 for Standard ABAP (702) and ABAP Cloud, and renamed installations of it on delivery branches",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -10,10 +10,9 @@
   "scripts": {
     "sync": "node build.mjs sync",
     "deliver": "node build.mjs deliver",
-    "lint:standard": "abaplint abaplint.standard.jsonc && abap2ui5lint --config abap2ui5lint.standard.jsonc",
     "lint:702": "abaplint abaplint.702.jsonc && abap2ui5lint --config abap2ui5lint.702.jsonc",
     "lint:cloud": "abaplint abaplint.cloud.jsonc && abap2ui5lint --config abap2ui5lint.cloud.jsonc",
-    "lint": "npm run lint:standard && npm run lint:702 && npm run lint:cloud",
+    "lint": "npm run lint:702 && npm run lint:cloud",
     "test": "node --test \"test/*.test.mjs\""
   },
   "devDependencies": {
