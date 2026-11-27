@@ -48,6 +48,39 @@ CLASS /ca2ui5/cl_tm_001 DEFINITION
       RETURNING
         VALUE(result) TYPE REF TO /ca2ui5/cl_tm_001.
 
+    "! A text of data element roll - or fallback where the data element is
+    "! not on the system or has no text (an EWM or S/4HANA system may lack
+    "! the data elements the texts are borrowed from). The app and its popup
+    "! (z2ui5_cl_tm_pop) take their texts from here.
+    "! @parameter roll     | the data element
+    "! @parameter type     | L, M, S or H - the long, medium, short or heading
+    "!                       text; any other value: the short text
+    "! @parameter fallback | the text where the data element has none
+    CLASS-METHODS get_text_by_dtel
+      IMPORTING
+        roll          TYPE clike
+        !type         TYPE clike  OPTIONAL
+        fallback      TYPE string OPTIONAL
+      RETURNING
+        VALUE(result) TYPE string.
+
+    "! The text of message no of class id - or fallback where the message
+    "! class or number is not on the system (an EWM or S/4HANA system may
+    "! lack the classes the texts are borrowed from; a missing message
+    "! answers with its own class and number, or nothing)
+    "! @parameter id       | the message class
+    "! @parameter no       | the message number
+    "! @parameter v1       | the first placeholder
+    "! @parameter fallback | the text where the message is missing
+    CLASS-METHODS get_text_by_msg
+      IMPORTING
+        !id           TYPE clike
+        !no           TYPE clike
+        v1            TYPE clike OPTIONAL
+        fallback      TYPE string
+      RETURNING
+        VALUE(result) TYPE string.
+
   PROTECTED SECTION.
     TYPES:
       BEGIN OF ty_s_keys,
@@ -60,10 +93,7 @@ CLASS /ca2ui5/cl_tm_001 DEFINITION
     DATA mt_dfies          TYPE /ca2ui5/cl_tm_context=>ty_t_dfies.
     DATA client            TYPE REF TO /ca2ui5/if_client.
     DATA check_initialized TYPE abap_bool.
-    DATA mv_f4_fname       TYPE string.
-    DATA mv_shlpfield      TYPE string.
     DATA mv_multi_edit     TYPE abap_bool.
-    DATA mv_key_error      TYPE abap_bool.
 
     DATA mv_ucomm_tmp      TYPE string.
     " the edit lock is held in a stateful session, from the first change
@@ -82,13 +112,17 @@ CLASS /ca2ui5/cl_tm_001 DEFINITION
 
     METHODS get_dfies.
 
+    "! The DDIC field list of ABAP Cloud has no data types: the client
+    "! column gets the type CLNT here, so that it is left out of the keys,
+    "! the row hash and the duplicate check and cannot be edited - as on
+    "! Standard ABAP
+    METHODS set_client_field.
+
     METHODS row_select.
 
     METHODS render_main.
 
-    "! A text of data element roll - or fallback where the data element is
-    "! not on the system or has no text (an EWM or S/4HANA system may lack
-    "! the data elements the texts are borrowed from)
+    "! A text of data element roll - or fallback, see get_text_by_dtel
     METHODS get_txt
       IMPORTING
         roll          TYPE string
@@ -97,10 +131,7 @@ CLASS /ca2ui5/cl_tm_001 DEFINITION
       RETURNING
         VALUE(result) TYPE string.
 
-    "! The text of message no of class id - or fallback where the message
-    "! class or number is not on the system (an EWM or S/4HANA system may
-    "! lack the classes the texts are borrowed from; a missing message
-    "! answers with its own class and number, or nothing)
+    "! The text of message no of class id - or fallback, see get_text_by_msg
     METHODS get_msg
       IMPORTING
         !id           TYPE clike
@@ -175,6 +206,13 @@ CLASS /ca2ui5/cl_tm_001 DEFINITION
     "! DEQUEUE_E_TABLE, the counterpart of lock( )
     METHODS unlock.
 
+    "! The VARKEY of lock( ) and unlock( ): the logon client for a
+    "! client-dependent table, typed RSTABLE-VARKEY - unbound for a table
+    "! without a client, which is locked as a whole
+    METHODS get_lock_varkey
+      RETURNING
+        VALUE(result) TYPE REF TO data.
+
     "! The lock for the changes that start now (add, edit, multi-edit): taken
     "! once and kept in a stateful session until the changes are saved or
     "! dropped. result is abap_false if another user holds it.
@@ -226,6 +264,16 @@ CLASS /ca2ui5/cl_tm_001 DEFINITION
 
     METHODS transport_all.
 
+    "! The logon client's change option for this table (SCC4,
+    "! T000-CCCORACTIV) as SM30 applies it - `1` automatic recording, `2` no
+    "! changes allowed, `3` no transports; empty when it does not apply:
+    "! ABAP Cloud, a cross-client table (T000-CCNOCLIIND is not checked) or
+    "! a table that is no customizing table (delivery class other than C or
+    "! G), or when T000 or DD02L cannot be read
+    METHODS get_client_change_option
+      RETURNING
+        VALUE(result) TYPE string.
+
     METHODS on_event_transport.
 
     METHODS render_ui_table
@@ -250,6 +298,23 @@ ENDCLASS.
 CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
 
   METHOD get_txt.
+
+    result = get_text_by_dtel( roll     = roll
+                               type     = type
+                               fallback = fallback ).
+
+  ENDMETHOD.
+
+  METHOD get_msg.
+
+    result = get_text_by_msg( id       = id
+                              no       = no
+                              v1       = v1
+                              fallback = fallback ).
+
+  ENDMETHOD.
+
+  METHOD get_text_by_dtel.
 
     TRY.
         DATA(texts) = /ca2ui5/cl_tm_context=>rtti_get_data_element_texts( roll ).
@@ -277,7 +342,7 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD get_msg.
+  METHOD get_text_by_msg.
 
     TRY.
         result = /ca2ui5/cl_tm_context=>msg_get_by_msg( id = id
@@ -306,6 +371,34 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
     FIELD-SYMBOLS <del_org> TYPE STANDARD TABLE.
     FIELD-SYMBOLS <del>     TYPE any.
     FIELD-SYMBOLS <saved>   TYPE STANDARD TABLE.
+
+    " the client setting first, as SM30 does: a client that allows no
+    " changes to customizing takes none from here either
+    DATA(lv_client_option) = get_client_change_option( ).
+    IF lv_client_option = `2`.
+      CLEAR mv_ucomm_tmp.
+      client->message_box_display( text = |Client { sy-mandt } allows no changes to customizing (SCC4) - the changes to { mv_table } were not saved.|
+                                   type = `error` ).
+      RETURN.
+    ENDIF.
+
+    " ABAP Cloud records nothing on a request (popups' bus_tr_add( ) has no
+    " Cloud branch, and its request list stays empty) - no popup to ask for
+    " one that would not be written
+    IF ms_transport IS INITIAL AND /ca2ui5/cl_tm_context=>check_abap_cloud( ) = abap_true.
+      ms_transport-locl = abap_true.
+    ENDIF.
+
+    " a client that records its customizing changes automatically: a
+    " request is required, No Transport is not enough
+    IF lv_client_option = `1` AND ms_transport-locl = abap_true.
+      CLEAR ms_transport.
+      client->message_toast_display( |Client { sy-mandt } records customizing changes automatically (SCC4) - choose a transport request.| ).
+      mv_ucomm_tmp = `BUTTON_SAVE`.
+      client->nav_app_call( app           = /ca2ui5/cl_popup_show_tr=>factory( )
+                            keep_messages = abap_true ).
+      RETURN.
+    ENDIF.
 
     IF ms_transport IS INITIAL.
 
@@ -528,6 +621,56 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD get_client_change_option.
+
+    DATA lv_contflag TYPE c LENGTH 1.
+    DATA lv_option   TYPE c LENGTH 1.
+
+    IF /ca2ui5/cl_tm_context=>check_abap_cloud( ) = abap_true.
+      RETURN.
+    ENDIF.
+
+    " the client-specific setting covers client-dependent tables only
+    IF NOT line_exists( mt_dfies[ keyflag = abap_true datatype = 'CLNT' ] ).
+      RETURN.
+    ENDIF.
+
+    " by name: neither T000 nor DD02L is released for ABAP Cloud, where the
+    " class has to compile as well
+    DATA(lv_dd02l) = `DD02L`.
+    DATA(lv_t000)  = `T000`.
+    TRY.
+        " customizing only (delivery class C or G) - application data is
+        " not what the client's change option is about
+        SELECT SINGLE contflag
+          FROM (lv_dd02l)
+          WHERE tabname  = @mv_table
+            AND as4local = 'A'
+            AND as4vers  = '0000'
+          INTO @lv_contflag.
+        IF sy-subrc <> 0 OR ( lv_contflag <> 'C' AND lv_contflag <> 'G' ).
+          RETURN.
+        ENDIF.
+
+        " T000 is cross-client: its MANDT is the key to read, not the
+        " client handling of the statement - a dynamic condition, as for a
+        " dynamic table
+        DATA(lv_where) = |MANDT = '{ sy-mandt }'|.
+        SELECT SINGLE cccoractiv
+          FROM (lv_t000)
+          WHERE (lv_where)
+          INTO @lv_option.
+        IF sy-subrc = 0.
+          result = lv_option.
+        ENDIF.
+
+      CATCH cx_root.
+        " not readable here - the save goes on as before
+        CLEAR result.
+    ENDTRY.
+
+  ENDMETHOD.
+
   METHOD transport_all.
 
     DATA t_table TYPE REF TO data.
@@ -548,13 +691,17 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
 
       CLEAR mv_ucomm_tmp.
 
-      " outside multi-edit a search leaves only its hits in mt_table - all
-      " rows are in mt_table_tmp, which is what the save writes as well
-      IF mv_multi_edit = abap_true.
-        ASSIGN mt_table->* TO <tab>.
-      ELSE.
-        ASSIGN mt_table_tmp->* TO <tab>.
+      " the entries as they are in the database - not the rows on the
+      " screen: a row added or changed and not yet saved is no entry the
+      " request can carry, and one deleted and not yet saved still is
+      DATA(db) = get_db_rows( ).
+      IF db IS NOT BOUND.
+        client->message_toast_display( get_msg( id       = '42'
+                                                no       = `316`
+                                                fallback = `Transport request error` ) ).
+        RETURN.
       ENDIF.
+      ASSIGN db->* TO <tab>.
 
       DATA(comp) = /ca2ui5/cl_tm_context=>rtti_get_t_attri_by_table_name( mv_table ).
 
@@ -577,8 +724,7 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
       ENDTRY.
       TRY.
           " the entries of the table only - deletions reach the transport
-          " with the save that executes them; pending ones are not in the
-          " database, and a request must not delete what is still there
+          " with the save that executes them
           /ca2ui5/cl_popup_show_tr=>add_data_to_tranport( ir_data      = t_table
                                                       iv_tabname   = mv_table
                                                       is_transport = ms_transport ).
@@ -591,10 +737,14 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
           RETURN.
       ENDTRY.
       " MESSAGE s215(rmps_general) WITH ms_transport-transport INTO msg. "Transporteintrag erfolgreich geschrieben (&1)
-      client->message_toast_display( get_msg( id       = 'rmps_general'
-                                              no       = `215`
-                                              v1       = ms_transport-transport
-                                              fallback = |Transport entries written ({ ms_transport-transport })| ) ).
+      DATA(text) = get_msg( id       = 'rmps_general'
+                            no       = `215`
+                            v1       = ms_transport-transport
+                            fallback = |Transport entries written ({ ms_transport-transport })| ).
+      IF mv_change_active = abap_true.
+        text = |{ text } - the changes not saved yet are not on the request|.
+      ENDIF.
+      client->message_toast_display( text ).
 
     ENDIF.
   ENDMETHOD.
@@ -820,18 +970,9 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
     ENDIF.
 
     lv_tabname = mv_table.
-    " a client-dependent table is locked in the logon client only
-    IF line_exists( mt_dfies[ keyflag = abap_true datatype = 'CLNT' ] ).
-      " VARKEY is passed by reference and must have the exact type of the
-      " module's parameter (RSTABLE-VARKEY - its length differs between
-      " releases); created by name, so the class also compiles on ABAP Cloud
-      TRY.
-          CREATE DATA lr_varkey TYPE (`RSTABLE-VARKEY`).
-          ASSIGN lr_varkey->* TO <varkey>.
-          <varkey> = sy-mandt.
-        CATCH cx_root ##NO_HANDLER.
-          " no such type: the whole table is locked, as without a client
-      ENDTRY.
+    lr_varkey = get_lock_varkey( ).
+    IF lr_varkey IS BOUND.
+      ASSIGN lr_varkey->* TO <varkey>.
     ENDIF.
 
     " called by name, so the class compiles where the module does not exist
@@ -905,17 +1046,9 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
     ENDIF.
 
     lv_tabname = mv_table.
-    IF line_exists( mt_dfies[ keyflag = abap_true datatype = 'CLNT' ] ).
-      " VARKEY is passed by reference and must have the exact type of the
-      " module's parameter (RSTABLE-VARKEY - its length differs between
-      " releases); created by name, so the class also compiles on ABAP Cloud
-      TRY.
-          CREATE DATA lr_varkey TYPE (`RSTABLE-VARKEY`).
-          ASSIGN lr_varkey->* TO <varkey>.
-          <varkey> = sy-mandt.
-        CATCH cx_root ##NO_HANDLER.
-          " no such type: the whole table is locked, as without a client
-      ENDTRY.
+    lr_varkey = get_lock_varkey( ).
+    IF lr_varkey IS BOUND.
+      ASSIGN lr_varkey->* TO <varkey>.
     ENDIF.
 
     TRY.
@@ -941,6 +1074,29 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
         ENDIF.
       CATCH cx_root ##NO_HANDLER.
         " a lock that cannot be released goes with the session
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD get_lock_varkey.
+
+    FIELD-SYMBOLS <varkey> TYPE any.
+
+    " a client-dependent table is locked in the logon client only
+    IF NOT line_exists( mt_dfies[ keyflag = abap_true datatype = 'CLNT' ] ).
+      RETURN.
+    ENDIF.
+
+    " VARKEY is passed by reference and must have the exact type of the
+    " module's parameter (RSTABLE-VARKEY - its length differs between
+    " releases); created by name, so the class also compiles on ABAP Cloud
+    TRY.
+        CREATE DATA result TYPE (`RSTABLE-VARKEY`).
+        ASSIGN result->* TO <varkey>.
+        <varkey> = sy-mandt.
+      CATCH cx_root.
+        " no such type: the whole table is locked, as without a client
+        CLEAR result.
     ENDTRY.
 
   ENDMETHOD.
@@ -997,6 +1153,12 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
 
     mt_dfies = /ca2ui5/cl_tm_context=>rtti_get_t_dfies_by_table_name( mv_table ).
 
+    " every check of the app and of the popup finds the client column by its
+    " data type CLNT - ABAP Cloud answers the fields without one
+    IF NOT line_exists( mt_dfies[ datatype = 'CLNT' ] ).
+      set_client_field( ).
+    ENDIF.
+
     " Check if the DB for the F4 Help is released
     LOOP AT mt_dfies REFERENCE INTO DATA(dfies) WHERE checktable IS NOT INITIAL.
       TRY.
@@ -1012,6 +1174,50 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
           CLEAR dfies->checktable.
       ENDTRY.
     ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD set_client_field.
+
+    DATA descr        TYPE REF TO cl_abap_typedescr.
+    DATA struct_descr TYPE REF TO cl_abap_structdescr.
+    DATA comp_descr   TYPE REF TO cl_abap_datadescr.
+    DATA elem_descr   TYPE REF TO cl_abap_elemdescr.
+
+    " the client is the first key field - on ABAP Cloud a column CLIENT (or
+    " MANDT) of the built-in type CLNT, which RTTI shows as a CHAR 3
+    " ASSIGN, not REF #( ... OPTIONAL ): the 702 downport drops the OPTIONAL
+    ASSIGN mt_dfies[ keyflag = abap_true ] TO FIELD-SYMBOL(<dfies>).
+    IF <dfies> IS NOT ASSIGNED OR <dfies>-datatype IS NOT INITIAL.
+      RETURN.
+    ENDIF.
+    IF <dfies>-fieldname <> 'CLIENT' AND <dfies>-fieldname <> 'MANDT'.
+      RETURN.
+    ENDIF.
+
+    cl_abap_typedescr=>describe_by_name( EXPORTING  p_name         = mv_table
+                                         RECEIVING  p_descr_ref    = descr
+                                         EXCEPTIONS type_not_found = 1
+                                                    OTHERS         = 2 ).
+    IF sy-subrc <> 0 OR descr->kind <> cl_abap_typedescr=>kind_struct.
+      RETURN.
+    ENDIF.
+
+    struct_descr ?= descr.
+    struct_descr->get_component_type( EXPORTING  p_name                 = <dfies>-fieldname
+                                      RECEIVING  p_descr_ref            = comp_descr
+                                      EXCEPTIONS component_not_found    = 1
+                                                 unsupported_input_type = 2
+                                                 OTHERS                 = 3 ).
+    IF sy-subrc <> 0 OR comp_descr->kind <> cl_abap_typedescr=>kind_elem
+        OR comp_descr->type_kind <> cl_abap_typedescr=>typekind_char.
+      RETURN.
+    ENDIF.
+
+    elem_descr ?= comp_descr.
+    IF elem_descr->output_length = 3.
+      <dfies>-datatype = 'CLNT'.
+    ENDIF.
 
   ENDMETHOD.
 
@@ -1041,13 +1247,14 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
     " a table set by factory( ) or set_app_data( ) is checked as well
     IF mv_table IS INITIAL.
 
-      " TABLE per Parameter?
-      DATA(tab) = /ca2ui5/cl_tm_context=>url_param_get( val = 'table'
-                                                url = client->get( )-s_config-search ).
-
+      " the launchpad startup parameter first: a tile's table is the scope
+      " the administrator gave it, which a URL parameter the user adds must
+      " not change; without a tile (no startup parameter) the URL names it
+      DATA(startup_params) = client->get( )-t_comp_params.
+      DATA(tab) = VALUE string( startup_params[ n = 'table' ]-v OPTIONAL ).
       IF tab IS INITIAL.
-        DATA(startup_params) = client->get( )-t_comp_params.
-        tab = VALUE #( startup_params[ n = 'table' ]-v OPTIONAL ).
+        tab = /ca2ui5/cl_tm_context=>url_param_get( val = 'table'
+                                                url = client->get( )-s_config-search ).
       ENDIF.
 
       " no fallback table: without the parameter the app asks for one
@@ -1067,6 +1274,24 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
                                                     OTHERS         = 2 ).
     IF sy-subrc <> 0 OR descr->kind <> cl_abap_typedescr=>kind_struct.
       client->message_toast_display( |Table { mv_table } does not exist.| ).
+      mv_table_input = mv_table.
+      CLEAR mv_table.
+      RETURN.
+    ENDIF.
+
+    " ROW_ID and SELKZ are the app's technical columns - the row id and the
+    " multi-edit selection. A table with a column of either name of its own
+    " had it taken over: the row ids overwrote the real ROW_ID values (and
+    " every save was refused as changed in the database), and Delete and
+    " Copy acted on the stored SELKZ values. Such a table is refused
+    TRY.
+        DATA(lt_comp) = /ca2ui5/cl_tm_context=>rtti_get_t_attri_by_table_name( mv_table ).
+      CATCH cx_root ##NO_HANDLER.
+    ENDTRY.
+    IF line_exists( lt_comp[ name = mc_row_id ] ) OR line_exists( lt_comp[ name = `SELKZ` ] ).
+      client->message_box_display( text = |Table { mv_table } has a column { mc_row_id } or SELKZ of its own, | &&
+                                          |which this app uses for itself - it cannot be maintained here.|
+                                   type = `error` ).
       mv_table_input = mv_table.
       CLEAR mv_table.
     ENDIF.
@@ -1287,19 +1512,24 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
         )->a( n = `press` v = client->_event( 'BUTTON_SAVE' )
         )->a( n = `type` v = 'Success' ).
 
-    footer->ele( `MenuButton`
+    DATA(menu) = footer->ele( `MenuButton`
         )->a( n = `activeIcon` v = 'sap-icon://action-settings'
         )->ele( `menu`
-        )->ele( `Menu`
-        )->tag( `MenuItem`
-        )->a( n = `icon`  v = 'sap-icon://shipping-status'
-        )->a( n = `text`  v = get_txt( roll = 'ALLES_FUB' fallback = `Transport All Entries` )
-        )->a( n = `press` v = client->_event( 'TRANSPORT_ALL' )
-        )->tag( `MenuItem`
-        )->a( n = `icon`  v = 'sap-icon://shipping-status'
-        )->a( n = `text`  v = get_txt( roll = 'FUNCCHANGE' fallback = `Change Transport Request` )
-        )->a( n = `press` v = client->_event( 'TRANSPORT_CHANGE' )
-        )->tag( `MenuItem`
+        )->ele( `Menu` ).
+
+    " ABAP Cloud records nothing on a transport request - no menu for it
+    IF /ca2ui5/cl_tm_context=>check_abap_cloud( ) = abap_false.
+      menu->tag( `MenuItem`
+          )->a( n = `icon`  v = 'sap-icon://shipping-status'
+          )->a( n = `text`  v = get_txt( roll = 'ALLES_FUB' fallback = `Transport All Entries` )
+          )->a( n = `press` v = client->_event( 'TRANSPORT_ALL' )
+          )->tag( `MenuItem`
+          )->a( n = `icon`  v = 'sap-icon://shipping-status'
+          )->a( n = `text`  v = get_txt( roll = 'FUNCCHANGE' fallback = `Change Transport Request` )
+          )->a( n = `press` v = client->_event( 'TRANSPORT_CHANGE' ) ).
+    ENDIF.
+
+    menu->tag( `MenuItem`
         )->a( n = `icon`  v = 'sap-icon://key-user-settings'
         )->a( n = `text`  v = get_txt( roll = 'POWL_ADMIN_TY' fallback = `Multi-Edit` )
         )->a( n = `press` v = client->_event( 'BUTTON_EDIT' ) ).
@@ -1361,17 +1591,31 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    " the fields of the table that are shown - not the technical columns
+    " ROW_ID (a UUID) and SELKZ, not the client, not a hidden column - each
+    " on a line of its own, so a hit never spans two fields
+    DATA(fields) = VALUE string_table( ).
+    LOOP AT mt_dfies INTO DATA(dfies) WHERE datatype <> 'CLNT' AND fieldname <> 'MANDT'.
+      IF mo_layout IS BOUND.
+        FIELD-SYMBOLS <layout> LIKE LINE OF mo_layout->ms_layout-t_layout.
+        UNASSIGN <layout>.
+        ASSIGN mo_layout->ms_layout-t_layout[ fname = dfies-fieldname ] TO <layout>.
+        IF <layout> IS ASSIGNED AND <layout>-visible = abap_false.
+          CONTINUE.
+        ENDIF.
+      ENDIF.
+      INSERT CONV string( dfies-fieldname ) INTO TABLE fields.
+    ENDLOOP.
+
     LOOP AT <tab> ASSIGNING FIELD-SYMBOL(<f_row>).
       DATA(lv_row) = ``.
-      DATA(lv_index) = 1.
-      DO.
-        ASSIGN COMPONENT lv_index OF STRUCTURE <f_row> TO FIELD-SYMBOL(<field>).
+      LOOP AT fields INTO DATA(field).
+        ASSIGN COMPONENT field OF STRUCTURE <f_row> TO FIELD-SYMBOL(<field>).
         IF sy-subrc <> 0.
-          EXIT.
+          CONTINUE.
         ENDIF.
-        lv_row = lv_row && <field>.
-        lv_index = lv_index + 1.
-      ENDDO.
+        lv_row = |{ lv_row }{ <field> }{ cl_abap_char_utilities=>newline }|.
+      ENDLOOP.
 
       IF lv_row NS mv_search_value.
         DELETE <tab>.
@@ -1544,19 +1788,21 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
 
   METHOD get_config_by_url.
 
-    DATA(value) = /ca2ui5/cl_tm_context=>url_param_get( val = 'readonly'
-                                                      url = client->get( )-s_config-search ).
-    IF value IS INITIAL.
-      DATA(startup_params) = client->get( )-t_comp_params.
-      value = VALUE #( startup_params[ n = 'readonly' ]-v OPTIONAL ).
-    ENDIF.
+    " only ever switched on here, by either source: a URL must not lift the
+    " read-only mode a caller or a launchpad tile configured - a URL value
+    " that is not X used to hide the tile's startup parameter
+    DATA(startup_params) = client->get( )-t_comp_params.
+    DATA(lt_value) = VALUE string_table(
+        ( /ca2ui5/cl_tm_context=>url_param_get( val = 'readonly'
+                                              url = client->get( )-s_config-search ) )
+        ( VALUE #( startup_params[ n = 'readonly' ]-v OPTIONAL ) ) ).
 
-    " only ever switched on here: a URL must not lift the read-only mode a
-    " caller configured
-    value = to_upper( condense( value ) ).
-    IF value = `X` OR value = `TRUE` OR value = `1`.
-      ms_config-read_only = abap_true.
-    ENDIF.
+    LOOP AT lt_value INTO DATA(value).
+      value = to_upper( condense( value ) ).
+      IF value = `X` OR value = `TRUE` OR value = `1`.
+        ms_config-read_only = abap_true.
+      ENDIF.
+    ENDLOOP.
 
   ENDMETHOD.
 
@@ -1798,8 +2044,6 @@ CLASS /ca2ui5/cl_tm_001 IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD check_input.
-
-    CLEAR mv_key_error.
 
     ASSIGN mt_table_tmp->* TO FIELD-SYMBOL(<mt_table_tmp>).
     ASSIGN mt_table->* TO FIELD-SYMBOL(<mt_table>).
