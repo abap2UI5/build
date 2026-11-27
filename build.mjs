@@ -45,14 +45,16 @@
 // accepted too). The branch is <name>-<variant> with # for /.
 //
 // Options:
-//   --out <dir>           deliver: where the result goes (default: out/<branch>)
+//   --out <dir>           deliver: where the result goes (default: out/<branch>);
+//                         deleted first, so never this repository, a folder
+//                         above it, or src/, upstream/, test/, .git, .github
 //   --abaplint <path>     the abaplint binary (default: node_modules/.bin/abaplint)
 //
 // Needs: node >= 22, git, and `npm ci` here.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -191,14 +193,54 @@ function findDir(root, name) {
   return null;
 }
 
-// abaplint writes <output>/<absolute path of the checkout>/src. Asked by that
-// path first: the first folder named src below <output> is a folder of the
-// checkout's own path when that path has one (~/src/build), and the result
-// would then nest the whole tree one level too deep
+// where abaplint puts the renamed tree: <output>/src from the run config at
+// the checkout's root (renameConfig below), in every version; an older run
+// from a config in .github/abaplint left <output>/<absolute path of the
+// checkout>/src (abaplint up to 2.120.121). Both asked by their path first:
+// the first folder named src below <output> is a folder of the checkout's own
+// path when that path has one (~/src/build), and the result would then nest
+// the whole tree one level too deep
 export function renamedSrc(output, checkout) {
-  const exact = join(output, resolve(checkout), "src");
-  if (existsSync(exact)) return exact;
+  for (const exact of [join(output, "src"), join(output, resolve(checkout), "src")]) {
+    if (existsSync(exact)) return exact;
+  }
   return findDir(output, "src");
+}
+
+// abap2UI5's rename.jsonc, written for its folder .github/abaplint, as a
+// config for the checkout's ROOT. From @abaplint/cli 2.120.122 on the rename
+// output is <output>/<file relative to the config's folder>: from
+// .github/abaplint that is <output>/../../src, i.e. .github/src - outside the
+// output folder, and "no renamed src folder". From the root it is
+// <output>/src. So every path of the config is rebased onto the root and the
+// output named from there (abap2UI5's own rename-run.mjs does the same)
+export function rootRenameConfig(config, from = ".github/abaplint", output = ".github/abaplint/output") {
+  const rebase = (p) => {
+    const to = posix.normalize(posix.join(from, String(p).replace(/^\//, "")));
+    if (to.startsWith("..")) throw new Error(`rename.jsonc: ${p} points outside the checkout`);
+    return `/${to}`;
+  };
+  const files = config.global?.files;
+  return {
+    ...config,
+    global: { ...config.global, files: Array.isArray(files) ? files.map(rebase) : rebase(files) },
+    dependencies: (config.dependencies ?? []).map((d) => (d.folder ? { ...d, folder: rebase(d.folder) } : d)),
+    rename: { ...config.rename, output },
+  };
+}
+
+// --out is deleted before the delivery is written there: never this
+// repository, a folder above it, or a folder the build reads
+export function outRefusal(out, root = here) {
+  const inside = (a, b) => {
+    const r = relative(b, a);
+    return r === "" || (!r.startsWith("..") && !isAbsolute(r));
+  };
+  if (inside(root, out)) return `--out ${out} is this repository or a folder above it`;
+  for (const k of ["src", "upstream", "test", "node_modules", ".git", ".github"].map((d) => join(root, d))) {
+    if (inside(out, k) || inside(k, out)) return `--out ${out} overlaps ${relative(root, k)}, which the build reads`;
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -287,11 +329,13 @@ function renameFramework(N, variant, checkout, abaplint) {
   // along, which are linted with their own config on main. The rename only
   // has to parse; whether every reference followed is what the lint of the
   // result says, with the config of the variant
-  const renameCfg = JSON.parse(strip(template.split("znamespace_").join(N.prefix)));
+  const renameCfg = rootRenameConfig(JSON.parse(strip(template.split("znamespace_").join(N.prefix))));
   renameCfg.rules = { parser_error: true };
-  const cfg = join(cfgDir, "rename_run.jsonc");
+  // at the checkout's root - rootRenameConfig says why
+  const cfg = join(checkout, "rename_run.json");
   writeFileSync(cfg, JSON.stringify(renameCfg, null, 2));
   const output = join(cfgDir, "output");
+  rmSync(output, { recursive: true, force: true });
   // the dependency (the released APIs) is cloned by abaplint from the url in
   // the config into the staged checkout
   run(abaplint, [cfg, "--rename"], { cwd: checkout, quiet: true });
@@ -671,6 +715,11 @@ function deliver(o) {
   if (COMPONENTS.some((c) => !existsSync(join(here, "src", variant, c.folder))) || !existsSync(join(here, "upstream/tools"))) fail(`src/${variant} or upstream/ missing - run: node build.mjs sync`);
 
   const branch = branchOf(N, variant);
+  // refused before anything is staged or deleted
+  if (o.out) {
+    const why = outRefusal(resolve(o.out));
+    if (why) fail(why);
+  }
   console.log(`abap2UI5 ${variant} as ${N.label}  (${OLD}_ -> ${N.prefix}, branch ${branch})`);
   const checkout = stage(variant, join(here, "work", `stage-${fileStem(N.label).replace(/#/g, "")}-${variant}`));
   const src = renameFramework(N, variant, checkout, abaplint);

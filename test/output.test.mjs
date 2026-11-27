@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { VARIANTS, badge, deriveNames, lintConfig, renameCloudService, renamedSrc } from "../build.mjs";
+import { VARIANTS, badge, deriveNames, lintConfig, outRefusal, renameCloudService, renamedSrc, rootRenameConfig } from "../build.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const strip = (text) => JSON.parse(text.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n"));
@@ -22,6 +22,48 @@ test("the renamed src of a checkout below a folder named src", () => {
     assert.equal(renamedSrc(output, checkout), expected);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// from a run config at the checkout's root, every abaplint writes
+// <output>/src - asked for before the absolute layout of older runs
+test("the renamed src of a run config at the root", () => {
+  const dir = mkdtempSync(join(tmpdir(), "build-"));
+  try {
+    const checkout = join(dir, "src", "build");
+    const output = join(checkout, ".github/abaplint/output");
+    mkdirSync(join(output, checkout, "src"), { recursive: true });
+    mkdirSync(join(output, "src", "00"), { recursive: true });
+    assert.equal(renamedSrc(output, checkout), join(output, "src"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// abap2UI5's rename.jsonc, written for .github/abaplint, rebased onto the
+// root: abaplint 2.120.122 writes the output relative to the config's folder
+test("abap2UI5's rename config, run from the root", () => {
+  const cfg = rootRenameConfig({
+    global: { files: "/../../src/**/*.*", exclude: ["/src/03/"] },
+    dependencies: [{ url: "https://github.com/abapedia/x", folder: "/../../node/deps/x", files: "/src/**/*.*" }],
+    rename: { output: "output", patterns: [{ type: "CLAS", oldName: "^z2ui5_(.*)$", newName: "zabc_$1" }] },
+  });
+  assert.equal(cfg.global.files, "/src/**/*.*");
+  assert.deepEqual(cfg.global.exclude, ["/src/03/"]);
+  assert.equal(cfg.dependencies[0].folder, "/node/deps/x");
+  assert.equal(cfg.dependencies[0].files, "/src/**/*.*");
+  assert.equal(cfg.rename.output, ".github/abaplint/output");
+  assert.equal(cfg.rename.patterns[0].newName, "zabc_$1");
+  assert.throws(() => rootRenameConfig({ global: { files: "/../../../x/**" } }), /outside the checkout/);
+});
+
+// --out is deleted first: never the repository, above it, or what it reads
+test("--out refuses this repository and what the build reads", () => {
+  for (const out of [".", "..", "/", "src", "src/standard", "upstream", ".git"]) {
+    assert.ok(outRefusal(resolve(root, out), root), out);
+  }
+  for (const out of ["out/zabc-standard", "../elsewhere", join(tmpdir(), "delivery")]) {
+    assert.equal(outRefusal(resolve(root, out), root), undefined, out);
   }
 });
 
