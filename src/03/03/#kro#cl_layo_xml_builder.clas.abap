@@ -352,6 +352,16 @@ CLASS /kro/cl_layo_xml_builder DEFINITION
       RETURNING
         VALUE(result) TYPE ty_s_grid_layout.
 
+    "! the span of a value beside its reference field: what the reference
+    "! field leaves of the span, but at least 1 - XL0 or S-1 is no span, and
+    "! the form failed on it
+    CLASS-METHODS get_value_span
+      IMPORTING
+        span          TYPE i
+        ref_size      TYPE i
+      RETURNING
+        VALUE(result) TYPE i.
+
     "! Attach the grid layout to one form element.
     "!
     "! @parameter i_xml | the ELEMENT to decorate, not its container. It used to
@@ -429,8 +439,8 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
     FIELD-SYMBOLS <ref_field> LIKE LINE OF i_layout->ms_layout-t_layout.
     DATA form TYPE REF TO /kro/cl_ui5_view_builder.
     FIELD-SYMBOLS <data> TYPE data.
-    DATA temp48 LIKE LINE OF i_layout->ms_layout-t_layout.
-    DATA layout LIKE REF TO temp48.
+    DATA temp50 LIKE LINE OF i_layout->ms_layout-t_layout.
+    DATA layout LIKE REF TO temp50.
       DATA lv_index LIKE sy-tabix.
       FIELD-SYMBOLS <value> TYPE any.
       DATA grid_layout TYPE /kro/cl_layo_xml_builder=>ty_s_grid_layout.
@@ -495,7 +505,13 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
       set_layout_for_element( i_xml = label
                               span  = grid_layout-label ).
 
-      IF layout->rollname CP `*_XML_S_ICON`.
+      " the controls of a field, each in a box that carries the visibility
+      " and the span of the value
+      IF    layout->rollname CP `*_XML_S_ICON`
+         OR layout->rollname CP `*_XML_S_PROGRESSIND`
+         OR layout->rollname CP `*_XML_S_GENERICTAG`
+         OR layout->rollname CP `*_XML_S_STATUSIND`
+         OR layout->rollname CP `*_XML_S_RADIALCHART`.
 
 
         hbox = form->ele( `HBox`
@@ -507,74 +523,32 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
         set_layout_for_element( i_xml = hbox
                                 span  = grid_layout-value ).
 
-        xml_build_icon( i_layout = layout
-                        i_data   = i_data
-                        i_client = i_client
-                        i_xml    = hbox ).
-
-      ELSEIF layout->rollname CP `*_XML_S_PROGRESSIND`.
-
-        hbox = form->ele( `HBox`
-                   )->a( n = `renderType` v = `Bare`
-                   )->a( n = `visible` v = i_client->_bind( val       = layout->visible
-                                                         tab       = i_layout->ms_layout-t_layout
-                                                         tab_index = lv_index ) ).
-
-        set_layout_for_element( i_xml = hbox
-                                span  = grid_layout-value ).
-
-        xml_build_progress_indicator( i_layout = layout
-                                      i_data   = i_data
+        IF layout->rollname CP `*_XML_S_ICON`.
+          xml_build_icon( i_layout = layout
+                          i_data   = i_data
+                          i_client = i_client
+                          i_xml    = hbox ).
+        ELSEIF layout->rollname CP `*_XML_S_PROGRESSIND`.
+          xml_build_progress_indicator( i_layout = layout
+                                        i_data   = i_data
+                                        i_client = i_client
+                                        i_xml    = hbox ).
+        ELSEIF layout->rollname CP `*_XML_S_GENERICTAG`.
+          xml_build_generic_tag( i_layout = layout
+                                 i_data   = i_data
+                                 i_client = i_client
+                                 i_xml    = hbox ).
+        ELSEIF layout->rollname CP `*_XML_S_STATUSIND`.
+          xml_build_status_indicator( i_data   = i_data
                                       i_client = i_client
+                                      i_layout = layout
                                       i_xml    = hbox ).
-
-      ELSEIF layout->rollname CP `*_XML_S_GENERICTAG`.
-
-        hbox = form->ele( `HBox`
-                   )->a( n = `renderType` v = `Bare`
-                   )->a( n = `visible` v = i_client->_bind( val       = layout->visible
-                                                         tab       = i_layout->ms_layout-t_layout
-                                                         tab_index = lv_index ) ).
-
-        set_layout_for_element( i_xml = hbox
-                                span  = grid_layout-value ).
-
-        xml_build_generic_tag( i_layout = layout
-                               i_data   = i_data
-                               i_client = i_client
-                               i_xml    = hbox ).
-
-      ELSEIF layout->rollname CP `*_XML_S_STATUSIND`.
-
-        hbox = form->ele( `HBox`
-                   )->a( n = `renderType` v = `Bare`
-                   )->a( n = `visible` v = i_client->_bind( val       = layout->visible
-                                                         tab       = i_layout->ms_layout-t_layout
-                                                         tab_index = lv_index ) ).
-
-        set_layout_for_element( i_xml = hbox
-                                span  = grid_layout-value ).
-
-        xml_build_status_indicator( i_data   = i_data
-                                    i_client = i_client
-                                    i_layout = layout
-                                    i_xml    = hbox ).
-
-      ELSEIF layout->rollname CP `*_XML_S_RADIALCHART`.
-
-        hbox = form->ele( `HBox`
-                   )->a( n = `renderType` v = `Bare`
-                   )->a( n = `visible` v = i_client->_bind( val       = layout->visible
-                                                         tab       = i_layout->ms_layout-t_layout
-                                                         tab_index = lv_index ) ).
-
-        set_layout_for_element( i_xml = hbox
-                                span  = grid_layout-value ).
-
-        xml_build_radial_microchart( i_data   = i_data
-                                     i_client = i_client
-                                     i_layout = layout
-                                     i_xml    = hbox ).
+        ELSE.
+          xml_build_radial_microchart( i_data   = i_data
+                                       i_client = i_client
+                                       i_layout = layout
+                                       i_xml    = hbox ).
+        ENDIF.
 
       ELSE.
 
@@ -638,6 +612,15 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
     ENDLOOP.
   ENDMETHOD.
 
+  METHOD get_value_span.
+
+    result = span - ref_size.
+    IF result < 1.
+      result = 1.
+    ENDIF.
+
+  ENDMETHOD.
+
   METHOD get_grid_layout.
       DATA label_xl TYPE string.
       DATA label_l TYPE string.
@@ -645,9 +628,13 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
       DATA label_s TYPE string.
       DATA ref_size TYPE i.
       DATA ref_size_s TYPE i.
+      DATA temp51 TYPE i.
       DATA value_xl TYPE string.
+      DATA temp52 TYPE i.
       DATA value_l TYPE string.
+      DATA temp53 TYPE i.
       DATA value_m TYPE string.
+      DATA temp54 TYPE i.
       DATA value_s TYPE string.
 
     IF layout->grid_label_xl > 0.
@@ -693,19 +680,31 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
 
     IF layout->grid_value_xl > 0.
 
-      value_xl = |XL{ layout->grid_value_xl - ref_size }|.
+      temp51 = layout->grid_value_xl.
+
+      value_xl = |XL{ get_value_span( span     = temp51
+                                            ref_size = ref_size ) }|.
     ENDIF.
     IF layout->grid_value_l > 0.
 
-      value_l = |L{ layout->grid_value_l - ref_size }|.
+      temp52 = layout->grid_value_l.
+
+      value_l = |L{ get_value_span( span     = temp52
+                                          ref_size = ref_size ) }|.
     ENDIF.
     IF layout->grid_value_m > 0.
 
-      value_m = |M{ layout->grid_value_m - ref_size }|.
+      temp53 = layout->grid_value_m.
+
+      value_m = |M{ get_value_span( span     = temp53
+                                          ref_size = ref_size ) }|.
     ENDIF.
     IF layout->grid_value_s > 0.
 
-      value_s = |S{ layout->grid_value_s - ref_size_s }|.
+      temp54 = layout->grid_value_s.
+
+      value_s = |S{ get_value_span( span     = temp54
+                                          ref_size = ref_size_s ) }|.
     ENDIF.
 
     IF value_xl IS NOT INITIAL.
@@ -738,18 +737,18 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
   METHOD xml_build_table.
 
     FIELD-SYMBOLS <tab> TYPE data.
-    DATA temp49 TYPE string.
+    DATA temp55 TYPE string.
     DATA temp14 TYPE string.
     DATA table TYPE REF TO /kro/cl_ui5_view_builder.
     DATA temp2 TYPE xsdboolean.
       DATA toolbar TYPE REF TO /kro/cl_ui5_view_builder.
         FIELD-SYMBOLS <search> TYPE data.
     DATA columns TYPE REF TO /kro/cl_ui5_view_builder.
-    DATA temp50 LIKE LINE OF i_layout->ms_layout-t_layout.
-    DATA layout LIKE REF TO temp50.
+    DATA temp56 LIKE LINE OF i_layout->ms_layout-t_layout.
+    DATA layout LIKE REF TO temp56.
       DATA lv_index LIKE sy-tabix.
       DATA column TYPE REF TO /kro/cl_ui5_view_builder.
-    DATA temp51 TYPE string_table.
+    DATA temp57 TYPE string_table.
     DATA temp15 TYPE string.
     DATA temp16 TYPE string.
     DATA temp1 TYPE string.
@@ -760,9 +759,9 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
 
 
     IF i_sel_mode = space.
-      temp49 = `None`.
+      temp55 = `None`.
     ELSE.
-      temp49 = i_sel_mode.
+      temp55 = i_sel_mode.
     ENDIF.
 
     IF i_sel_event IS INITIAL.
@@ -777,7 +776,7 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
                       )->a( n = `growing` b = temp2
                       )->a( n = `growingThreshold` v = i_growingthreshold
                       )->a( n = `width` v = `auto`
-                      )->a( n = `mode` v = temp49
+                      )->a( n = `mode` v = temp55
                       )->a( n = `items` v = i_client->_bind( <tab> )
                       )->a( n = `selectionChange` v = i_client->_event( temp14 ) ).
 
@@ -862,14 +861,14 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
     ENDLOOP.
 
 
-    CLEAR temp51.
+    CLEAR temp57.
 
     IF i_col_bind_to = space.
       temp15 = ``.
     ELSE.
       temp15 = |$\{{ /kro/cl_ui5_view_builder=>component_path( i_col_bind_to ) }\}|.
     ENDIF.
-    INSERT temp15 INTO TABLE temp51.
+    INSERT temp15 INTO TABLE temp57.
 
     IF i_sel_bind_to = space.
       temp16 = ``.
@@ -891,7 +890,7 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
                                  )->a( n = `type` v = temp1
                                  )->a( n = `press` v = i_client->_event(
                                                val   = 'ROW_SELECT'
-                                               t_arg = temp51 ) ).
+                                               t_arg = temp57 ) ).
 
     " the row colour: custom data written to the DOM of the row (tr), the
     " app's CSS colours it by the key
@@ -973,9 +972,9 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD xml_build_column_header.
-    DATA temp53 TYPE string_table.
-    DATA temp17 LIKE LINE OF temp53.
-    DATA temp18 LIKE LINE OF temp53.
+    DATA temp59 TYPE string_table.
+    DATA temp17 LIKE LINE OF temp59.
+    DATA temp18 LIKE LINE OF temp59.
     DATA link TYPE REF TO /kro/cl_ui5_view_builder.
 
     IF i_sort = abap_false.
@@ -992,19 +991,19 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
                                                                          path      = abap_true ) ) ).
 
 
-    CLEAR temp53.
+    CLEAR temp59.
 
     temp17 = i_layout->ms_layout-s_head-guid.
-    INSERT temp17 INTO TABLE temp53.
+    INSERT temp17 INTO TABLE temp59.
 
     temp18 = position->fname.
-    INSERT temp18 INTO TABLE temp53.
+    INSERT temp18 INTO TABLE temp59.
 
     link = i_column->ele( `Link`
                          )->a( n = `text` t = position->tlabel
                          )->a( n = `wrapping` b = abap_true
                          )->a( n = `press` v = i_client->_event( val   = cv_event_column_sort
-                                                                 t_arg = temp53 ) ).
+                                                                 t_arg = temp59 ) ).
 
     IF i_class IS NOT INITIAL.
       link->a( n = `class` v = i_class ).
@@ -1137,9 +1136,9 @@ CLASS /kro/cl_layo_xml_builder IMPLEMENTATION.
     TYPES temp1 TYPE STANDARD TABLE OF REF TO /kro/cl_layo_manager=>ty_s_positions WITH DEFAULT KEY.
 DATA t_sub_control TYPE temp1.
     DATA subcol LIKE LINE OF position->t_sub_col.
-      DATA temp55 LIKE sy-subrc.
-      FIELD-SYMBOLS <temp56> TYPE /kro/cl_layo_manager=>ty_s_positions.
-DATA line LIKE REF TO <temp56>.
+      DATA temp61 LIKE sy-subrc.
+      FIELD-SYMBOLS <temp62> TYPE /kro/cl_layo_manager=>ty_s_positions.
+DATA line LIKE REF TO <temp62>.
     DATA cell LIKE i_xml.
     control = cell_control( rollname       = position->rollname
                                   t_cell_control = i_t_cell_control ).
@@ -1156,17 +1155,17 @@ DATA line LIKE REF TO <temp56>.
     LOOP AT position->t_sub_col INTO subcol.
 
       READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = subcol-fname TRANSPORTING NO FIELDS.
-      temp55 = sy-subrc.
-      IF NOT temp55 = 0.
+      temp61 = sy-subrc.
+      IF NOT temp61 = 0.
         CONTINUE.
       ENDIF.
 
-      READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = subcol-fname ASSIGNING <temp56>.
+      READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = subcol-fname ASSIGNING <temp62>.
 IF sy-subrc <> 0.
   ASSERT 1 = 0.
 ENDIF.
 
-GET REFERENCE OF <temp56> INTO line.
+GET REFERENCE OF <temp62> INTO line.
       IF cell_control( rollname       = line->rollname
                        t_cell_control = i_t_cell_control ) <> cs_cell_control-text.
         INSERT line INTO TABLE t_sub_control.
@@ -1226,13 +1225,13 @@ GET REFERENCE OF <temp56> INTO line.
     DATA ref  TYPE /kro/cl_layo_manager=>ty_s_positions.
 
     DATA subcol LIKE LINE OF position-t_sub_col.
-      DATA temp57 LIKE sy-subrc.
-      FIELD-SYMBOLS <temp58> LIKE LINE OF i_layout->ms_layout-t_layout.
-      DATA temp59 LIKE sy-tabix.
+      DATA temp63 LIKE sy-subrc.
+      FIELD-SYMBOLS <temp64> LIKE LINE OF i_layout->ms_layout-t_layout.
+      DATA temp65 LIKE sy-tabix.
       DATA column TYPE string.
-      DATA temp60 LIKE sy-subrc.
-        FIELD-SYMBOLS <temp61> LIKE LINE OF i_layout->ms_layout-t_layout.
-        DATA temp62 LIKE sy-tabix.
+      DATA temp66 LIKE sy-subrc.
+        FIELD-SYMBOLS <temp67> LIKE LINE OF i_layout->ms_layout-t_layout.
+        DATA temp68 LIKE sy-tabix.
     LOOP AT position-t_sub_col INTO subcol.
 
       " a subcolumn that names no position (one added in the popup and
@@ -1240,19 +1239,19 @@ GET REFERENCE OF <temp56> INTO line.
       " the work area kept the previous row and repeated it
 
       READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = subcol-fname TRANSPORTING NO FIELDS.
-      temp57 = sy-subrc.
-      IF NOT temp57 = 0.
+      temp63 = sy-subrc.
+      IF NOT temp63 = 0.
         CONTINUE.
       ENDIF.
 
 
-      temp59 = sy-tabix.
-      READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = subcol-fname ASSIGNING <temp58>.
-      sy-tabix = temp59.
+      temp65 = sy-tabix.
+      READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = subcol-fname ASSIGNING <temp64>.
+      sy-tabix = temp65.
       IF sy-subrc <> 0.
         ASSERT 1 = 0.
       ENDIF.
-      line = <temp58>.
+      line = <temp64>.
 
       IF skip_controls = abap_true AND cell_control( rollname       = line-rollname
                                                      t_cell_control = i_t_cell_control ) <> cs_cell_control-text.
@@ -1267,18 +1266,18 @@ GET REFERENCE OF <temp56> INTO line.
       " kept the previous one in the work area
 
       READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = line-reference_field TRANSPORTING NO FIELDS.
-      temp60 = sy-subrc.
+      temp66 = sy-subrc.
       IF     line-reference_field IS NOT INITIAL
-         AND temp60 = 0.
+         AND temp66 = 0.
 
 
-        temp62 = sy-tabix.
-        READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = line-reference_field ASSIGNING <temp61>.
-        sy-tabix = temp62.
+        temp68 = sy-tabix.
+        READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = line-reference_field ASSIGNING <temp67>.
+        sy-tabix = temp68.
         IF sy-subrc <> 0.
           ASSERT 1 = 0.
         ENDIF.
-        ref = <temp61>.
+        ref = <temp67>.
         column = |{ column } { table_value_formatter( ref ) }|.
       ENDIF.
 
@@ -1293,22 +1292,22 @@ GET REFERENCE OF <temp56> INTO line.
 
   METHOD get_t_comp.
         DATA t_attri TYPE abap_component_tab.
-        DATA temp63 LIKE sy-subrc.
+        DATA temp69 LIKE sy-subrc.
         DATA attri LIKE LINE OF t_attri.
         FIELD-SYMBOLS <temp19> LIKE LINE OF t_attri.
         DATA temp20 LIKE sy-tabix.
-        DATA temp64 TYPE REF TO cl_abap_structdescr.
-        DATA struct LIKE temp64.
+        DATA temp70 TYPE REF TO cl_abap_structdescr.
+        DATA struct LIKE temp70.
         DATA comp LIKE LINE OF struct->components.
-          DATA temp65 LIKE LINE OF result.
+          DATA temp71 LIKE LINE OF result.
 
     TRY.
 
         t_attri = /kro/cl_layo_context=>rtti_get_t_attri_by_any( i_data ).
 
         READ TABLE t_attri WITH KEY name = fname TRANSPORTING NO FIELDS.
-        temp63 = sy-subrc.
-        IF NOT temp63 = 0.
+        temp69 = sy-subrc.
+        IF NOT temp69 = 0.
           RETURN.
         ENDIF.
 
@@ -1325,14 +1324,14 @@ GET REFERENCE OF <temp56> INTO line.
           RETURN.
         ENDIF.
 
-        temp64 ?= attri-type.
+        temp70 ?= attri-type.
 
-        struct = temp64.
+        struct = temp70.
 
         LOOP AT struct->components INTO comp.
 
-          temp65 = comp-name.
-          INSERT temp65 INTO TABLE result.
+          temp71 = comp-name.
+          INSERT temp71 INTO TABLE result.
         ENDLOOP.
       CATCH cx_root.
         CLEAR result.
@@ -1341,8 +1340,8 @@ GET REFERENCE OF <temp56> INTO line.
   ENDMETHOD.
 
   METHOD comp_name.
-    DATA temp66 LIKE sy-subrc.
-    DATA temp67 LIKE sy-subrc.
+    DATA temp72 LIKE sy-subrc.
+    DATA temp73 LIKE sy-subrc.
 
     result = primary.
 
@@ -1352,15 +1351,15 @@ GET REFERENCE OF <temp56> INTO line.
 
 
     READ TABLE t_comp WITH KEY table_line = primary TRANSPORTING NO FIELDS.
-    temp66 = sy-subrc.
-    IF temp66 = 0.
+    temp72 = sy-subrc.
+    IF temp72 = 0.
       RETURN.
     ENDIF.
 
 
     READ TABLE t_comp WITH KEY table_line = alternative TRANSPORTING NO FIELDS.
-    temp67 = sy-subrc.
-    IF temp67 = 0.
+    temp73 = sy-subrc.
+    IF temp73 = 0.
       result = alternative.
     ENDIF.
 
@@ -1368,24 +1367,24 @@ GET REFERENCE OF <temp56> INTO line.
 
   METHOD has_comp.
 
-    DATA temp68 LIKE sy-subrc.
+    DATA temp74 LIKE sy-subrc.
     DATA temp3 TYPE xsdboolean.
     READ TABLE t_comp WITH KEY table_line = name TRANSPORTING NO FIELDS.
-    temp68 = sy-subrc.
+    temp74 = sy-subrc.
 
-    temp3 = boolc( t_comp IS INITIAL OR temp68 = 0 ).
+    temp3 = boolc( t_comp IS INITIAL OR temp74 = 0 ).
     result = temp3.
 
   ENDMETHOD.
 
   METHOD has_comp_strict.
 
-    DATA temp69 LIKE sy-subrc.
+    DATA temp75 LIKE sy-subrc.
     DATA temp4 TYPE xsdboolean.
     READ TABLE t_comp WITH KEY table_line = name TRANSPORTING NO FIELDS.
-    temp69 = sy-subrc.
+    temp75 = sy-subrc.
 
-    temp4 = boolc( temp69 = 0 ).
+    temp4 = boolc( temp75 = 0 ).
     result = temp4.
 
   ENDMETHOD.
@@ -1398,13 +1397,13 @@ GET REFERENCE OF <temp56> INTO line.
     CONSTANTS placeholder TYPE string VALUE `LAYO_ROW_EVENT`.
 
     DATA t_arg TYPE string_table.
-      DATA temp70 LIKE LINE OF t_arg.
+      DATA temp76 LIKE LINE OF t_arg.
 
     IF has_comp( t_comp = t_comp
                  name   = value ) = abap_true.
 
-      temp70 = |$\{{ path }/{ value }\}|.
-      INSERT temp70 INTO TABLE t_arg.
+      temp76 = |$\{{ path }/{ value }\}|.
+      INSERT temp76 INTO TABLE t_arg.
     ENDIF.
 
     result = i_client->_event( val   = placeholder
@@ -1511,7 +1510,7 @@ GET REFERENCE OF <temp56> INTO line.
   ENDMETHOD.
 
   METHOD cell_text.
-    DATA temp71 LIKE sy-subrc.
+    DATA temp77 LIKE sy-subrc.
       DATA ref TYPE /kro/cl_layo_manager=>ty_s_positions.
       FIELD-SYMBOLS <temp21> LIKE LINE OF i_layout->ms_layout-t_layout.
       DATA temp22 LIKE sy-tabix.
@@ -1526,8 +1525,8 @@ GET REFERENCE OF <temp56> INTO line.
     " the previous one in the work area
 
     READ TABLE i_layout->ms_layout-t_layout WITH KEY fname = position-reference_field TRANSPORTING NO FIELDS.
-    temp71 = sy-subrc.
-    IF temp71 = 0.
+    temp77 = sy-subrc.
+    IF temp77 = 0.
 
 
 
@@ -1586,9 +1585,9 @@ GET REFERENCE OF <temp56> INTO line.
     DATA path TYPE string.
       DATA icon TYPE REF TO /kro/cl_ui5_view_builder.
       FIELD-SYMBOLS <data> TYPE data.
-      DATA temp72 TYPE string.
+      DATA temp78 TYPE string.
 FIELD-SYMBOLS <src> TYPE any.
-      DATA temp73 TYPE string.
+      DATA temp79 TYPE string.
 FIELD-SYMBOLS <size> TYPE any.
 
     " Table case
@@ -1623,17 +1622,17 @@ FIELD-SYMBOLS <size> TYPE any.
       ASSIGN i_data->* TO <data>.
 
 
-      temp72 = |{ i_layout->fname }-SRC|.
+      temp78 = |{ i_layout->fname }-SRC|.
 
-ASSIGN COMPONENT temp72 OF STRUCTURE <data> TO <src>.
+ASSIGN COMPONENT temp78 OF STRUCTURE <data> TO <src>.
       IF <src> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
 
-      temp73 = |{ i_layout->fname }-ICON_SIZE|.
+      temp79 = |{ i_layout->fname }-ICON_SIZE|.
 
-ASSIGN COMPONENT temp73 OF STRUCTURE <data> TO <size>.
+ASSIGN COMPONENT temp79 OF STRUCTURE <data> TO <size>.
       IF <size> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
@@ -1650,13 +1649,13 @@ ASSIGN COMPONENT temp73 OF STRUCTURE <data> TO <size>.
 
   METHOD xml_build_radial_microchart.
       FIELD-SYMBOLS <data> TYPE data.
-      DATA temp74 TYPE string.
+      DATA temp80 TYPE string.
 FIELD-SYMBOLS <size> TYPE any.
-      DATA temp75 TYPE string.
+      DATA temp81 TYPE string.
 FIELD-SYMBOLS <percentage> TYPE any.
-      DATA temp76 TYPE string.
+      DATA temp82 TYPE string.
 FIELD-SYMBOLS <valuecolor> TYPE any.
-      DATA temp77 TYPE string.
+      DATA temp83 TYPE string.
 FIELD-SYMBOLS <hideonnodata> TYPE any.
 
     " Table case
@@ -1676,31 +1675,31 @@ FIELD-SYMBOLS <hideonnodata> TYPE any.
       ASSIGN i_data->* TO <data>.
 
 
-      temp74 = |{ i_layout->fname }-RADIALMICROCHART_SIZE|.
+      temp80 = |{ i_layout->fname }-RADIALMICROCHART_SIZE|.
 
-ASSIGN COMPONENT temp74 OF STRUCTURE <data> TO <size>.
+ASSIGN COMPONENT temp80 OF STRUCTURE <data> TO <size>.
       IF <size> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
 
-      temp75 = |{ i_layout->fname }-PERCENTAGE|.
+      temp81 = |{ i_layout->fname }-PERCENTAGE|.
 
-ASSIGN COMPONENT temp75 OF STRUCTURE <data> TO <percentage>.
+ASSIGN COMPONENT temp81 OF STRUCTURE <data> TO <percentage>.
       IF <percentage> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
-      temp76 = |{ i_layout->fname }-VALUECOLOR|.
+      temp82 = |{ i_layout->fname }-VALUECOLOR|.
 
-ASSIGN COMPONENT temp76 OF STRUCTURE <data> TO <valuecolor>.
+ASSIGN COMPONENT temp82 OF STRUCTURE <data> TO <valuecolor>.
       IF <valuecolor> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
-      temp77 = |{ i_layout->fname }-HIDEONNODATA|.
+      temp83 = |{ i_layout->fname }-HIDEONNODATA|.
 
-ASSIGN COMPONENT temp77 OF STRUCTURE <data> TO <hideonnodata>.
+ASSIGN COMPONENT temp83 OF STRUCTURE <data> TO <hideonnodata>.
       IF <hideonnodata> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
@@ -1719,13 +1718,13 @@ ASSIGN COMPONENT temp77 OF STRUCTURE <data> TO <hideonnodata>.
 
   METHOD xml_build_progress_indicator.
       FIELD-SYMBOLS <data> TYPE data.
-      DATA temp78 TYPE string.
+      DATA temp84 TYPE string.
 FIELD-SYMBOLS <percentvalue> TYPE any.
-      DATA temp79 TYPE string.
+      DATA temp85 TYPE string.
 FIELD-SYMBOLS <displayvalue> TYPE any.
-      DATA temp80 TYPE string.
+      DATA temp86 TYPE string.
 FIELD-SYMBOLS <showvalue> TYPE any.
-      DATA temp81 TYPE string.
+      DATA temp87 TYPE string.
 FIELD-SYMBOLS <state> TYPE any.
 
     " Table case
@@ -1744,31 +1743,31 @@ FIELD-SYMBOLS <state> TYPE any.
       ASSIGN i_data->* TO <data>.
 
 
-      temp78 = |{ i_layout->fname }-PERCENTVALUE|.
+      temp84 = |{ i_layout->fname }-PERCENTVALUE|.
 
-ASSIGN COMPONENT temp78 OF STRUCTURE <data> TO <percentvalue>.
+ASSIGN COMPONENT temp84 OF STRUCTURE <data> TO <percentvalue>.
       IF <percentvalue> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
 
-      temp79 = |{ i_layout->fname }-DISPLAYVALUE|.
+      temp85 = |{ i_layout->fname }-DISPLAYVALUE|.
 
-ASSIGN COMPONENT temp79 OF STRUCTURE <data> TO <displayvalue>.
+ASSIGN COMPONENT temp85 OF STRUCTURE <data> TO <displayvalue>.
       IF <displayvalue> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
-      temp80 = |{ i_layout->fname }-SHOWVALUE|.
+      temp86 = |{ i_layout->fname }-SHOWVALUE|.
 
-ASSIGN COMPONENT temp80 OF STRUCTURE <data> TO <showvalue>.
+ASSIGN COMPONENT temp86 OF STRUCTURE <data> TO <showvalue>.
       IF <showvalue> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
-      temp81 = |{ i_layout->fname }-STATE|.
+      temp87 = |{ i_layout->fname }-STATE|.
 
-ASSIGN COMPONENT temp81 OF STRUCTURE <data> TO <state>.
+ASSIGN COMPONENT temp87 OF STRUCTURE <data> TO <state>.
       IF <state> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
@@ -1791,19 +1790,19 @@ ASSIGN COMPONENT temp81 OF STRUCTURE <data> TO <state>.
       DATA status_indicator TYPE REF TO /kro/cl_ui5_view_builder.
       DATA thresholds TYPE REF TO /kro/cl_ui5_view_builder.
       FIELD-SYMBOLS <data> TYPE data.
-      DATA temp82 TYPE string.
-FIELD-SYMBOLS <value> TYPE any.
-      DATA temp83 TYPE string.
-FIELD-SYMBOLS <class> TYPE any.
-      DATA temp84 TYPE string.
-FIELD-SYMBOLS <size> TYPE any.
-      DATA temp85 TYPE string.
-FIELD-SYMBOLS <fillcolor_good> TYPE any.
-      DATA temp86 TYPE string.
-FIELD-SYMBOLS <fillcolor_critical> TYPE any.
-      DATA temp87 TYPE string.
-FIELD-SYMBOLS <fillcolor_error> TYPE any.
       DATA temp88 TYPE string.
+FIELD-SYMBOLS <value> TYPE any.
+      DATA temp89 TYPE string.
+FIELD-SYMBOLS <class> TYPE any.
+      DATA temp90 TYPE string.
+FIELD-SYMBOLS <size> TYPE any.
+      DATA temp91 TYPE string.
+FIELD-SYMBOLS <fillcolor_good> TYPE any.
+      DATA temp92 TYPE string.
+FIELD-SYMBOLS <fillcolor_critical> TYPE any.
+      DATA temp93 TYPE string.
+FIELD-SYMBOLS <fillcolor_error> TYPE any.
+      DATA temp94 TYPE string.
 FIELD-SYMBOLS <shapeid> TYPE any.
 
     " We want to build a Table!
@@ -1842,25 +1841,25 @@ FIELD-SYMBOLS <shapeid> TYPE any.
       ASSIGN i_data->* TO <data>.
 
 
-      temp82 = |{ i_layout->fname }-VALUE|.
+      temp88 = |{ i_layout->fname }-VALUE|.
 
-ASSIGN COMPONENT temp82 OF STRUCTURE <data> TO <value>.
+ASSIGN COMPONENT temp88 OF STRUCTURE <data> TO <value>.
       IF <value> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
 
-      temp83 = |{ i_layout->fname }-CLASS|.
+      temp89 = |{ i_layout->fname }-CLASS|.
 
-ASSIGN COMPONENT temp83 OF STRUCTURE <data> TO <class>.
+ASSIGN COMPONENT temp89 OF STRUCTURE <data> TO <class>.
       IF <class> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
 
-      temp84 = |{ i_layout->fname }-STATUSINDICATOR_SIZE|.
+      temp90 = |{ i_layout->fname }-STATUSINDICATOR_SIZE|.
 
-ASSIGN COMPONENT temp84 OF STRUCTURE <data> TO <size>.
+ASSIGN COMPONENT temp90 OF STRUCTURE <data> TO <size>.
       IF <size> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
@@ -1874,30 +1873,30 @@ ASSIGN COMPONENT temp84 OF STRUCTURE <data> TO <size>.
       thresholds = status_indicator->ele( n = `propertyThresholds` ns = `si` ).
 
 
-      temp85 = |{ i_layout->fname }-FILLCOLOR_GOOD|.
+      temp91 = |{ i_layout->fname }-FILLCOLOR_GOOD|.
 
-ASSIGN COMPONENT temp85 OF STRUCTURE <data> TO <fillcolor_good>.
+ASSIGN COMPONENT temp91 OF STRUCTURE <data> TO <fillcolor_good>.
       IF <fillcolor_good> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
-      temp86 = |{ i_layout->fname }-FILLCOLOR_CRITICAL|.
+      temp92 = |{ i_layout->fname }-FILLCOLOR_CRITICAL|.
 
-ASSIGN COMPONENT temp86 OF STRUCTURE <data> TO <fillcolor_critical>.
+ASSIGN COMPONENT temp92 OF STRUCTURE <data> TO <fillcolor_critical>.
       IF <fillcolor_critical> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
-      temp87 = |{ i_layout->fname }-FILLCOLOR_ERROR|.
+      temp93 = |{ i_layout->fname }-FILLCOLOR_ERROR|.
 
-ASSIGN COMPONENT temp87 OF STRUCTURE <data> TO <fillcolor_error>.
+ASSIGN COMPONENT temp93 OF STRUCTURE <data> TO <fillcolor_error>.
       IF <fillcolor_error> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
-      temp88 = |{ i_layout->fname }-SHAPEID|.
+      temp94 = |{ i_layout->fname }-SHAPEID|.
 
-ASSIGN COMPONENT temp88 OF STRUCTURE <data> TO <shapeid>.
+ASSIGN COMPONENT temp94 OF STRUCTURE <data> TO <shapeid>.
       IF <shapeid> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
@@ -1926,11 +1925,11 @@ ASSIGN COMPONENT temp88 OF STRUCTURE <data> TO <shapeid>.
 
   METHOD xml_build_generic_tag.
       FIELD-SYMBOLS <data> TYPE data.
-      DATA temp89 TYPE string.
+      DATA temp95 TYPE string.
 FIELD-SYMBOLS <text> TYPE any.
-      DATA temp90 TYPE string.
+      DATA temp96 TYPE string.
 FIELD-SYMBOLS <design> TYPE any.
-      DATA temp91 TYPE string.
+      DATA temp97 TYPE string.
 FIELD-SYMBOLS <status> TYPE any.
 
     " Table case
@@ -1947,24 +1946,24 @@ FIELD-SYMBOLS <status> TYPE any.
       ASSIGN i_data->* TO <data>.
 
 
-      temp89 = |{ i_layout->fname }-TEXT|.
+      temp95 = |{ i_layout->fname }-TEXT|.
 
-ASSIGN COMPONENT temp89 OF STRUCTURE <data> TO <text>.
+ASSIGN COMPONENT temp95 OF STRUCTURE <data> TO <text>.
       IF <text> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
 
-      temp90 = |{ i_layout->fname }-DESIGN|.
+      temp96 = |{ i_layout->fname }-DESIGN|.
 
-ASSIGN COMPONENT temp90 OF STRUCTURE <data> TO <design>.
+ASSIGN COMPONENT temp96 OF STRUCTURE <data> TO <design>.
       IF <design> IS NOT ASSIGNED.
         RETURN.
       ENDIF.
 
-      temp91 = |{ i_layout->fname }-STATUS|.
+      temp97 = |{ i_layout->fname }-STATUS|.
 
-ASSIGN COMPONENT temp91 OF STRUCTURE <data> TO <status>.
+ASSIGN COMPONENT temp97 OF STRUCTURE <data> TO <status>.
       IF <status> IS NOT ASSIGNED.
         RETURN.
       ENDIF.

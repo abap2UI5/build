@@ -107,29 +107,20 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
   METHOD test_init_displays_script.
 
+    " i_js is not run any more (abap2UI5 has no path for raw JavaScript):
+    " no popup with a dead script element, no timer - the app leaves at
+    " once and still answers i_result
     DATA lo_pop TYPE REF TO /kro/cl_popup_js_loader.
-    DATA lv_xml TYPE string.
-    DATA temp2 TYPE xsdboolean.
-    DATA temp3 TYPE xsdboolean.
-    DATA temp1 TYPE string_table.
     lo_pop = /kro/cl_popup_js_loader=>factory( `console.log('x');` ).
     client_create( lo_pop ).
 
     lo_pop->/kro/if_app~main( mi_client ).
 
-
-    lv_xml = popup_xml( ).
-
-    temp2 = boolc( lv_xml CS `script` ).
-    cl_abap_unit_assert=>assert_true( temp2 ).
-
-    temp3 = boolc( lv_xml CS `z2ui5.cc` ).
-    cl_abap_unit_assert=>assert_false( temp3 ).
-
-    CLEAR temp1.
-    INSERT `["START_TIMER","TIMER_FINISHED","0"]` INTO TABLE temp1.
-    cl_abap_unit_assert=>assert_equals( exp = temp1
-                                        act = follow_up_actions( ) ).
+    cl_abap_unit_assert=>assert_initial( popup_xml( ) ).
+    cl_abap_unit_assert=>assert_initial( follow_up_actions( ) ).
+    cl_abap_unit_assert=>assert_bound( mo_action->ms_next-o_app_leave ).
+    cl_abap_unit_assert=>assert_equals( exp = `LOADED`
+                                        act = lo_pop->result( ) ).
 
   ENDMETHOD.
 
@@ -201,13 +192,13 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
   METHOD popup_destroyed.
 
-    DATA temp3 LIKE sy-subrc.
-    DATA temp4 TYPE xsdboolean.
+    DATA temp1 LIKE sy-subrc.
+    DATA temp2 TYPE xsdboolean.
     READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = /kro/if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
-    temp3 = sy-subrc.
+    temp1 = sy-subrc.
 
-    temp4 = boolc( temp3 = 0 ).
-    result = temp4.
+    temp2 = boolc( temp1 = 0 ).
+    result = temp2.
 
   ENDMETHOD.
 
@@ -234,37 +225,37 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD roundtrip_init.
 
-    DATA temp2 TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp4 TYPE REF TO /kro/cl_ui5_client.
-    CREATE OBJECT temp2 TYPE /kro/cl_ui5_handler EXPORTING VAL = ``.
-    CREATE OBJECT mo_action EXPORTING VAL = temp2.
+    DATA temp3 TYPE REF TO /kro/cl_ui5_handler.
+    DATA temp2 TYPE REF TO /kro/cl_ui5_client.
+    CREATE OBJECT temp3 TYPE /kro/cl_ui5_handler EXPORTING VAL = ``.
+    CREATE OBJECT mo_action EXPORTING VAL = temp3.
     mo_action->mo_app->mo_app = io_app.
 
-    CREATE OBJECT temp4 TYPE /kro/cl_ui5_client EXPORTING ACTION = mo_action.
-    io_app->main( temp4 ).
+    CREATE OBJECT temp2 TYPE /kro/cl_ui5_client EXPORTING ACTION = mo_action.
+    io_app->main( temp2 ).
 
   ENDMETHOD.
 
   METHOD test_script_loaded.
 
     DATA lo_pop TYPE REF TO /kro/cl_popup_js_loader.
-    DATA temp5 TYPE REF TO /kro/if_popup_result.
-    DATA li_result LIKE temp5.
-    DATA temp6 TYPE REF TO string.
-    DATA lr_value LIKE temp6.
+    DATA temp3 TYPE REF TO /kro/if_popup_result.
+    DATA li_result LIKE temp3.
+    DATA temp4 TYPE REF TO string.
+    DATA lr_value LIKE temp4.
     lo_pop = /kro/cl_popup_js_loader=>factory( `console.log( 1 );` ).
 
-    temp5 ?= lo_pop.
+    temp3 ?= lo_pop.
 
-    li_result = temp5.
+    li_result = temp3.
 
     cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
     cl_abap_unit_assert=>assert_equals( exp = `LOADED`
                                         act = li_result->value_string( ) ).
 
-    temp6 ?= li_result->value( ).
+    temp4 ?= li_result->value( ).
 
-    lr_value = temp6.
+    lr_value = temp4.
     cl_abap_unit_assert=>assert_equals( exp = `LOADED`
                                         act = lr_value->* ).
 
@@ -273,22 +264,22 @@ CLASS ltcl_popup_result IMPLEMENTATION.
   METHOD test_check_open_ui5.
 
     DATA lo_pop TYPE REF TO /kro/cl_popup_js_loader.
-    DATA temp7 TYPE REF TO /kro/if_popup_result.
-    DATA li_result LIKE temp7.
-    DATA temp8 TYPE REF TO abap_bool.
-    DATA lr_value LIKE temp8.
+    DATA temp5 TYPE REF TO /kro/if_popup_result.
+    DATA li_result LIKE temp5.
+    DATA temp6 TYPE REF TO abap_bool.
+    DATA lr_value LIKE temp6.
     lo_pop = /kro/cl_popup_js_loader=>factory_check_open_ui5( ).
     roundtrip_init( lo_pop ).
 
-    temp7 ?= lo_pop.
+    temp5 ?= lo_pop.
 
-    li_result = temp7.
+    li_result = temp5.
 
     cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
 
-    temp8 ?= li_result->value( ).
+    temp6 ?= li_result->value( ).
 
-    lr_value = temp8.
+    lr_value = temp6.
     cl_abap_unit_assert=>assert_equals( exp = lo_pop->mv_is_open_ui5
                                         act = lr_value->* ).
     cl_abap_unit_assert=>assert_equals( exp = lo_pop->ui5_gav

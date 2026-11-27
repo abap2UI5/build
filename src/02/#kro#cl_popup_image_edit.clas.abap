@@ -79,6 +79,11 @@ CLASS /kro/cl_popup_image_edit IMPLEMENTATION.
     IF client->check_on_init( ) IS NOT INITIAL.
       display( ).
       RETURN.
+    ELSEIF client->check_on_navigated( ) IS NOT INITIAL.
+      " a restored draft (browser Forward, a reload): the popup went with
+      " the page - show it again
+      display( ).
+      RETURN.
     ENDIF.
 
     CASE client->get( )-event.
@@ -113,7 +118,10 @@ CLASS /kro/cl_popup_image_edit IMPLEMENTATION.
                       )->a( n = `contentHeight` v = `80%`
                       )->a( n = `contentWidth` v = `80%`
                       )->a( n = `verticalScrolling` b = abap_false
-                      )->a( n = `horizontalScrolling` b = abap_false ).
+                      )->a( n = `horizontalScrolling` b = abap_false
+                      " Esc closes the dialog in the browser - without the
+                      " event the screen stayed on a closed popup
+                      )->a( n = `afterClose` v = client->_event( `CANCEL` ) ).
 
     popup->ele( n = `ImageEditorContainer` ns = `ie`
         )->a( n = `enabledButtons` t = mv_enabledbuttons

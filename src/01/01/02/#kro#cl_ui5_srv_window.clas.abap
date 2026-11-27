@@ -55,6 +55,25 @@ CLASS /kro/cl_ui5_srv_window DEFINITION PUBLIC FINAL CREATE PUBLIC.
       RETURNING
         VALUE(result) TYPE i.
 
+    "! a sorter's or a condition's path that can name a component of a row:
+    "! not empty, and nothing but A-Z, 0-9, _ and / (a namespace, a
+    "! sub-component). The app puts it into an ORDER BY or a WHERE - often a
+    "! dynamic one - so a path that could not be a component is dropped here
+    "! instead of reaching it as written by the browser
+    CLASS-METHODS path_valid
+      IMPORTING
+        val           TYPE string
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+
+    "! an operator of the documented list (ty_s_bind_tab_filter) - the
+    "! sap.ui.model.FilterOperator values; anything else is dropped
+    CLASS-METHODS operator_valid
+      IMPORTING
+        val           TYPE string
+      RETURNING
+        VALUE(result) TYPE abap_bool.
+
 ENDCLASS.
 
 
@@ -62,70 +81,70 @@ CLASS /kro/cl_ui5_srv_window IMPLEMENTATION.
 
   METHOD request.
 
-    DATA temp28 TYPE string.
-    DATA temp29 TYPE string.
-    DATA temp30 TYPE string.
-    DATA temp31 TYPE string.
-    DATA temp32 TYPE string.
-    DATA temp33 TYPE string.
-    DATA temp34 TYPE string.
-    DATA temp35 TYPE string.
-      DATA temp36 TYPE string.
-      DATA temp37 TYPE string.
-      DATA temp38 TYPE string.
-      DATA temp39 TYPE string.
-    CLEAR temp28.
+    DATA temp38 TYPE string.
+    DATA temp39 TYPE string.
+    DATA temp40 TYPE string.
+    DATA temp41 TYPE string.
+    DATA temp42 TYPE string.
+    DATA temp43 TYPE string.
+    DATA temp44 TYPE string.
+    DATA temp45 TYPE string.
+      DATA temp46 TYPE string.
+      DATA temp47 TYPE string.
+      DATA temp48 TYPE string.
+      DATA temp49 TYPE string.
+    CLEAR temp38.
 
-    READ TABLE t_arg INTO temp29 INDEX 1.
+    READ TABLE t_arg INTO temp39 INDEX 1.
     IF sy-subrc = 0.
-      temp28 = temp29.
+      temp38 = temp39.
     ENDIF.
-    result-path   = temp28.
+    result-path   = temp38.
 
-    CLEAR temp30.
+    CLEAR temp40.
 
-    READ TABLE t_arg INTO temp31 INDEX 3.
+    READ TABLE t_arg INTO temp41 INDEX 3.
     IF sy-subrc = 0.
-      temp30 = temp31.
+      temp40 = temp41.
     ENDIF.
-    result-reason = to_upper( condense( temp30 ) ).
+    result-reason = to_upper( condense( temp40 ) ).
 
-    CLEAR temp32.
+    CLEAR temp42.
 
-    READ TABLE t_arg INTO temp33 INDEX 4.
+    READ TABLE t_arg INTO temp43 INDEX 4.
     IF sy-subrc = 0.
-      temp32 = temp33.
+      temp42 = temp43.
     ENDIF.
-    result-skip   = count_of( temp32 ).
+    result-skip   = count_of( temp42 ).
 
-    CLEAR temp34.
+    CLEAR temp44.
 
-    READ TABLE t_arg INTO temp35 INDEX 5.
+    READ TABLE t_arg INTO temp45 INDEX 5.
     IF sy-subrc = 0.
-      temp34 = temp35.
+      temp44 = temp45.
     ENDIF.
-    result-top    = count_of( temp34 ).
+    result-top    = count_of( temp44 ).
 
     " a SORT and a FILTER carry the binding's sorters AND filter - the
     " whole state of the columns - and start again from the first row
     IF result-reason = /kro/if_client=>cs_window_reason-sort
         OR result-reason = /kro/if_client=>cs_window_reason-filter.
 
-      CLEAR temp36.
+      CLEAR temp46.
 
-      READ TABLE t_arg INTO temp37 INDEX 6.
+      READ TABLE t_arg INTO temp47 INDEX 6.
       IF sy-subrc = 0.
-        temp36 = temp37.
+        temp46 = temp47.
       ENDIF.
-      result-t_sort   = parse_sort( temp36 ).
+      result-t_sort   = parse_sort( temp46 ).
 
-      CLEAR temp38.
+      CLEAR temp48.
 
-      READ TABLE t_arg INTO temp39 INDEX 7.
+      READ TABLE t_arg INTO temp49 INDEX 7.
       IF sy-subrc = 0.
-        temp38 = temp39.
+        temp48 = temp49.
       ENDIF.
-      result-t_filter = parse_filter( temp38 ).
+      result-t_filter = parse_filter( temp48 ).
       CLEAR result-skip.
     ELSE.
       result-reason = /kro/if_client=>cs_window_reason-more.
@@ -135,37 +154,35 @@ CLASS /kro/cl_ui5_srv_window IMPLEMENTATION.
 
   METHOD event.
 
-    DATA temp40 TYPE string.
-    DATA temp41 TYPE string.
-    CLEAR temp40.
+    DATA temp50 TYPE string.
+    DATA temp51 TYPE string.
+    CLEAR temp50.
 
-    READ TABLE t_arg INTO temp41 INDEX 2.
+    READ TABLE t_arg INTO temp51 INDEX 2.
     IF sy-subrc = 0.
-      temp40 = temp41.
+      temp50 = temp51.
     ENDIF.
-    result = temp40.
+    result = temp50.
 
   ENDMETHOD.
 
   METHOD count_of.
 
-    DATA lv_val TYPE string.
-    lv_val = condense( val ).
-    IF lv_val IS NOT INITIAL AND lv_val CO `0123456789` AND strlen( lv_val ) <= 9.
-      result = lv_val.
+    IF /kro/cl_ui5_util_context=>check_int_digits( val ) = abap_true.
+      result = condense( val ).
     ENDIF.
 
   ENDMETHOD.
 
   METHOD parse_sort.
 
-    DATA lv_json TYPE string.
+    DATA lv_json  TYPE string.
+    DATA lv_index TYPE i.
         DATA li_json TYPE REF TO /kro/cl_ajson.
-        DATA temp42 TYPE string_table.
-        DATA lv_member LIKE LINE OF temp42.
+        DATA lv_count TYPE i.
           DATA lv_sorter TYPE string.
           DATA lv_name TYPE string.
-          DATA temp43 TYPE /kro/if_client=>ty_s_bind_tab_sort.
+          DATA temp52 TYPE /kro/if_client=>ty_s_bind_tab_sort.
     lv_json = condense( val ).
     IF lv_json IS INITIAL.
       RETURN.
@@ -174,23 +191,25 @@ CLASS /kro/cl_ui5_srv_window IMPLEMENTATION.
     TRY.
 
         li_json = /kro/cl_ajson=>parse( lv_json ).
+        " by index, not over members( ): ajson sorts the member names as
+        " text, so an eleventh sorter (`10`) came before the third (`2`)
 
-        temp42 = li_json->members( `/` ).
+        lv_count = lines( li_json->members( `/` ) ).
+        WHILE lv_index < lv_count.
+          lv_index = lv_index + 1.
 
-        LOOP AT temp42 INTO lv_member.
-
-          lv_sorter = |/{ lv_member }|.
+          lv_sorter = |/{ lv_index }|.
 
           lv_name = to_upper( li_json->get_string( |{ lv_sorter }/PATH| ) ).
-          IF lv_name IS INITIAL.
+          IF path_valid( lv_name ) = abap_false.
             CONTINUE.
           ENDIF.
 
-          CLEAR temp43.
-          temp43-path = lv_name.
-          temp43-descending = li_json->get_boolean( |{ lv_sorter }/DESCENDING| ).
-          INSERT temp43 INTO TABLE result.
-        ENDLOOP.
+          CLEAR temp52.
+          temp52-path = lv_name.
+          temp52-descending = li_json->get_boolean( |{ lv_sorter }/DESCENDING| ).
+          INSERT temp52 INTO TABLE result.
+        ENDWHILE.
       CATCH cx_root.
         " a sort that cannot be read is no sort - the app's own order
         CLEAR result.
@@ -203,12 +222,14 @@ CLASS /kro/cl_ui5_srv_window IMPLEMENTATION.
     DATA lv_json  TYPE string.
     DATA lv_group TYPE i.
         DATA li_json TYPE REF TO /kro/cl_ajson.
-        DATA temp44 TYPE string_table.
-        DATA lv_g LIKE LINE OF temp44.
-          DATA temp45 TYPE string_table.
-          DATA lv_c LIKE LINE OF temp45.
+        DATA temp53 TYPE string_table.
+        DATA lv_g LIKE LINE OF temp53.
+          DATA temp54 TYPE string_table.
+          DATA lv_c LIKE LINE OF temp54.
             DATA lv_cond TYPE string.
-            DATA temp46 TYPE /kro/if_client=>ty_s_bind_tab_filter.
+            DATA lv_path TYPE string.
+            DATA lv_operator TYPE string.
+            DATA temp55 TYPE /kro/if_client=>ty_s_bind_tab_filter.
     lv_json = condense( val ).
     IF lv_json IS INITIAL.
       RETURN.
@@ -218,30 +239,63 @@ CLASS /kro/cl_ui5_srv_window IMPLEMENTATION.
 
         li_json = /kro/cl_ajson=>parse( lv_json ).
 
-        temp44 = li_json->members( `/` ).
+        temp53 = li_json->members( `/` ).
 
-        LOOP AT temp44 INTO lv_g.
+        LOOP AT temp53 INTO lv_g.
           lv_group = lv_group + 1.
 
-          temp45 = li_json->members( |/{ lv_g }| ).
+          temp54 = li_json->members( |/{ lv_g }| ).
 
-          LOOP AT temp45 INTO lv_c.
+          LOOP AT temp54 INTO lv_c.
 
             lv_cond = |/{ lv_g }/{ lv_c }|.
 
-            CLEAR temp46.
-            temp46-group = lv_group.
-            temp46-path = to_upper( li_json->get_string( |{ lv_cond }/1| ) ).
-            temp46-operator = li_json->get_string( |{ lv_cond }/2| ).
-            temp46-value1 = li_json->get( |{ lv_cond }/3| ).
-            temp46-value2 = li_json->get( |{ lv_cond }/4| ).
-            INSERT temp46 INTO TABLE result.
+            lv_path = to_upper( li_json->get_string( |{ lv_cond }/1| ) ).
+
+            lv_operator = li_json->get_string( |{ lv_cond }/2| ).
+            " path and operator are the browser's, and the app builds its
+            " WHERE from them: a condition that names no component or no
+            " documented operator is no condition
+            IF path_valid( lv_path ) = abap_false OR operator_valid( lv_operator ) = abap_false.
+              CONTINUE.
+            ENDIF.
+
+            CLEAR temp55.
+            temp55-group = lv_group.
+            temp55-path = lv_path.
+            temp55-operator = lv_operator.
+            temp55-value1 = li_json->get( |{ lv_cond }/3| ).
+            temp55-value2 = li_json->get( |{ lv_cond }/4| ).
+            INSERT temp55 INTO TABLE result.
           ENDLOOP.
         ENDLOOP.
       CATCH cx_root.
         " a filter that cannot be read is no filter - every row
         CLEAR result.
     ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD path_valid.
+    DATA temp1 TYPE xsdboolean.
+
+    IF val IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    temp1 = boolc( val CO `ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/` ).
+    result = temp1.
+
+  ENDMETHOD.
+
+  METHOD operator_valid.
+
+    CASE val.
+      WHEN `EQ` OR `NE` OR `LT` OR `LE` OR `GT` OR `GE` OR `BT` OR `NB`
+          OR `Contains` OR `NotContains` OR `StartsWith` OR `NotStartsWith`
+          OR `EndsWith` OR `NotEndsWith`.
+        result = abap_true.
+    ENDCASE.
 
   ENDMETHOD.
 

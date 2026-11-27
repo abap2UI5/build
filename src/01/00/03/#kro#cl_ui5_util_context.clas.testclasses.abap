@@ -2013,6 +2013,7 @@ CLASS ltcl_msg DEFINITION FINAL
     METHODS test_msg_initial_struct   FOR TESTING RAISING cx_static_check.
     METHODS test_msg_item_component   FOR TESTING RAISING cx_static_check.
     METHODS test_msg_id_without_text  FOR TESTING RAISING cx_static_check.
+    METHODS test_msg_mesg_shape       FOR TESTING RAISING cx_static_check.
 
 ENDCLASS.
 
@@ -2133,6 +2134,84 @@ CLASS ltcl_msg IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD test_msg_mesg_shape.
+
+    " MESG names the message class ARBGB and the number TXTNR
+    TYPES:
+      BEGIN OF ty_s_mesg,
+        msgty TYPE c LENGTH 1,
+        arbgb TYPE c LENGTH 20,
+        txtnr TYPE c LENGTH 3,
+        text  TYPE c LENGTH 73,
+      END OF ty_s_mesg.
+
+    DATA temp100 TYPE ty_s_mesg.
+    DATA ls_mesg LIKE temp100.
+    DATA lt_msg TYPE /kro/cl_ui5_util_context=>ty_t_msg.
+    FIELD-SYMBOLS <temp101> LIKE LINE OF lt_msg.
+    DATA temp102 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp103> LIKE LINE OF lt_msg.
+    DATA temp104 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp105> LIKE LINE OF lt_msg.
+    DATA temp106 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp107> LIKE LINE OF lt_msg.
+    DATA temp108 LIKE sy-tabix.
+    CLEAR temp100.
+    temp100-msgty = `W`.
+    temp100-arbgb = `VL`.
+    temp100-txtnr = `042`.
+    temp100-text = `a warning`.
+
+    ls_mesg = temp100.
+
+
+    lt_msg = /kro/cl_ui5_util_context=>msg_get_t( ls_mesg ).
+
+    cl_abap_unit_assert=>assert_equals( exp = 1
+                                        act = lines( lt_msg ) ).
+
+
+    temp102 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp101>.
+    sy-tabix = temp102.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `W`
+                                        act = <temp101>-type ).
+
+
+    temp104 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp103>.
+    sy-tabix = temp104.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `VL`
+                                        act = <temp103>-id ).
+
+
+    temp106 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp105>.
+    sy-tabix = temp106.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `042`
+                                        act = <temp105>-no ).
+
+
+    temp108 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp107>.
+    sy-tabix = temp108.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `a warning`
+                                        act = <temp107>-text ).
+
+  ENDMETHOD.
+
   METHOD test_msg_id_without_text.
 
     " the T100 shape: a structure that names a message by ID and NUMBER and
@@ -2147,24 +2226,24 @@ CLASS ltcl_msg IMPLEMENTATION.
         message_v1 TYPE string,
       END OF ty_s_t100.
 
-    DATA temp100 TYPE ty_s_t100.
-    DATA ls_t100 LIKE temp100.
+    DATA temp109 TYPE ty_s_t100.
+    DATA ls_t100 LIKE temp109.
     DATA lt_msg TYPE /kro/cl_ui5_util_context=>ty_t_msg.
-    FIELD-SYMBOLS <temp101> LIKE LINE OF lt_msg.
-    DATA temp102 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp103> LIKE LINE OF lt_msg.
-    DATA temp104 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp105> LIKE LINE OF lt_msg.
-    DATA temp106 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp107> LIKE LINE OF lt_msg.
-    DATA temp108 LIKE sy-tabix.
-    CLEAR temp100.
-    temp100-id = `z2ui5_test`.
-    temp100-number = '001'.
-    temp100-type = `E`.
-    temp100-message_v1 = `4711`.
+    FIELD-SYMBOLS <temp110> LIKE LINE OF lt_msg.
+    DATA temp111 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp112> LIKE LINE OF lt_msg.
+    DATA temp113 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp114> LIKE LINE OF lt_msg.
+    DATA temp115 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp116> LIKE LINE OF lt_msg.
+    DATA temp117 LIKE sy-tabix.
+    CLEAR temp109.
+    temp109-id = `z2ui5_test`.
+    temp109-number = '001'.
+    temp109-type = `E`.
+    temp109-message_v1 = `4711`.
 
-    ls_t100 = temp100.
+    ls_t100 = temp109.
 
 
     lt_msg = /kro/cl_ui5_util_context=>msg_get_t( ls_t100 ).
@@ -2174,44 +2253,44 @@ CLASS ltcl_msg IMPLEMENTATION.
     " the parts the walk mapped by name, whatever the message class says
 
 
-    temp102 = sy-tabix.
-    READ TABLE lt_msg INDEX 1 ASSIGNING <temp101>.
-    sy-tabix = temp102.
+    temp111 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp110>.
+    sy-tabix = temp111.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `Z2UI5_TEST`
-                                        act = <temp101>-id ).
+                                        act = <temp110>-id ).
 
 
-    temp104 = sy-tabix.
-    READ TABLE lt_msg INDEX 1 ASSIGNING <temp103>.
-    sy-tabix = temp104.
+    temp113 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp112>.
+    sy-tabix = temp113.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `E`
-                                        act = <temp103>-type ).
+                                        act = <temp112>-type ).
 
 
-    temp106 = sy-tabix.
-    READ TABLE lt_msg INDEX 1 ASSIGNING <temp105>.
-    sy-tabix = temp106.
+    temp115 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp114>.
+    sy-tabix = temp115.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `4711`
-                                        act = <temp105>-v1 ).
+                                        act = <temp114>-v1 ).
     " and a text was assembled rather than left blank
 
 
-    temp108 = sy-tabix.
-    READ TABLE lt_msg INDEX 1 ASSIGNING <temp107>.
-    sy-tabix = temp108.
+    temp117 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp116>.
+    sy-tabix = temp117.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_not_initial( <temp107>-text ).
+    cl_abap_unit_assert=>assert_not_initial( <temp116>-text ).
 
   ENDMETHOD.
 
@@ -2245,45 +2324,45 @@ CLASS ltcl_msg IMPLEMENTATION.
     " {LOW}/{HIGH} are substituted from the range row
     DATA lt_range TYPE /kro/cl_ui5_util_context=>ty_t_range.
 
-    DATA temp109 TYPE /kro/cl_ui5_util_context=>ty_t_range.
-    DATA temp110 LIKE LINE OF temp109.
+    DATA temp118 TYPE /kro/cl_ui5_util_context=>ty_t_range.
+    DATA temp119 LIKE LINE OF temp118.
     DATA lt_token TYPE /kro/cl_ui5_util_context=>ty_t_token.
-    FIELD-SYMBOLS <temp111> LIKE LINE OF lt_token.
-    DATA temp112 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp113> LIKE LINE OF lt_token.
-    DATA temp114 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp115> LIKE LINE OF lt_token.
-    DATA temp116 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp117> LIKE LINE OF lt_token.
-    DATA temp118 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp119> LIKE LINE OF lt_token.
-    DATA temp120 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp121> LIKE LINE OF lt_token.
-    DATA temp122 LIKE sy-tabix.
-    CLEAR temp109.
+    FIELD-SYMBOLS <temp120> LIKE LINE OF lt_token.
+    DATA temp121 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp122> LIKE LINE OF lt_token.
+    DATA temp123 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp124> LIKE LINE OF lt_token.
+    DATA temp125 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp126> LIKE LINE OF lt_token.
+    DATA temp127 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp128> LIKE LINE OF lt_token.
+    DATA temp129 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp130> LIKE LINE OF lt_token.
+    DATA temp131 LIKE sy-tabix.
+    CLEAR temp118.
 
-    CLEAR temp110.
-    temp110-sign = `I`.
-    temp110-option = `EQ`.
-    temp110-low = `X`.
-    INSERT temp110 INTO TABLE temp109.
-    CLEAR temp110.
-    temp110-sign = `I`.
-    temp110-option = `BT`.
-    temp110-low = `1`.
-    temp110-high = `9`.
-    INSERT temp110 INTO TABLE temp109.
-    CLEAR temp110.
-    temp110-sign = `I`.
-    temp110-option = `CP`.
-    temp110-low = `A`.
-    INSERT temp110 INTO TABLE temp109.
-    CLEAR temp110.
-    temp110-sign = `E`.
-    temp110-option = `EQ`.
-    temp110-low = `Y`.
-    INSERT temp110 INTO TABLE temp109.
-    lt_range = temp109.
+    CLEAR temp119.
+    temp119-sign = `I`.
+    temp119-option = `EQ`.
+    temp119-low = `X`.
+    INSERT temp119 INTO TABLE temp118.
+    CLEAR temp119.
+    temp119-sign = `I`.
+    temp119-option = `BT`.
+    temp119-low = `1`.
+    temp119-high = `9`.
+    INSERT temp119 INTO TABLE temp118.
+    CLEAR temp119.
+    temp119-sign = `I`.
+    temp119-option = `CP`.
+    temp119-low = `A`.
+    INSERT temp119 INTO TABLE temp118.
+    CLEAR temp119.
+    temp119-sign = `E`.
+    temp119-option = `EQ`.
+    temp119-low = `Y`.
+    INSERT temp119 INTO TABLE temp118.
+    lt_range = temp118.
 
 
     lt_token = /kro/cl_ui5_util_context=>filter_get_token_t_by_range_t( lt_range ).
@@ -2292,66 +2371,66 @@ CLASS ltcl_msg IMPLEMENTATION.
                                         act = lines( lt_token ) ).
 
 
-    temp112 = sy-tabix.
-    READ TABLE lt_token INDEX 1 ASSIGNING <temp111>.
-    sy-tabix = temp112.
+    temp121 = sy-tabix.
+    READ TABLE lt_token INDEX 1 ASSIGNING <temp120>.
+    sy-tabix = temp121.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `=X`
-                                        act = <temp111>-key ).
+                                        act = <temp120>-key ).
 
 
-    temp114 = sy-tabix.
-    READ TABLE lt_token INDEX 2 ASSIGNING <temp113>.
-    sy-tabix = temp114.
+    temp123 = sy-tabix.
+    READ TABLE lt_token INDEX 2 ASSIGNING <temp122>.
+    sy-tabix = temp123.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `1...9`
-                                        act = <temp113>-key ).
+                                        act = <temp122>-key ).
 
 
-    temp116 = sy-tabix.
-    READ TABLE lt_token INDEX 3 ASSIGNING <temp115>.
-    sy-tabix = temp116.
+    temp125 = sy-tabix.
+    READ TABLE lt_token INDEX 3 ASSIGNING <temp124>.
+    sy-tabix = temp125.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `*A*`
-                                        act = <temp115>-key ).
+                                        act = <temp124>-key ).
     " an excluding row renders negated, not like its including twin
 
 
-    temp118 = sy-tabix.
-    READ TABLE lt_token INDEX 4 ASSIGNING <temp117>.
-    sy-tabix = temp118.
+    temp127 = sy-tabix.
+    READ TABLE lt_token INDEX 4 ASSIGNING <temp126>.
+    sy-tabix = temp127.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `!(=Y)`
-                                        act = <temp117>-key ).
+                                        act = <temp126>-key ).
 
     " tokens come back visible and editable so the UI5 MultiInput can render
     " and remove them
 
 
-    temp120 = sy-tabix.
-    READ TABLE lt_token INDEX 1 ASSIGNING <temp119>.
-    sy-tabix = temp120.
+    temp129 = sy-tabix.
+    READ TABLE lt_token INDEX 1 ASSIGNING <temp128>.
+    sy-tabix = temp129.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = <temp119>-visible ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = <temp128>-visible ).
 
 
-    temp122 = sy-tabix.
-    READ TABLE lt_token INDEX 1 ASSIGNING <temp121>.
-    sy-tabix = temp122.
+    temp131 = sy-tabix.
+    READ TABLE lt_token INDEX 1 ASSIGNING <temp130>.
+    sy-tabix = temp131.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = <temp121>-editable ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = <temp130>-editable ).
 
   ENDMETHOD.
 
@@ -2368,53 +2447,53 @@ CLASS ltcl_msg IMPLEMENTATION.
       END OF ty_s_int_range.
     TYPES ty_t_int_range TYPE STANDARD TABLE OF ty_s_int_range WITH DEFAULT KEY.
 
-    DATA temp123 TYPE ty_t_int_range.
-    DATA temp124 LIKE LINE OF temp123.
-    DATA lt_range LIKE temp123.
+    DATA temp132 TYPE ty_t_int_range.
+    DATA temp133 LIKE LINE OF temp132.
+    DATA lt_range LIKE temp132.
     DATA lt_token TYPE /kro/cl_ui5_util_context=>ty_t_token.
-    FIELD-SYMBOLS <temp125> LIKE LINE OF lt_token.
-    DATA temp126 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp127> LIKE LINE OF lt_token.
-    DATA temp128 LIKE sy-tabix.
-    CLEAR temp123.
+    FIELD-SYMBOLS <temp134> LIKE LINE OF lt_token.
+    DATA temp135 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp136> LIKE LINE OF lt_token.
+    DATA temp137 LIKE sy-tabix.
+    CLEAR temp132.
 
-    CLEAR temp124.
-    temp124-sign = `I`.
-    temp124-option = `EQ`.
-    temp124-low = 42.
-    INSERT temp124 INTO TABLE temp123.
-    CLEAR temp124.
-    temp124-sign = `I`.
-    temp124-option = `BT`.
-    temp124-low = -5.
-    temp124-high = 10.
-    INSERT temp124 INTO TABLE temp123.
+    CLEAR temp133.
+    temp133-sign = `I`.
+    temp133-option = `EQ`.
+    temp133-low = 42.
+    INSERT temp133 INTO TABLE temp132.
+    CLEAR temp133.
+    temp133-sign = `I`.
+    temp133-option = `BT`.
+    temp133-low = -5.
+    temp133-high = 10.
+    INSERT temp133 INTO TABLE temp132.
 
-    lt_range = temp123.
+    lt_range = temp132.
 
 
     lt_token = /kro/cl_ui5_util_context=>filter_get_token_t_by_range_t( lt_range ).
 
 
 
-    temp126 = sy-tabix.
-    READ TABLE lt_token INDEX 1 ASSIGNING <temp125>.
-    sy-tabix = temp126.
+    temp135 = sy-tabix.
+    READ TABLE lt_token INDEX 1 ASSIGNING <temp134>.
+    sy-tabix = temp135.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `=42`
-                                        act = <temp125>-key ).
+                                        act = <temp134>-key ).
 
 
-    temp128 = sy-tabix.
-    READ TABLE lt_token INDEX 2 ASSIGNING <temp127>.
-    sy-tabix = temp128.
+    temp137 = sy-tabix.
+    READ TABLE lt_token INDEX 2 ASSIGNING <temp136>.
+    sy-tabix = temp137.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `-5...10`
-                                        act = <temp127>-key ).
+                                        act = <temp136>-key ).
 
   ENDMETHOD.
 
@@ -2425,69 +2504,69 @@ CLASS ltcl_msg IMPLEMENTATION.
     " placeholder is not substituted again
     DATA lt_range TYPE /kro/cl_ui5_util_context=>ty_t_range.
 
-    DATA temp129 TYPE /kro/cl_ui5_util_context=>ty_t_range.
-    DATA temp130 LIKE LINE OF temp129.
+    DATA temp138 TYPE /kro/cl_ui5_util_context=>ty_t_range.
+    DATA temp139 LIKE LINE OF temp138.
     DATA lt_token TYPE /kro/cl_ui5_util_context=>ty_t_token.
-    FIELD-SYMBOLS <temp131> LIKE LINE OF lt_token.
-    DATA temp132 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp133> LIKE LINE OF lt_token.
-    DATA temp134 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp135> LIKE LINE OF lt_token.
-    DATA temp136 LIKE sy-tabix.
-    CLEAR temp129.
+    FIELD-SYMBOLS <temp140> LIKE LINE OF lt_token.
+    DATA temp141 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp142> LIKE LINE OF lt_token.
+    DATA temp143 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp144> LIKE LINE OF lt_token.
+    DATA temp145 LIKE sy-tabix.
+    CLEAR temp138.
 
-    CLEAR temp130.
-    temp130-sign = `I`.
-    temp130-option = `EQ`.
-    temp130-low = `a$&b`.
-    INSERT temp130 INTO TABLE temp129.
-    CLEAR temp130.
-    temp130-sign = `I`.
-    temp130-option = `BT`.
-    temp130-low = `$$`.
-    temp130-high = `\{x\}`.
-    INSERT temp130 INTO TABLE temp129.
-    CLEAR temp130.
-    temp130-sign = `I`.
-    temp130-option = `BT`.
-    temp130-low = `{HIGH}`.
-    temp130-high = `9`.
-    INSERT temp130 INTO TABLE temp129.
-    lt_range = temp129.
+    CLEAR temp139.
+    temp139-sign = `I`.
+    temp139-option = `EQ`.
+    temp139-low = `a$&b`.
+    INSERT temp139 INTO TABLE temp138.
+    CLEAR temp139.
+    temp139-sign = `I`.
+    temp139-option = `BT`.
+    temp139-low = `$$`.
+    temp139-high = `\{x\}`.
+    INSERT temp139 INTO TABLE temp138.
+    CLEAR temp139.
+    temp139-sign = `I`.
+    temp139-option = `BT`.
+    temp139-low = `{HIGH}`.
+    temp139-high = `9`.
+    INSERT temp139 INTO TABLE temp138.
+    lt_range = temp138.
 
 
     lt_token = /kro/cl_ui5_util_context=>filter_get_token_t_by_range_t( lt_range ).
 
 
 
-    temp132 = sy-tabix.
-    READ TABLE lt_token INDEX 1 ASSIGNING <temp131>.
-    sy-tabix = temp132.
+    temp141 = sy-tabix.
+    READ TABLE lt_token INDEX 1 ASSIGNING <temp140>.
+    sy-tabix = temp141.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `=a$&b`
-                                        act = <temp131>-key ).
+                                        act = <temp140>-key ).
 
 
-    temp134 = sy-tabix.
-    READ TABLE lt_token INDEX 2 ASSIGNING <temp133>.
-    sy-tabix = temp134.
+    temp143 = sy-tabix.
+    READ TABLE lt_token INDEX 2 ASSIGNING <temp142>.
+    sy-tabix = temp143.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `$$...\{x\}`
-                                        act = <temp133>-key ).
+                                        act = <temp142>-key ).
 
 
-    temp136 = sy-tabix.
-    READ TABLE lt_token INDEX 3 ASSIGNING <temp135>.
-    sy-tabix = temp136.
+    temp145 = sy-tabix.
+    READ TABLE lt_token INDEX 3 ASSIGNING <temp144>.
+    sy-tabix = temp145.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `{HIGH}...9`
-                                        act = <temp135>-key ).
+                                        act = <temp144>-key ).
 
   ENDMETHOD.
 
@@ -2500,12 +2579,12 @@ CLASS ltcl_msg IMPLEMENTATION.
     DATA ls_range LIKE LINE OF lt_range.
     DATA lv_option TYPE string.
     DATA lt_token TYPE /kro/cl_ui5_util_context=>ty_t_token.
-    FIELD-SYMBOLS <temp137> LIKE LINE OF lt_token.
-    DATA temp138 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp139> LIKE LINE OF lt_token.
-    DATA temp140 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp141> LIKE LINE OF lt_token.
-    DATA temp142 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp146> LIKE LINE OF lt_token.
+    DATA temp147 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp148> LIKE LINE OF lt_token.
+    DATA temp149 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp150> LIKE LINE OF lt_token.
+    DATA temp151 LIKE sy-tabix.
 
     " filled field by field and through a variable: a VALUE #( ) row with a
     " missing, lower-case or unknown option is exactly what the SAP syntax
@@ -2531,34 +2610,34 @@ CLASS ltcl_msg IMPLEMENTATION.
                                         act = lines( lt_token ) ).
 
 
-    temp138 = sy-tabix.
-    READ TABLE lt_token INDEX 1 ASSIGNING <temp137>.
-    sy-tabix = temp138.
+    temp147 = sy-tabix.
+    READ TABLE lt_token INDEX 1 ASSIGNING <temp146>.
+    sy-tabix = temp147.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `=X`
-                                        act = <temp137>-key ).
+                                        act = <temp146>-key ).
 
 
-    temp140 = sy-tabix.
-    READ TABLE lt_token INDEX 2 ASSIGNING <temp139>.
-    sy-tabix = temp140.
+    temp149 = sy-tabix.
+    READ TABLE lt_token INDEX 2 ASSIGNING <temp148>.
+    sy-tabix = temp149.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `=Y`
-                                        act = <temp139>-key ).
+                                        act = <temp148>-key ).
 
 
-    temp142 = sy-tabix.
-    READ TABLE lt_token INDEX 3 ASSIGNING <temp141>.
-    sy-tabix = temp142.
+    temp151 = sy-tabix.
+    READ TABLE lt_token INDEX 3 ASSIGNING <temp150>.
+    sy-tabix = temp151.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `=Z`
-                                        act = <temp141>-key ).
+                                        act = <temp150>-key ).
 
   ENDMETHOD.
 
@@ -2677,23 +2756,23 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
     " value and renders a text that is not the fallback - one assert over
     " both SWITCHes, so a branch dropped by an edit shows
     DATA lt_name TYPE string_table.
-    DATA temp143 TYPE string_table.
+    DATA temp152 TYPE string_table.
     DATA lv_name LIKE LINE OF lt_name.
       DATA lv_cause TYPE i.
       DATA temp8 TYPE xsdboolean.
       DATA lv_text TYPE string.
       DATA temp9 TYPE xsdboolean.
-    CLEAR temp143.
-    INSERT `UNSPECIFIC` INTO TABLE temp143.
-    INSERT `UNAUTHORIZED` INTO TABLE temp143.
-    INSERT `NOT_FOUND` INTO TABLE temp143.
-    INSERT `CONFLICT` INTO TABLE temp143.
-    INSERT `LOCKED` INTO TABLE temp143.
-    INSERT `DEPENDENCY` INTO TABLE temp143.
-    INSERT `NOT_IMPLEMENTED` INTO TABLE temp143.
-    INSERT `DISABLED` INTO TABLE temp143.
-    INSERT `READONLY` INTO TABLE temp143.
-    lt_name = temp143.
+    CLEAR temp152.
+    INSERT `UNSPECIFIC` INTO TABLE temp152.
+    INSERT `UNAUTHORIZED` INTO TABLE temp152.
+    INSERT `NOT_FOUND` INTO TABLE temp152.
+    INSERT `CONFLICT` INTO TABLE temp152.
+    INSERT `LOCKED` INTO TABLE temp152.
+    INSERT `DEPENDENCY` INTO TABLE temp152.
+    INSERT `NOT_IMPLEMENTED` INTO TABLE temp152.
+    INSERT `DISABLED` INTO TABLE temp152.
+    INSERT `READONLY` INTO TABLE temp152.
+    lt_name = temp152.
 
 
     LOOP AT lt_name INTO lv_name.
@@ -2725,13 +2804,13 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
 
     " the key renders as NAME=VALUE pairs, comma separated - this is what a
     " message ends up quoting to say WHICH entity failed
-    DATA temp145 TYPE ty_s_tky.
-    DATA ls_tky LIKE temp145.
-    CLEAR temp145.
-    temp145-product_uuid = `ABC-1`.
-    temp145-product_id = `4711`.
+    DATA temp154 TYPE ty_s_tky.
+    DATA ls_tky LIKE temp154.
+    CLEAR temp154.
+    temp154-product_uuid = `ABC-1`.
+    temp154-product_id = `4711`.
 
-    ls_tky = temp145.
+    ls_tky = temp154.
 
     cl_abap_unit_assert=>assert_equals(
         exp = `PRODUCT_UUID=ABC-1, PRODUCT_ID=4711`
@@ -2743,12 +2822,12 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
 
     " an initial component contributes nothing - not an empty pair and not a
     " dangling separator
-    DATA temp146 TYPE ty_s_tky.
-    DATA ls_tky LIKE temp146.
-    CLEAR temp146.
-    temp146-product_id = `4711`.
+    DATA temp155 TYPE ty_s_tky.
+    DATA ls_tky LIKE temp155.
+    CLEAR temp155.
+    temp155-product_id = `4711`.
 
-    ls_tky = temp146.
+    ls_tky = temp155.
 
     cl_abap_unit_assert=>assert_equals(
         exp = `PRODUCT_ID=4711`
@@ -2760,15 +2839,15 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
 
     " a nested structure is flattened by the recursion, and its pairs join the
     " outer ones in component order
-    DATA temp147 TYPE ty_s_nested.
-    DATA ls_nested LIKE temp147.
-    CLEAR temp147.
-    CLEAR temp147-inner.
-    temp147-inner-a = `1`.
-    temp147-inner-b = `2`.
-    temp147-c = `3`.
+    DATA temp156 TYPE ty_s_nested.
+    DATA ls_nested LIKE temp156.
+    CLEAR temp156.
+    CLEAR temp156-inner.
+    temp156-inner-a = `1`.
+    temp156-inner-b = `2`.
+    temp156-c = `3`.
 
-    ls_nested = temp147.
+    ls_nested = temp156.
 
     cl_abap_unit_assert=>assert_equals(
         exp = `A=1, B=2, C=3`
@@ -2792,13 +2871,13 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
 
     " a structure with no %MSG / %FAIL / %OTHER component and no message table
     " is not RAP-shaped: box_resolve has to fall through to the plain path
-    DATA temp148 TYPE ty_s_plain.
-    DATA ls_plain LIKE temp148.
-    CLEAR temp148.
-    temp148-name = `Ada`.
-    temp148-city = `London`.
+    DATA temp157 TYPE ty_s_plain.
+    DATA ls_plain LIKE temp157.
+    CLEAR temp157.
+    temp157-name = `Ada`.
+    temp157-city = `London`.
 
-    ls_plain = temp148.
+    ls_plain = temp157.
 
     cl_abap_unit_assert=>assert_equals(
         exp = abap_false
@@ -2835,101 +2914,101 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
     FIELD-SYMBOLS <ftab>   TYPE STANDARD TABLE.
     FIELD-SYMBOLS <row>    TYPE any.
     FIELD-SYMBOLS <comp>   TYPE any.
-    DATA temp149 TYPE abap_component_tab.
-    DATA temp150 LIKE LINE OF temp149.
-    DATA temp151 TYPE abap_component_tab.
-    DATA temp152 LIKE LINE OF temp151.
-    DATA temp153 TYPE abap_component_tab.
-    DATA temp154 LIKE LINE OF temp153.
-      DATA temp155 TYPE abap_component_tab.
-      DATA temp156 LIKE LINE OF temp155.
-      DATA temp157 TYPE abap_component_tab.
-      DATA temp158 LIKE LINE OF temp157.
-      DATA temp159 TYPE abap_component_tab.
-      DATA temp160 LIKE LINE OF temp159.
-      DATA temp161 TYPE abap_componentdescr.
-      DATA temp162 TYPE abap_componentdescr.
-    DATA temp163 TYPE abap_component_tab.
-    DATA temp164 LIKE LINE OF temp163.
+    DATA temp158 TYPE abap_component_tab.
+    DATA temp159 LIKE LINE OF temp158.
+    DATA temp160 TYPE abap_component_tab.
+    DATA temp161 LIKE LINE OF temp160.
+    DATA temp162 TYPE abap_component_tab.
+    DATA temp163 LIKE LINE OF temp162.
+      DATA temp164 TYPE abap_component_tab.
+      DATA temp165 LIKE LINE OF temp164.
+      DATA temp166 TYPE abap_component_tab.
+      DATA temp167 LIKE LINE OF temp166.
+      DATA temp168 TYPE abap_component_tab.
+      DATA temp169 LIKE LINE OF temp168.
+      DATA temp170 TYPE abap_componentdescr.
+      DATA temp171 TYPE abap_componentdescr.
+    DATA temp172 TYPE abap_component_tab.
+    DATA temp173 LIKE LINE OF temp172.
 
     lo_str = cl_abap_elemdescr=>get_string( ).
     lo_c1  = cl_abap_elemdescr=>get_c( 1 ).
 
 
-    CLEAR temp149.
+    CLEAR temp158.
 
-    temp150-name = `PRODUCT_ID`.
-    temp150-type = lo_str.
-    INSERT temp150 INTO TABLE temp149.
-    lo_key  = cl_abap_structdescr=>create( temp149 ).
+    temp159-name = `PRODUCT_ID`.
+    temp159-type = lo_str.
+    INSERT temp159 INTO TABLE temp158.
+    lo_key  = cl_abap_structdescr=>create( temp158 ).
 
-    CLEAR temp151.
+    CLEAR temp160.
 
-    temp152-name = `CAUSE`.
-    temp152-type = cl_abap_elemdescr=>get_i( ).
-    INSERT temp152 INTO TABLE temp151.
-    lo_fail = cl_abap_structdescr=>create( temp151 ).
+    temp161-name = `CAUSE`.
+    temp161-type = cl_abap_elemdescr=>get_i( ).
+    INSERT temp161 INTO TABLE temp160.
+    lo_fail = cl_abap_structdescr=>create( temp160 ).
 
 
-    CLEAR temp153.
+    CLEAR temp162.
 
-    temp154-name = `%FAIL`.
-    temp154-type = lo_fail.
-    INSERT temp154 INTO TABLE temp153.
-    temp154-name = `%TKY`.
-    temp154-type = lo_key.
-    INSERT temp154 INTO TABLE temp153.
-    temp154-name = `%PID`.
-    temp154-type = lo_str.
-    INSERT temp154 INTO TABLE temp153.
-    temp154-name = `%CID`.
-    temp154-type = lo_str.
-    INSERT temp154 INTO TABLE temp153.
-    lt_comp = temp153.
+    temp163-name = `%FAIL`.
+    temp163-type = lo_fail.
+    INSERT temp163 INTO TABLE temp162.
+    temp163-name = `%TKY`.
+    temp163-type = lo_key.
+    INSERT temp163 INTO TABLE temp162.
+    temp163-name = `%PID`.
+    temp163-type = lo_str.
+    INSERT temp163 INTO TABLE temp162.
+    temp163-name = `%CID`.
+    temp163-type = lo_str.
+    INSERT temp163 INTO TABLE temp162.
+    lt_comp = temp162.
     IF with_dashed_meta = abap_true.
       " as RAP declares them: %ELEMENT and %OP-%ACTION are nested structures
       " of flags, %ELEMENT-CUSTOMERID is the path to one of them
 
-      CLEAR temp155.
+      CLEAR temp164.
 
-      temp156-name = `CUSTOMERID`.
-      temp156-type = lo_c1.
-      INSERT temp156 INTO TABLE temp155.
-      lo_elem = cl_abap_structdescr=>create( temp155 ).
+      temp165-name = `CUSTOMERID`.
+      temp165-type = lo_c1.
+      INSERT temp165 INTO TABLE temp164.
+      lo_elem = cl_abap_structdescr=>create( temp164 ).
 
-      CLEAR temp157.
+      CLEAR temp166.
 
-      temp158-name = `DEDUCTDISCOUNT`.
-      temp158-type = lo_c1.
-      INSERT temp158 INTO TABLE temp157.
-      lo_act  = cl_abap_structdescr=>create( temp157 ).
+      temp167-name = `DEDUCTDISCOUNT`.
+      temp167-type = lo_c1.
+      INSERT temp167 INTO TABLE temp166.
+      lo_act  = cl_abap_structdescr=>create( temp166 ).
 
-      CLEAR temp159.
+      CLEAR temp168.
 
-      temp160-name = `%ACTION`.
-      temp160-type = lo_act.
-      INSERT temp160 INTO TABLE temp159.
-      lo_op   = cl_abap_structdescr=>create( temp159 ).
+      temp169-name = `%ACTION`.
+      temp169-type = lo_act.
+      INSERT temp169 INTO TABLE temp168.
+      lo_op   = cl_abap_structdescr=>create( temp168 ).
 
-      CLEAR temp161.
-      temp161-name = `%ELEMENT`.
-      temp161-type = lo_elem.
-      INSERT temp161 INTO TABLE lt_comp.
+      CLEAR temp170.
+      temp170-name = `%ELEMENT`.
+      temp170-type = lo_elem.
+      INSERT temp170 INTO TABLE lt_comp.
 
-      CLEAR temp162.
-      temp162-name = `%OP`.
-      temp162-type = lo_op.
-      INSERT temp162 INTO TABLE lt_comp.
+      CLEAR temp171.
+      temp171-name = `%OP`.
+      temp171-type = lo_op.
+      INSERT temp171 INTO TABLE lt_comp.
     ENDIF.
     lo_row  = cl_abap_structdescr=>create( lt_comp ).
     lo_rows = cl_abap_tabledescr=>create( lo_row ).
 
-    CLEAR temp163.
+    CLEAR temp172.
 
-    temp164-name = `BOOKINGS`.
-    temp164-type = lo_rows.
-    INSERT temp164 INTO TABLE temp163.
-    lo_top  = cl_abap_structdescr=>create( temp163 ).
+    temp173-name = `BOOKINGS`.
+    temp173-type = lo_rows.
+    INSERT temp173 INTO TABLE temp172.
+    lo_top  = cl_abap_structdescr=>create( temp172 ).
 
     CREATE DATA result TYPE HANDLE lo_top.
     ASSIGN result->* TO <failed>.
@@ -2973,8 +3052,8 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
     FIELD-SYMBOLS <temp9> LIKE LINE OF lt_msg.
     DATA temp10 LIKE sy-tabix.
     DATA lt_any TYPE /kro/cl_ui5_util_context=>ty_t_msg.
-    FIELD-SYMBOLS <temp165> LIKE LINE OF lt_any.
-    DATA temp166 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp174> LIKE LINE OF lt_any.
+    DATA temp175 LIKE sy-tabix.
     lr_failed = failed_bookings( ).
     ASSIGN lr_failed->* TO <failed>.
 
@@ -3018,14 +3097,14 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
     lt_any = /kro/cl_ui5_util_context=>msg_get_t( <failed> ).
 
 
-    temp166 = sy-tabix.
-    READ TABLE lt_any INDEX 1 ASSIGNING <temp165>.
-    sy-tabix = temp166.
+    temp175 = sy-tabix.
+    READ TABLE lt_any INDEX 1 ASSIGNING <temp174>.
+    sy-tabix = temp175.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = ls_msg-text
-                                        act = <temp165>-text ).
+                                        act = <temp174>-text ).
 
   ENDMETHOD.
 
@@ -3047,40 +3126,40 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
     FIELD-SYMBOLS <ftab>     TYPE STANDARD TABLE.
     FIELD-SYMBOLS <row>      TYPE any.
     FIELD-SYMBOLS <comp>     TYPE any.
-    DATA temp167 TYPE REF TO cl_abap_classdescr.
-    DATA temp168 TYPE abap_component_tab.
-    DATA temp169 LIKE LINE OF temp168.
-    DATA temp170 TYPE abap_component_tab.
-    DATA temp171 LIKE LINE OF temp170.
+    DATA temp176 TYPE REF TO cl_abap_classdescr.
+    DATA temp177 TYPE abap_component_tab.
+    DATA temp178 LIKE LINE OF temp177.
+    DATA temp179 TYPE abap_component_tab.
+    DATA temp180 LIKE LINE OF temp179.
     DATA lt_msg TYPE /kro/cl_ui5_util_context=>ty_t_msg.
-    FIELD-SYMBOLS <temp172> LIKE LINE OF lt_msg.
-    DATA temp173 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp174> LIKE LINE OF lt_msg.
-    DATA temp175 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp181> LIKE LINE OF lt_msg.
+    DATA temp182 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp183> LIKE LINE OF lt_msg.
+    DATA temp184 LIKE sy-tabix.
 
     lo_str = cl_abap_elemdescr=>get_string( ).
 
-    temp167 ?= cl_abap_typedescr=>describe_by_name( `CX_ROOT` ).
+    temp176 ?= cl_abap_typedescr=>describe_by_name( `CX_ROOT` ).
     lo_ref = cl_abap_refdescr=>create(
-      temp167 ).
+      temp176 ).
 
-    CLEAR temp168.
+    CLEAR temp177.
 
-    temp169-name = `%MSG`.
-    temp169-type = lo_ref.
-    INSERT temp169 INTO TABLE temp168.
-    temp169-name = `%PID`.
-    temp169-type = lo_str.
-    INSERT temp169 INTO TABLE temp168.
-    lo_row  = cl_abap_structdescr=>create( temp168 ).
+    temp178-name = `%MSG`.
+    temp178-type = lo_ref.
+    INSERT temp178 INTO TABLE temp177.
+    temp178-name = `%PID`.
+    temp178-type = lo_str.
+    INSERT temp178 INTO TABLE temp177.
+    lo_row  = cl_abap_structdescr=>create( temp177 ).
     lo_rows = cl_abap_tabledescr=>create( lo_row ).
 
-    CLEAR temp170.
+    CLEAR temp179.
 
-    temp171-name = `BOOKINGS`.
-    temp171-type = lo_rows.
-    INSERT temp171 INTO TABLE temp170.
-    lo_top  = cl_abap_structdescr=>create( temp170 ).
+    temp180-name = `BOOKINGS`.
+    temp180-type = lo_rows.
+    INSERT temp180 INTO TABLE temp179.
+    lo_top  = cl_abap_structdescr=>create( temp179 ).
 
     CREATE DATA lr_data TYPE HANDLE lo_top.
     ASSIGN lr_data->* TO <reported>.
@@ -3109,24 +3188,24 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
                                         act = lines( lt_msg ) ).
 
 
-    temp173 = sy-tabix.
-    READ TABLE lt_msg INDEX 1 ASSIGNING <temp172>.
-    sy-tabix = temp173.
+    temp182 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp181>.
+    sy-tabix = temp182.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_char_cp( exp = `*booking date in the past*`
-                                         act = <temp172>-text ).
+                                         act = <temp181>-text ).
 
 
-    temp175 = sy-tabix.
-    READ TABLE lt_msg INDEX 1 ASSIGNING <temp174>.
-    sy-tabix = temp175.
+    temp184 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp183>.
+    sy-tabix = temp184.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `pid-9`
-                                        act = meta_of( msg = <temp174> n = `pid` ) ).
+                                        act = meta_of( msg = <temp183> n = `pid` ) ).
 
   ENDMETHOD.
 
@@ -3139,10 +3218,10 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
     FIELD-SYMBOLS <failed> TYPE any.
     DATA lr_failed TYPE REF TO data.
     DATA lt_msg TYPE /kro/cl_ui5_util_context=>ty_t_msg.
-    FIELD-SYMBOLS <temp176> LIKE LINE OF lt_msg.
-    DATA temp177 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp178> LIKE LINE OF lt_msg.
-    DATA temp179 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp185> LIKE LINE OF lt_msg.
+    DATA temp186 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp187> LIKE LINE OF lt_msg.
+    DATA temp188 LIKE sy-tabix.
     lr_failed = failed_bookings( abap_true ).
     ASSIGN lr_failed->* TO <failed>.
 
@@ -3153,24 +3232,24 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
                                         act = lines( lt_msg ) ).
 
 
-    temp177 = sy-tabix.
-    READ TABLE lt_msg INDEX 1 ASSIGNING <temp176>.
-    sy-tabix = temp177.
+    temp186 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp185>.
+    sy-tabix = temp186.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `CUSTOMERID`
-                                        act = meta_of( msg = <temp176> n = `element` ) ).
+                                        act = meta_of( msg = <temp185> n = `element` ) ).
 
 
-    temp179 = sy-tabix.
-    READ TABLE lt_msg INDEX 1 ASSIGNING <temp178>.
-    sy-tabix = temp179.
+    temp188 = sy-tabix.
+    READ TABLE lt_msg INDEX 1 ASSIGNING <temp187>.
+    sy-tabix = temp188.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `DEDUCTDISCOUNT`
-                                        act = meta_of( msg = <temp178> n = `action` ) ).
+                                        act = meta_of( msg = <temp187> n = `action` ) ).
 
   ENDMETHOD.
 
@@ -3192,14 +3271,14 @@ CLASS ltcl_msg_rap IMPLEMENTATION.
 
     " a printable component by name, as text; a missing one or a structure
     " (not printable) answers nothing instead of dumping its bytes
-    DATA temp180 TYPE ty_s_nested.
-    DATA ls_nested LIKE temp180.
-    CLEAR temp180.
-    CLEAR temp180-inner.
-    temp180-inner-a = `1`.
-    temp180-c = `three`.
+    DATA temp189 TYPE ty_s_nested.
+    DATA ls_nested LIKE temp189.
+    CLEAR temp189.
+    CLEAR temp189-inner.
+    temp189-inner-a = `1`.
+    temp189-c = `three`.
 
-    ls_nested = temp180.
+    ls_nested = temp189.
 
     cl_abap_unit_assert=>assert_equals( exp = `three`
                                         act = /kro/cl_ui5_util_context=>get_comp_str( val = ls_nested
@@ -3333,15 +3412,15 @@ CLASS ltcl_data_box IMPLEMENTATION.
     " with its component names
     DATA lt_row TYPE ty_t_row.
 
-    DATA temp181 TYPE ltcl_data_box=>ty_t_row.
-    DATA temp182 LIKE LINE OF temp181.
+    DATA temp190 TYPE ltcl_data_box=>ty_t_row.
+    DATA temp191 LIKE LINE OF temp190.
     DATA ls_box TYPE /kro/cl_ui5_util_context=>ty_s_msg_box.
-    CLEAR temp181.
+    CLEAR temp190.
 
-    temp182-carrid = `LH`.
-    temp182-seats = 12.
-    INSERT temp182 INTO TABLE temp181.
-    lt_row = temp181.
+    temp191-carrid = `LH`.
+    temp191-seats = 12.
+    INSERT temp191 INTO TABLE temp190.
+    lt_row = temp190.
 
 
     ls_box = /kro/cl_ui5_util_context=>ui5_data_box_format( lt_row ).
@@ -3410,14 +3489,14 @@ CLASS ltcl_data_box IMPLEMENTATION.
     " able to close the list the renderer is building
     DATA lt_row TYPE ty_t_row.
 
-    DATA temp183 TYPE ltcl_data_box=>ty_t_row.
-    DATA temp184 LIKE LINE OF temp183.
+    DATA temp192 TYPE ltcl_data_box=>ty_t_row.
+    DATA temp193 LIKE LINE OF temp192.
     DATA ls_box TYPE /kro/cl_ui5_util_context=>ty_s_msg_box.
-    CLEAR temp183.
+    CLEAR temp192.
 
-    temp184-carrid = `</ul><script>`.
-    INSERT temp184 INTO TABLE temp183.
-    lt_row = temp183.
+    temp193-carrid = `</ul><script>`.
+    INSERT temp193 INTO TABLE temp192.
+    lt_row = temp192.
 
 
     ls_box = /kro/cl_ui5_util_context=>ui5_data_box_format( lt_row ).
@@ -3434,15 +3513,15 @@ CLASS ltcl_data_box IMPLEMENTATION.
     " a dump is a diagnostic, not a report: the box stops after 100 rows and
     " says how many it left out
     DATA lt_row TYPE ty_t_row.
-      DATA temp185 TYPE ltcl_data_box=>ty_s_row.
+      DATA temp194 TYPE ltcl_data_box=>ty_s_row.
     DATA ls_box TYPE /kro/cl_ui5_util_context=>ty_s_msg_box.
     DATA temp10 TYPE xsdboolean.
 
     DO 105 TIMES.
 
-      CLEAR temp185.
-      temp185-seats = sy-index.
-      INSERT temp185 INTO TABLE lt_row.
+      CLEAR temp194.
+      temp194-seats = sy-index.
+      INSERT temp194 INTO TABLE lt_row.
     ENDDO.
 
 
@@ -3687,6 +3766,7 @@ CLASS ltcl_edge DEFINITION FINAL
     METHODS test_trim_many_layers       FOR TESTING RAISING cx_static_check.
     METHODS test_utf8_roundtrip         FOR TESTING RAISING cx_static_check.
     METHODS test_utf8_empty             FOR TESTING RAISING cx_static_check.
+    METHODS test_utf8_invalid           FOR TESTING RAISING cx_static_check.
     METHODS test_base64_roundtrip       FOR TESTING RAISING cx_static_check.
     METHODS test_escape_html_entity     FOR TESTING RAISING cx_static_check.
     METHODS test_struc_pairs_signs      FOR TESTING RAISING cx_static_check.
@@ -3752,45 +3832,45 @@ CLASS ltcl_edge IMPLEMENTATION.
     " `?debug&a=1` - a flag without `=` is a parameter with an empty value,
     " and it does not swallow the one after it
     DATA lt_param TYPE /kro/cl_ui5_util_context=>ty_t_name_value.
-    FIELD-SYMBOLS <temp186> LIKE LINE OF lt_param.
-    DATA temp187 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp188> LIKE LINE OF lt_param.
-    DATA temp189 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp190> LIKE LINE OF lt_param.
-    DATA temp191 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp195> LIKE LINE OF lt_param.
+    DATA temp196 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp197> LIKE LINE OF lt_param.
+    DATA temp198 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp199> LIKE LINE OF lt_param.
+    DATA temp200 LIKE sy-tabix.
     lt_param = /kro/cl_ui5_util_context=>url_param_get_tab( `?debug&a=1` ).
 
     cl_abap_unit_assert=>assert_equals( exp = 2
                                         act = lines( lt_param ) ).
 
 
-    temp187 = sy-tabix.
-    READ TABLE lt_param INDEX 1 ASSIGNING <temp186>.
-    sy-tabix = temp187.
+    temp196 = sy-tabix.
+    READ TABLE lt_param INDEX 1 ASSIGNING <temp195>.
+    sy-tabix = temp196.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `debug`
-                                        act = <temp186>-n ).
+                                        act = <temp195>-n ).
 
 
-    temp189 = sy-tabix.
-    READ TABLE lt_param INDEX 1 ASSIGNING <temp188>.
-    sy-tabix = temp189.
+    temp198 = sy-tabix.
+    READ TABLE lt_param INDEX 1 ASSIGNING <temp197>.
+    sy-tabix = temp198.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_initial( <temp188>-v ).
+    cl_abap_unit_assert=>assert_initial( <temp197>-v ).
 
 
-    temp191 = sy-tabix.
-    READ TABLE lt_param INDEX 2 ASSIGNING <temp190>.
-    sy-tabix = temp191.
+    temp200 = sy-tabix.
+    READ TABLE lt_param INDEX 2 ASSIGNING <temp199>.
+    sy-tabix = temp200.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `1`
-                                        act = <temp190>-v ).
+                                        act = <temp199>-v ).
 
   ENDMETHOD.
 
@@ -3799,17 +3879,17 @@ CLASS ltcl_edge IMPLEMENTATION.
     " an empty LAST value keeps its `=` - only the separator behind it goes
     DATA lt_params TYPE /kro/cl_ui5_util_context=>ty_t_name_value.
 
-    DATA temp192 TYPE /kro/cl_ui5_util_context=>ty_t_name_value.
-    DATA temp193 LIKE LINE OF temp192.
-    CLEAR temp192.
+    DATA temp201 TYPE /kro/cl_ui5_util_context=>ty_t_name_value.
+    DATA temp202 LIKE LINE OF temp201.
+    CLEAR temp201.
 
-    temp193-n = `a`.
-    temp193-v = `1`.
-    INSERT temp193 INTO TABLE temp192.
-    temp193-n = `b`.
-    temp193-v = ``.
-    INSERT temp193 INTO TABLE temp192.
-    lt_params = temp192.
+    temp202-n = `a`.
+    temp202-v = `1`.
+    INSERT temp202 INTO TABLE temp201.
+    temp202-n = `b`.
+    temp202-v = ``.
+    INSERT temp202 INTO TABLE temp201.
+    lt_params = temp201.
 
     cl_abap_unit_assert=>assert_equals(
         exp = `a=1&b=`
@@ -3889,6 +3969,25 @@ CLASS ltcl_edge IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD test_utf8_invalid.
+        DATA temp203 TYPE xstring.
+        DATA lx TYPE REF TO /kro/cx_ui5_util_error.
+
+    " bytes that are no UTF-8 - a lone continuation byte - are reported as
+    " such, not as a missing codepage API
+    TRY.
+
+        temp203 = `41FF42`.
+        /kro/cl_ui5_util_context=>conv_get_string_by_xstring( temp203 ).
+        cl_abap_unit_assert=>fail( `invalid UTF-8 was accepted` ).
+
+      CATCH /kro/cx_ui5_util_error INTO lx.
+        cl_abap_unit_assert=>assert_char_cp( act = lx->get_text( )
+                                             exp = `INVALID_UTF8*` ).
+    ENDTRY.
+
+  ENDMETHOD.
+
   METHOD test_base64_roundtrip.
 
     DATA lv_empty TYPE xstring.
@@ -3935,55 +4034,55 @@ CLASS ltcl_edge IMPLEMENTATION.
         label  TYPE c LENGTH 10,
       END OF ty_s_num.
 
-    DATA temp194 TYPE ty_s_num.
-    DATA ls_num LIKE temp194.
+    DATA temp204 TYPE ty_s_num.
+    DATA ls_num LIKE temp204.
     DATA lt_pair TYPE /kro/cl_ui5_util_context=>ty_t_name_value.
-    FIELD-SYMBOLS <temp195> LIKE LINE OF lt_pair.
-    DATA temp196 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp197> LIKE LINE OF lt_pair.
-    DATA temp198 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp199> LIKE LINE OF lt_pair.
-    DATA temp200 LIKE sy-tabix.
-    CLEAR temp194.
-    temp194-count = -5.
-    temp194-amount = `-12.50`.
-    temp194-label = `abc`.
+    FIELD-SYMBOLS <temp205> LIKE LINE OF lt_pair.
+    DATA temp206 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp207> LIKE LINE OF lt_pair.
+    DATA temp208 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp209> LIKE LINE OF lt_pair.
+    DATA temp210 LIKE sy-tabix.
+    CLEAR temp204.
+    temp204-count = -5.
+    temp204-amount = `-12.50`.
+    temp204-label = `abc`.
 
-    ls_num = temp194.
+    ls_num = temp204.
 
 
     lt_pair = /kro/cl_ui5_util_context=>itab_get_by_struc( ls_num ).
 
 
 
-    temp196 = sy-tabix.
-    READ TABLE lt_pair WITH KEY n = `COUNT` ASSIGNING <temp195>.
-    sy-tabix = temp196.
+    temp206 = sy-tabix.
+    READ TABLE lt_pair WITH KEY n = `COUNT` ASSIGNING <temp205>.
+    sy-tabix = temp206.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `-5`
-                                        act = <temp195>-v ).
+                                        act = <temp205>-v ).
 
 
-    temp198 = sy-tabix.
-    READ TABLE lt_pair WITH KEY n = `AMOUNT` ASSIGNING <temp197>.
-    sy-tabix = temp198.
+    temp208 = sy-tabix.
+    READ TABLE lt_pair WITH KEY n = `AMOUNT` ASSIGNING <temp207>.
+    sy-tabix = temp208.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `-12.50`
-                                        act = <temp197>-v ).
+                                        act = <temp207>-v ).
 
 
-    temp200 = sy-tabix.
-    READ TABLE lt_pair WITH KEY n = `LABEL` ASSIGNING <temp199>.
-    sy-tabix = temp200.
+    temp210 = sy-tabix.
+    READ TABLE lt_pair WITH KEY n = `LABEL` ASSIGNING <temp209>.
+    sy-tabix = temp210.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `abc`
-                                        act = <temp199>-v ).
+                                        act = <temp209>-v ).
 
   ENDMETHOD.
 
@@ -4047,9 +4146,9 @@ CLASS ltcl_edge IMPLEMENTATION.
     DATA lv_sign TYPE string.
     DATA lv_option TYPE string.
     DATA lt_token TYPE /kro/cl_ui5_util_context=>ty_t_token.
-    FIELD-SYMBOLS <temp201> LIKE LINE OF lt_token.
-    DATA temp202 LIKE sy-tabix.
-    DATA temp203 TYPE /kro/cl_ui5_util_context=>ty_t_range.
+    FIELD-SYMBOLS <temp211> LIKE LINE OF lt_token.
+    DATA temp212 LIKE sy-tabix.
+    DATA temp213 TYPE /kro/cl_ui5_util_context=>ty_t_range.
 
     lv_sign   = `E`.
     lv_option = `BT`.
@@ -4064,17 +4163,17 @@ CLASS ltcl_edge IMPLEMENTATION.
 
 
 
-    temp202 = sy-tabix.
-    READ TABLE lt_token INDEX 1 ASSIGNING <temp201>.
-    sy-tabix = temp202.
+    temp212 = sy-tabix.
+    READ TABLE lt_token INDEX 1 ASSIGNING <temp211>.
+    sy-tabix = temp212.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `!(1...5)`
-                                        act = <temp201>-key ).
+                                        act = <temp211>-key ).
 
-    CLEAR temp203.
-    cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>filter_get_token_t_by_range_t( temp203 ) ).
+    CLEAR temp213.
+    cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>filter_get_token_t_by_range_t( temp213 ) ).
 
   ENDMETHOD.
 
@@ -4083,66 +4182,66 @@ CLASS ltcl_edge IMPLEMENTATION.
     " a CP / NP row whose LOW is a pattern already renders as that pattern -
     " the template's asterisks around it turned `abc*` into `*abc**`. A row
     " without an asterisk keeps the rendering it always had
-    DATA temp204 TYPE /kro/cl_ui5_util_context=>ty_t_range.
-    DATA temp205 LIKE LINE OF temp204.
-    DATA lt_range LIKE temp204.
+    DATA temp214 TYPE /kro/cl_ui5_util_context=>ty_t_range.
+    DATA temp215 LIKE LINE OF temp214.
+    DATA lt_range LIKE temp214.
     DATA lt_token TYPE /kro/cl_ui5_util_context=>ty_t_token.
-    FIELD-SYMBOLS <temp206> LIKE LINE OF lt_token.
-    DATA temp207 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp208> LIKE LINE OF lt_token.
-    DATA temp209 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp210> LIKE LINE OF lt_token.
-    DATA temp211 LIKE sy-tabix.
-    CLEAR temp204.
+    FIELD-SYMBOLS <temp216> LIKE LINE OF lt_token.
+    DATA temp217 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp218> LIKE LINE OF lt_token.
+    DATA temp219 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp220> LIKE LINE OF lt_token.
+    DATA temp221 LIKE sy-tabix.
+    CLEAR temp214.
 
-    temp205-sign = `I`.
-    temp205-option = `CP`.
-    temp205-low = `abc*`.
-    INSERT temp205 INTO TABLE temp204.
-    temp205-sign = `I`.
-    temp205-option = `NP`.
-    temp205-low = `*x`.
-    INSERT temp205 INTO TABLE temp204.
-    temp205-sign = `I`.
-    temp205-option = `CP`.
-    temp205-low = `xyz`.
-    INSERT temp205 INTO TABLE temp204.
+    temp215-sign = `I`.
+    temp215-option = `CP`.
+    temp215-low = `abc*`.
+    INSERT temp215 INTO TABLE temp214.
+    temp215-sign = `I`.
+    temp215-option = `NP`.
+    temp215-low = `*x`.
+    INSERT temp215 INTO TABLE temp214.
+    temp215-sign = `I`.
+    temp215-option = `CP`.
+    temp215-low = `xyz`.
+    INSERT temp215 INTO TABLE temp214.
 
-    lt_range = temp204.
+    lt_range = temp214.
 
 
     lt_token = /kro/cl_ui5_util_context=>filter_get_token_t_by_range_t( lt_range ).
 
 
 
-    temp207 = sy-tabix.
-    READ TABLE lt_token INDEX 1 ASSIGNING <temp206>.
-    sy-tabix = temp207.
+    temp217 = sy-tabix.
+    READ TABLE lt_token INDEX 1 ASSIGNING <temp216>.
+    sy-tabix = temp217.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `abc*`
-                                        act = <temp206>-key ).
+                                        act = <temp216>-key ).
 
 
-    temp209 = sy-tabix.
-    READ TABLE lt_token INDEX 2 ASSIGNING <temp208>.
-    sy-tabix = temp209.
+    temp219 = sy-tabix.
+    READ TABLE lt_token INDEX 2 ASSIGNING <temp218>.
+    sy-tabix = temp219.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `!(*x)`
-                                        act = <temp208>-key ).
+                                        act = <temp218>-key ).
 
 
-    temp211 = sy-tabix.
-    READ TABLE lt_token INDEX 3 ASSIGNING <temp210>.
-    sy-tabix = temp211.
+    temp221 = sy-tabix.
+    READ TABLE lt_token INDEX 3 ASSIGNING <temp220>.
+    sy-tabix = temp221.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `*xyz*`
-                                        act = <temp210>-key ).
+                                        act = <temp220>-key ).
 
   ENDMETHOD.
 
@@ -4320,17 +4419,17 @@ CLASS ltcl_coverage IMPLEMENTATION.
     DATA lt_sorted TYPE ty_t_sorted.
     DATA ls_flat TYPE ty_s_flat.
 
-    DATA temp212 LIKE REF TO lt_std.
-    DATA temp213 LIKE REF TO lt_sorted.
-    DATA temp214 LIKE REF TO ls_flat.
-    GET REFERENCE OF lt_std INTO temp212.
-cl_abap_unit_assert=>assert_equals( exp = abap_true act = /kro/cl_ui5_util_context=>rtti_check_table_standard( temp212 ) ).
+    DATA temp222 LIKE REF TO lt_std.
+    DATA temp223 LIKE REF TO lt_sorted.
+    DATA temp224 LIKE REF TO ls_flat.
+    GET REFERENCE OF lt_std INTO temp222.
+cl_abap_unit_assert=>assert_equals( exp = abap_true act = /kro/cl_ui5_util_context=>rtti_check_table_standard( temp222 ) ).
 
-    GET REFERENCE OF lt_sorted INTO temp213.
-cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_context=>rtti_check_table_standard( temp213 ) ).
+    GET REFERENCE OF lt_sorted INTO temp223.
+cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_context=>rtti_check_table_standard( temp223 ) ).
 
-    GET REFERENCE OF ls_flat INTO temp214.
-cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_context=>rtti_check_table_standard( temp214 ) ).
+    GET REFERENCE OF ls_flat INTO temp224.
+cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_context=>rtti_check_table_standard( temp224 ) ).
 
   ENDMETHOD.
 
@@ -4351,86 +4450,86 @@ cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_cont
     DATA lt_flat TYPE ty_t_flat.
 
     " the line of a standard table, every component with its json_kind
-    DATA temp215 LIKE REF TO lt_flat.
+    DATA temp225 LIKE REF TO lt_flat.
 DATA lt_comp TYPE /kro/cl_ui5_util_context=>ty_t_flat_comp.
-    FIELD-SYMBOLS <temp216> LIKE LINE OF lt_comp.
-    DATA temp217 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp218> LIKE LINE OF lt_comp.
-    DATA temp219 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp220> LIKE LINE OF lt_comp.
-    DATA temp221 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp222> LIKE LINE OF lt_comp.
-    DATA temp223 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp224> LIKE LINE OF lt_comp.
-    DATA temp225 LIKE sy-tabix.
     FIELD-SYMBOLS <temp226> LIKE LINE OF lt_comp.
     DATA temp227 LIKE sy-tabix.
-    GET REFERENCE OF lt_flat INTO temp215.
+    FIELD-SYMBOLS <temp228> LIKE LINE OF lt_comp.
+    DATA temp229 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp230> LIKE LINE OF lt_comp.
+    DATA temp231 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp232> LIKE LINE OF lt_comp.
+    DATA temp233 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp234> LIKE LINE OF lt_comp.
+    DATA temp235 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp236> LIKE LINE OF lt_comp.
+    DATA temp237 LIKE sy-tabix.
+    GET REFERENCE OF lt_flat INTO temp225.
 
-lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp215 ).
+lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp225 ).
 
     cl_abap_unit_assert=>assert_equals( exp = 5
                                         act = lines( lt_comp ) ).
 
 
-    temp217 = sy-tabix.
-    READ TABLE lt_comp INDEX 1 ASSIGNING <temp216>.
-    sy-tabix = temp217.
-    IF sy-subrc <> 0.
-      ASSERT 1 = 0.
-    ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `TEXT`
-                                        act = <temp216>-name ).
-
-
-    temp219 = sy-tabix.
-    READ TABLE lt_comp INDEX 1 ASSIGNING <temp218>.
-    sy-tabix = temp219.
-    IF sy-subrc <> 0.
-      ASSERT 1 = 0.
-    ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `S`
-                                        act = <temp218>-json_kind ).
-
-
-    temp221 = sy-tabix.
-    READ TABLE lt_comp INDEX 2 ASSIGNING <temp220>.
-    sy-tabix = temp221.
-    IF sy-subrc <> 0.
-      ASSERT 1 = 0.
-    ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `D`
-                                        act = <temp220>-json_kind ).
-
-
-    temp223 = sy-tabix.
-    READ TABLE lt_comp INDEX 3 ASSIGNING <temp222>.
-    sy-tabix = temp223.
-    IF sy-subrc <> 0.
-      ASSERT 1 = 0.
-    ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `T`
-                                        act = <temp222>-json_kind ).
-
-
-    temp225 = sy-tabix.
-    READ TABLE lt_comp INDEX 4 ASSIGNING <temp224>.
-    sy-tabix = temp225.
-    IF sy-subrc <> 0.
-      ASSERT 1 = 0.
-    ENDIF.
-    cl_abap_unit_assert=>assert_equals( exp = `B`
-                                        act = <temp224>-json_kind ).
-
-
     temp227 = sy-tabix.
-    READ TABLE lt_comp INDEX 5 ASSIGNING <temp226>.
+    READ TABLE lt_comp INDEX 1 ASSIGNING <temp226>.
     sy-tabix = temp227.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `TEXT`
+                                        act = <temp226>-name ).
+
+
+    temp229 = sy-tabix.
+    READ TABLE lt_comp INDEX 1 ASSIGNING <temp228>.
+    sy-tabix = temp229.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `S`
+                                        act = <temp228>-json_kind ).
+
+
+    temp231 = sy-tabix.
+    READ TABLE lt_comp INDEX 2 ASSIGNING <temp230>.
+    sy-tabix = temp231.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `D`
+                                        act = <temp230>-json_kind ).
+
+
+    temp233 = sy-tabix.
+    READ TABLE lt_comp INDEX 3 ASSIGNING <temp232>.
+    sy-tabix = temp233.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `T`
+                                        act = <temp232>-json_kind ).
+
+
+    temp235 = sy-tabix.
+    READ TABLE lt_comp INDEX 4 ASSIGNING <temp234>.
+    sy-tabix = temp235.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
+    cl_abap_unit_assert=>assert_equals( exp = `B`
+                                        act = <temp234>-json_kind ).
+
+
+    temp237 = sy-tabix.
+    READ TABLE lt_comp INDEX 5 ASSIGNING <temp236>.
+    sy-tabix = temp237.
+    IF sy-subrc <> 0.
+      ASSERT 1 = 0.
+    ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `N`
-                                        act = <temp226>-json_kind ).
+                                        act = <temp236>-json_kind ).
 
   ENDMETHOD.
 
@@ -4441,17 +4540,17 @@ lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp215 ).
     DATA lv_text TYPE string.
 
     " a sorted table, a nested structure, a scalar: none is flat
-    DATA temp228 LIKE REF TO lt_sorted.
-    DATA temp229 LIKE REF TO ls_nested.
-    DATA temp230 LIKE REF TO lv_text.
-    GET REFERENCE OF lt_sorted INTO temp228.
-cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_components( temp228 ) ).
+    DATA temp238 LIKE REF TO lt_sorted.
+    DATA temp239 LIKE REF TO ls_nested.
+    DATA temp240 LIKE REF TO lv_text.
+    GET REFERENCE OF lt_sorted INTO temp238.
+cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_components( temp238 ) ).
 
-    GET REFERENCE OF ls_nested INTO temp229.
-cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_components( temp229 ) ).
+    GET REFERENCE OF ls_nested INTO temp239.
+cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_components( temp239 ) ).
 
-    GET REFERENCE OF lv_text INTO temp230.
-cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_components( temp230 ) ).
+    GET REFERENCE OF lv_text INTO temp240.
+cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_components( temp240 ) ).
 
   ENDMETHOD.
 
@@ -4463,7 +4562,7 @@ cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_com
 
     " the fields of an include in its place, under the names the structure
     " addresses them by - the name of the include itself is none of them
-    DATA temp231 LIKE REF TO ls_incl.
+    DATA temp241 LIKE REF TO ls_incl.
 DATA lt_comp TYPE /kro/cl_ui5_util_context=>ty_t_flat_comp.
     DATA temp12 TYPE xsdboolean.
     DATA temp2 LIKE sy-subrc.
@@ -4473,25 +4572,25 @@ DATA lt_comp TYPE /kro/cl_ui5_util_context=>ty_t_flat_comp.
     DATA temp5 LIKE sy-subrc.
     DATA temp6 LIKE sy-subrc.
     DATA temp7 LIKE sy-tabix.
-    DATA temp232 LIKE REF TO ls_suffix.
-    FIELD-SYMBOLS <temp233> LIKE LINE OF lt_comp.
-    DATA temp234 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp235> LIKE LINE OF lt_comp.
-    DATA temp236 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp237> LIKE LINE OF lt_comp.
-    DATA temp238 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp239> LIKE LINE OF lt_comp.
-    DATA temp240 LIKE sy-tabix.
+    DATA temp242 LIKE REF TO ls_suffix.
+    FIELD-SYMBOLS <temp243> LIKE LINE OF lt_comp.
+    DATA temp244 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp245> LIKE LINE OF lt_comp.
+    DATA temp246 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp247> LIKE LINE OF lt_comp.
+    DATA temp248 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp249> LIKE LINE OF lt_comp.
+    DATA temp250 LIKE sy-tabix.
     DATA temp14 TYPE xsdboolean.
     DATA temp8 LIKE sy-subrc.
     FIELD-SYMBOLS <cell> TYPE any.
-    DATA temp241 LIKE LINE OF lt_comp.
-    DATA lr_comp LIKE REF TO temp241.
+    DATA temp251 LIKE LINE OF lt_comp.
+    DATA lr_comp LIKE REF TO temp251.
       DATA temp15 TYPE xsdboolean.
-    DATA temp242 LIKE REF TO ls_deep.
-    GET REFERENCE OF ls_incl INTO temp231.
+    DATA temp252 LIKE REF TO ls_deep.
+    GET REFERENCE OF ls_incl INTO temp241.
 
-lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp231 ).
+lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp241 ).
     cl_abap_unit_assert=>assert_equals( exp = 2
                                         act = lines( lt_comp ) ).
 
@@ -4520,50 +4619,50 @@ lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp231 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp13 ).
 
 
-    GET REFERENCE OF ls_suffix INTO temp232.
-lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp232 ).
+    GET REFERENCE OF ls_suffix INTO temp242.
+lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp242 ).
     cl_abap_unit_assert=>assert_equals( exp = 6
                                         act = lines( lt_comp ) ).
 
 
-    temp234 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `TEXT_X` ASSIGNING <temp233>.
-    sy-tabix = temp234.
+    temp244 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `TEXT_X` ASSIGNING <temp243>.
+    sy-tabix = temp244.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `S`
-                                        act = <temp233>-json_kind ).
+                                        act = <temp243>-json_kind ).
 
 
-    temp236 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `DATE_X` ASSIGNING <temp235>.
-    sy-tabix = temp236.
+    temp246 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `DATE_X` ASSIGNING <temp245>.
+    sy-tabix = temp246.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `D`
-                                        act = <temp235>-json_kind ).
+                                        act = <temp245>-json_kind ).
 
 
-    temp238 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `FLAG_X` ASSIGNING <temp237>.
-    sy-tabix = temp238.
+    temp248 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `FLAG_X` ASSIGNING <temp247>.
+    sy-tabix = temp248.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `B`
-                                        act = <temp237>-json_kind ).
+                                        act = <temp247>-json_kind ).
 
 
-    temp240 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `NUM_X` ASSIGNING <temp239>.
-    sy-tabix = temp240.
+    temp250 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `NUM_X` ASSIGNING <temp249>.
+    sy-tabix = temp250.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `N`
-                                        act = <temp239>-json_kind ).
+                                        act = <temp249>-json_kind ).
 
 
     READ TABLE lt_comp WITH KEY name = `S_FLAT` TRANSPORTING NO FIELDS.
@@ -4585,8 +4684,8 @@ lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp232 ).
 
     " an include that brings a nested structure: not flat
 
-    GET REFERENCE OF ls_deep INTO temp242.
-cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_components( temp242 ) ).
+    GET REFERENCE OF ls_deep INTO temp252.
+cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_components( temp252 ) ).
 
   ENDMETHOD.
 
@@ -4594,36 +4693,36 @@ cl_abap_unit_assert=>assert_initial( /kro/cl_ui5_util_context=>rtti_get_flat_com
 
     DATA ls_stamps TYPE ty_s_stamps.
 
-    DATA temp243 LIKE REF TO ls_stamps.
+    DATA temp253 LIKE REF TO ls_stamps.
 DATA lt_comp TYPE /kro/cl_ui5_util_context=>ty_t_flat_comp.
-    FIELD-SYMBOLS <temp244> LIKE LINE OF lt_comp.
-    DATA temp245 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp246> LIKE LINE OF lt_comp.
-    DATA temp247 LIKE sy-tabix.
-    GET REFERENCE OF ls_stamps INTO temp243.
+    FIELD-SYMBOLS <temp254> LIKE LINE OF lt_comp.
+    DATA temp255 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp256> LIKE LINE OF lt_comp.
+    DATA temp257 LIKE sy-tabix.
+    GET REFERENCE OF ls_stamps INTO temp253.
 
-lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp243 ).
+lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp253 ).
 
 
 
-    temp245 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `TS` ASSIGNING <temp244>.
-    sy-tabix = temp245.
+    temp255 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `TS` ASSIGNING <temp254>.
+    sy-tabix = temp255.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `U`
-                                        act = <temp244>-json_kind ).
+                                        act = <temp254>-json_kind ).
 
 
-    temp247 = sy-tabix.
-    READ TABLE lt_comp WITH KEY name = `TSL` ASSIGNING <temp246>.
-    sy-tabix = temp247.
+    temp257 = sy-tabix.
+    READ TABLE lt_comp WITH KEY name = `TSL` ASSIGNING <temp256>.
+    sy-tabix = temp257.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `L`
-                                        act = <temp246>-json_kind ).
+                                        act = <temp256>-json_kind ).
 
   ENDMETHOD.
 
@@ -4659,46 +4758,46 @@ lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp243 ).
     DATA ls_with_incl TYPE ty_s_with_incl.
     DATA lv_text TYPE string.
 
-    DATA temp248 TYPE REF TO cl_abap_datadescr.
+    DATA temp258 TYPE REF TO cl_abap_datadescr.
     DATA lt_comp TYPE abap_component_tab.
-    FIELD-SYMBOLS <temp249> LIKE LINE OF lt_comp.
-    DATA temp250 LIKE sy-tabix.
-    FIELD-SYMBOLS <temp251> LIKE LINE OF lt_comp.
-    DATA temp252 LIKE sy-tabix.
-        DATA temp253 TYPE REF TO cl_abap_datadescr.
-    temp248 ?= cl_abap_typedescr=>describe_by_data( ls_with_incl ).
+    FIELD-SYMBOLS <temp259> LIKE LINE OF lt_comp.
+    DATA temp260 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp261> LIKE LINE OF lt_comp.
+    DATA temp262 LIKE sy-tabix.
+        DATA temp263 TYPE REF TO cl_abap_datadescr.
+    temp258 ?= cl_abap_typedescr=>describe_by_data( ls_with_incl ).
 
     lt_comp = /kro/cl_ui5_util_context=>rtti_get_t_attri_by_include(
-        temp248 ).
+        temp258 ).
     cl_abap_unit_assert=>assert_equals( exp = 2
                                         act = lines( lt_comp ) ).
 
 
-    temp250 = sy-tabix.
-    READ TABLE lt_comp INDEX 1 ASSIGNING <temp249>.
-    sy-tabix = temp250.
+    temp260 = sy-tabix.
+    READ TABLE lt_comp INDEX 1 ASSIGNING <temp259>.
+    sy-tabix = temp260.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `NAME`
-                                        act = <temp249>-name ).
+                                        act = <temp259>-name ).
 
 
-    temp252 = sy-tabix.
-    READ TABLE lt_comp INDEX 2 ASSIGNING <temp251>.
-    sy-tabix = temp252.
+    temp262 = sy-tabix.
+    READ TABLE lt_comp INDEX 2 ASSIGNING <temp261>.
+    sy-tabix = temp262.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `ZIP`
-                                        act = <temp251>-name ).
+                                        act = <temp261>-name ).
 
     " no structure: the error names it, it is no dump
     TRY.
 
-        temp253 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
+        temp263 ?= cl_abap_typedescr=>describe_by_data( lv_text ).
         /kro/cl_ui5_util_context=>rtti_get_t_attri_by_include(
-            temp253 ).
+            temp263 ).
         cl_abap_unit_assert=>fail( `a non-structure include must raise` ).
       CATCH /kro/cx_ui5_util_error ##NO_HANDLER.
     ENDTRY.
@@ -4709,14 +4808,14 @@ lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp243 ).
 
     DATA ls_with_incl TYPE ty_s_with_incl.
 
-    DATA temp254 TYPE REF TO cl_abap_structdescr.
+    DATA temp264 TYPE REF TO cl_abap_structdescr.
     DATA lt_raw TYPE abap_component_tab.
     DATA lt_comp TYPE abap_component_tab.
     DATA temp16 TYPE xsdboolean.
     DATA temp9 LIKE sy-subrc.
-    temp254 ?= cl_abap_typedescr=>describe_by_data( ls_with_incl ).
+    temp264 ?= cl_abap_typedescr=>describe_by_data( ls_with_incl ).
 
-    lt_raw = temp254->get_components( ).
+    lt_raw = temp264->get_components( ).
 
     lt_comp = /kro/cl_ui5_util_context=>expand_components( lt_raw ).
 
@@ -4744,16 +4843,16 @@ lt_comp = /kro/cl_ui5_util_context=>rtti_get_flat_components( temp243 ).
     DATA lv_empty TYPE string.
     DATA lv_full TYPE string VALUE `x`.
     DATA lr_none TYPE REF TO data.
-    DATA temp255 LIKE REF TO lv_empty.
-    DATA temp256 LIKE REF TO lv_full.
+    DATA temp265 LIKE REF TO lv_empty.
+    DATA temp266 LIKE REF TO lv_full.
 
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = /kro/cl_ui5_util_context=>check_unassign_initial( lr_none ) ).
 
-    GET REFERENCE OF lv_empty INTO temp255.
-cl_abap_unit_assert=>assert_equals( exp = abap_true act = /kro/cl_ui5_util_context=>check_unassign_initial( temp255 ) ).
+    GET REFERENCE OF lv_empty INTO temp265.
+cl_abap_unit_assert=>assert_equals( exp = abap_true act = /kro/cl_ui5_util_context=>check_unassign_initial( temp265 ) ).
 
-    GET REFERENCE OF lv_full INTO temp256.
-cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_context=>check_unassign_initial( temp256 ) ).
+    GET REFERENCE OF lv_full INTO temp266.
+cl_abap_unit_assert=>assert_equals( exp = abap_false act = /kro/cl_ui5_util_context=>check_unassign_initial( temp266 ) ).
 
   ENDMETHOD.
 

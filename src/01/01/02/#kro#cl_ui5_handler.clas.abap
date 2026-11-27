@@ -164,15 +164,6 @@ CLASS /kro/cl_ui5_handler DEFINITION PUBLIC FINAL.
         VALUE(result) TYPE string.
 
   PRIVATE SECTION.
-    " the prologue of hash_get_shell_part - see the method body
-    CLASS-METHODS hash_split
-      IMPORTING
-        iv_hash      TYPE string
-      EXPORTING
-        ev_hash      TYPE string
-        ev_off       TYPE i
-        ev_check_app TYPE abap_bool.
-
     " upper bound for nav_app_call/nav_app_leave hops within a single
     " request - an app that navigates unconditionally in main( ) would
     " otherwise loop the work process forever. Writable instance DATA, not a
@@ -734,43 +725,6 @@ CLASS /kro/cl_ui5_handler IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD hash_split.
-
-    " The prologue of the split (it had a second caller, the app half, until
-    " the frontend took over reading routes). Strip the leading '#'; then decide the
-    " one shape that needs no search: an app hash starts with '/', a shell
-    " hash never does, and checking this BEFORE the '&/' search matters,
-    " because an app hash may itself contain '&/' in a parameter and
-    " splitting on that would truncate it (or fabricate a shell part out
-    " of an app-owned prefix). ev_off is the offset of '&/' in ev_hash, or
-    " -1 when there is none; ev_check_app says the leading-'/' shape was
-    " met, which the shell half answers differently from "no separator"
-    ev_hash      = iv_hash.
-    ev_off       = -1.
-    ev_check_app = abap_false.
-
-    IF ev_hash IS INITIAL.
-      RETURN.
-    ENDIF.
-
-    IF ev_hash(1) = `#`.
-      ev_hash = substring( val = ev_hash
-                           off = 1 ).
-      IF ev_hash IS INITIAL.
-        RETURN.
-      ENDIF.
-    ENDIF.
-
-    IF ev_hash(1) = `/`.
-      ev_check_app = abap_true.
-      RETURN.
-    ENDIF.
-
-    ev_off = find( val = ev_hash
-                   sub = `&/` ).
-
-  ENDMETHOD.
-
   METHOD hash_get_shell_part.
     " The part of a browser hash the
     " launchpad SHELL owns - everything in front of '&/'
@@ -780,18 +734,31 @@ CLASS /kro/cl_ui5_handler IMPLEMENTATION.
     " z2ui5_cl_ui5_client->app_state_get_href keeps the shell part in the
     " link it composes, so the recipient lands in this app instead of on the
     " launchpad home page.
-    DATA lv_hash TYPE string.
+    DATA lv_hash LIKE iv_hash.
     DATA lv_off TYPE i.
-    DATA lv_check_app TYPE abap_bool.
-    hash_split( EXPORTING iv_hash      = iv_hash
-                IMPORTING ev_hash      = lv_hash
-                          ev_off       = lv_off
-                          ev_check_app = lv_check_app ).
+    lv_hash = iv_hash.
+    IF lv_hash IS INITIAL.
+      RETURN.
+    ENDIF.
+    IF lv_hash(1) = `#`.
+      lv_hash = substring( val = lv_hash
+                           off = 1 ).
+      IF lv_hash IS INITIAL.
+        RETURN.
+      ENDIF.
+    ENDIF.
 
-    IF lv_hash IS INITIAL OR lv_check_app = abap_true.
+    " an app hash starts with '/', a shell hash never does - decided BEFORE
+    " the '&/' search, because an app hash may itself contain '&/' in a
+    " parameter, and splitting on that would truncate it (or fabricate a
+    " shell part out of an app-owned prefix)
+    IF lv_hash(1) = `/`.
       RETURN.
     ENDIF.
 
+
+    lv_off = find( val = lv_hash
+                         sub = `&/` ).
     IF lv_off < 0.
       " no separator: an inner hash reads as app (canonical, the default),
       " a raw location hash as a bare launchpad intent - all shell. See the
@@ -1024,7 +991,7 @@ CLASS /kro/cl_ui5_handler IMPLEMENTATION.
     DATA temp48 TYPE string.
     DATA temp2 TYPE string.
     DATA temp1 TYPE string.
-    DATA temp89 TYPE string.
+    DATA temp90 TYPE string.
 
     " The request may have died before any of this existed - a bad JSON body
     " leaves the action without an app, an unknown app class leaves the app
@@ -1035,11 +1002,15 @@ CLASS /kro/cl_ui5_handler IMPLEMENTATION.
     " ...and only once THIS request was parsed: before that, a sticky
     " handler's action is the previous roundtrip's, whose event and draft
     " have nothing to do with the body that just failed
+    " The event name and the draft id come off the request as well (a
+    " window event's name is even an argument of it): the same strip as the
+    " url below, then the cap - an event or a draft id of a real app is
+    " letters, digits and _ - and keeps its spelling.
     IF mo_action IS BOUND AND mv_request_parsed = abap_true.
-      lv_event = context_info_cap( mo_action->ms_actual-event ).
+      lv_event = context_info_cap( context_info_url_safe( mo_action->ms_actual-event ) ).
 
       IF mo_action->mo_app IS BOUND.
-        lv_draft = context_info_cap( mo_action->mo_app->ms_draft-id_prev ).
+        lv_draft = context_info_cap( context_info_url_safe( mo_action->mo_app->ms_draft-id_prev ) ).
 
         IF mo_action->mo_app->mo_app IS BOUND.
           lv_app = /kro/cl_ui5_util_context=>rtti_get_classname_by_ref( mo_action->mo_app->mo_app ).
@@ -1048,8 +1019,8 @@ CLASS /kro/cl_ui5_handler IMPLEMENTATION.
     ENDIF.
 
     " the url comes from the client - stripped to safe characters like
-    " app_start below (context_info_url_safe), then capped like the event
-    " and the draft id above (context_info_cap)
+    " app_start below and the event and the draft id above
+    " (context_info_url_safe), then capped like them (context_info_cap)
 
     lv_url = context_info_cap( context_info_url_safe( ms_request-s_front-pathname && ms_request-s_front-search ) ).
 
@@ -1087,16 +1058,16 @@ CLASS /kro/cl_ui5_handler IMPLEMENTATION.
     ENDIF.
 
     IF lv_url IS NOT INITIAL.
-      temp89 = |, url { lv_url }|.
+      temp90 = |, url { lv_url }|.
     ELSE.
-      CLEAR temp89.
+      CLEAR temp90.
     ENDIF.
     result = |Request failed| &&
              temp138 &&
              temp48 &&
              temp2 &&
              temp1 &&
-             temp89.
+             temp90.
 
   ENDMETHOD.
 

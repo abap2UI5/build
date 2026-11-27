@@ -41,6 +41,7 @@ CLASS ltcl_pop_w_sel DEFINITION FINAL FOR TESTING
     METHODS single_row_pressed FOR TESTING.
     METHODS single_selection_replaced FOR TESTING.
     METHODS elementary_line FOR TESTING.
+    METHODS sort_field_honoured FOR TESTING.
 ENDCLASS.
 
 
@@ -184,22 +185,54 @@ CLASS ltcl_pop_w_sel IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD sort_field_honoured.
+
+    FIELD-SYMBOLS <out> TYPE STANDARD TABLE.
+
+    " i_sort_field and i_descending were stored and never used
+    DATA temp9 TYPE string_table.
+    DATA cut TYPE REF TO /kro/cl_layo_pop_w_sel.
+    FIELD-SYMBOLS <first> TYPE any.
+    FIELD-SYMBOLS <product> TYPE any.
+    CLEAR temp9.
+    INSERT `PRODUCT` INTO TABLE temp9.
+    INSERT `QUANTITY` INTO TABLE temp9.
+
+    cut = new_cut( tab     = rows( )
+                         columns = temp9 ).
+    cut->sort_field = `quantity`.
+    cut->descending = abap_true.
+    cut->set_output_table( ).
+    cut->sort_output_table( ).
+
+    ASSIGN cut->mr_out->* TO <out>.
+
+    READ TABLE <out> INDEX 1 ASSIGNING <first>.
+    cl_abap_unit_assert=>assert_subrc( ).
+
+    ASSIGN COMPONENT `PRODUCT` OF STRUCTURE <first> TO <product>.
+    cl_abap_unit_assert=>assert_subrc( ).
+    cl_abap_unit_assert=>assert_equals( exp = `Lamp 4`
+                                        act = <product> ).
+
+  ENDMETHOD.
+
   METHOD multi_keeps_sel_over_search.
 
     FIELD-SYMBOLS <table> TYPE ty_t_row.
     FIELD-SYMBOLS <out>   TYPE STANDARD TABLE.
 
-    DATA temp9 TYPE string_table.
+    DATA temp11 TYPE string_table.
     DATA cut TYPE REF TO /kro/cl_layo_pop_w_sel.
-    DATA temp11 TYPE ty_t_row.
-    DATA temp12 LIKE LINE OF temp11.
-    CLEAR temp9.
-    INSERT `PRODUCT` INTO TABLE temp9.
-    INSERT `QUANTITY` INTO TABLE temp9.
+    DATA temp13 TYPE ty_t_row.
+    DATA temp14 LIKE LINE OF temp13.
+    CLEAR temp11.
+    INSERT `PRODUCT` INTO TABLE temp11.
+    INSERT `QUANTITY` INTO TABLE temp11.
 
     cut = new_cut( tab         = rows( )
                          multiselect = abap_true
-                         columns     = temp9 ).
+                         columns     = temp11 ).
     cut->set_output_table( ).
 
     select_on_screen( cut    = cut
@@ -226,18 +259,18 @@ CLASS ltcl_pop_w_sel IMPLEMENTATION.
 
     ASSIGN cut->ms_result-table->* TO <table>.
 
-    CLEAR temp11.
+    CLEAR temp13.
 
-    temp12-product = `Chair 2`.
-    temp12-quantity = 20.
-    INSERT temp12 INTO TABLE temp11.
-    temp12-product = `Sofa 3`.
-    temp12-quantity = 30.
-    INSERT temp12 INTO TABLE temp11.
-    temp12-product = `Lamp 4`.
-    temp12-quantity = 40.
-    INSERT temp12 INTO TABLE temp11.
-    cl_abap_unit_assert=>assert_equals( exp = temp11
+    temp14-product = `Chair 2`.
+    temp14-quantity = 20.
+    INSERT temp14 INTO TABLE temp13.
+    temp14-product = `Sofa 3`.
+    temp14-quantity = 30.
+    INSERT temp14 INTO TABLE temp13.
+    temp14-product = `Lamp 4`.
+    temp14-quantity = 40.
+    INSERT temp14 INTO TABLE temp13.
+    cl_abap_unit_assert=>assert_equals( exp = temp13
                                         act = <table> ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true
                                         act = cut->result( )-check_confirmed ).
@@ -249,16 +282,16 @@ CLASS ltcl_pop_w_sel IMPLEMENTATION.
     FIELD-SYMBOLS <table> TYPE ty_t_row.
     FIELD-SYMBOLS <row>   TYPE ty_s_row.
 
-    DATA temp13 TYPE string_table.
+    DATA temp15 TYPE string_table.
     DATA cut TYPE REF TO /kro/cl_layo_pop_w_sel.
-    DATA temp15 TYPE ty_t_row.
-    DATA temp16 LIKE LINE OF temp15.
-    CLEAR temp13.
-    INSERT `PRODUCT` INTO TABLE temp13.
-    INSERT `QUANTITY` INTO TABLE temp13.
+    DATA temp17 TYPE ty_t_row.
+    DATA temp18 LIKE LINE OF temp17.
+    CLEAR temp15.
+    INSERT `PRODUCT` INTO TABLE temp15.
+    INSERT `QUANTITY` INTO TABLE temp15.
 
     cut = new_cut( tab     = rows( )
-                         columns = temp13 ).
+                         columns = temp15 ).
     cut->set_output_table( ).
 
     cut->select_row( `3` ).
@@ -266,12 +299,12 @@ CLASS ltcl_pop_w_sel IMPLEMENTATION.
 
     ASSIGN cut->ms_result-table->* TO <table>.
 
-    CLEAR temp15.
+    CLEAR temp17.
 
-    temp16-product = `Sofa 3`.
-    temp16-quantity = 30.
-    INSERT temp16 INTO TABLE temp15.
-    cl_abap_unit_assert=>assert_equals( exp = temp15
+    temp18-product = `Sofa 3`.
+    temp18-quantity = 30.
+    INSERT temp18 INTO TABLE temp17.
+    cl_abap_unit_assert=>assert_equals( exp = temp17
                                         act = <table> ).
     ASSIGN cut->ms_result-row->* TO <row>.
     cl_abap_unit_assert=>assert_equals( exp = `Sofa 3`
@@ -283,16 +316,16 @@ CLASS ltcl_pop_w_sel IMPLEMENTATION.
 
     FIELD-SYMBOLS <table> TYPE ty_t_row.
 
-    DATA temp17 TYPE string_table.
+    DATA temp19 TYPE string_table.
     DATA cut TYPE REF TO /kro/cl_layo_pop_w_sel.
-    DATA temp19 TYPE ty_t_row.
-    DATA temp20 LIKE LINE OF temp19.
-    CLEAR temp17.
-    INSERT `PRODUCT` INTO TABLE temp17.
-    INSERT `QUANTITY` INTO TABLE temp17.
+    DATA temp21 TYPE ty_t_row.
+    DATA temp22 LIKE LINE OF temp21.
+    CLEAR temp19.
+    INSERT `PRODUCT` INTO TABLE temp19.
+    INSERT `QUANTITY` INTO TABLE temp19.
 
     cut = new_cut( tab     = rows( )
-                         columns = temp17 ).
+                         columns = temp19 ).
     cut->set_output_table( ).
 
     select_on_screen( cut    = cut
@@ -308,12 +341,12 @@ CLASS ltcl_pop_w_sel IMPLEMENTATION.
 
     ASSIGN cut->ms_result-table->* TO <table>.
 
-    CLEAR temp19.
+    CLEAR temp21.
 
-    temp20-product = `Lamp 4`.
-    temp20-quantity = 40.
-    INSERT temp20 INTO TABLE temp19.
-    cl_abap_unit_assert=>assert_equals( exp = temp19
+    temp22-product = `Lamp 4`.
+    temp22-quantity = 40.
+    INSERT temp22 INTO TABLE temp21.
+    cl_abap_unit_assert=>assert_equals( exp = temp21
                                         act = <table> ).
 
   ENDMETHOD.
@@ -323,19 +356,19 @@ CLASS ltcl_pop_w_sel IMPLEMENTATION.
     FIELD-SYMBOLS <table> TYPE string_table.
     FIELD-SYMBOLS <row>   TYPE string.
 
-    DATA temp21 TYPE string_table.
+    DATA temp23 TYPE string_table.
     DATA temp1 TYPE string_table.
     DATA cut TYPE REF TO /kro/cl_layo_pop_w_sel.
-    DATA temp23 TYPE string_table.
-    CLEAR temp21.
-    INSERT `A` INTO TABLE temp21.
-    INSERT `B` INTO TABLE temp21.
-    INSERT `C` INTO TABLE temp21.
+    DATA temp25 TYPE string_table.
+    CLEAR temp23.
+    INSERT `A` INTO TABLE temp23.
+    INSERT `B` INTO TABLE temp23.
+    INSERT `C` INTO TABLE temp23.
 
     CLEAR temp1.
     INSERT `TAB_LINE` INTO TABLE temp1.
 
-    cut = new_cut( tab         = temp21
+    cut = new_cut( tab         = temp23
                          multiselect = abap_true
                          columns     = temp1 ).
     cut->set_output_table( ).
@@ -355,10 +388,10 @@ CLASS ltcl_pop_w_sel IMPLEMENTATION.
 
     ASSIGN cut->ms_result-table->* TO <table>.
 
-    CLEAR temp23.
-    INSERT `B` INTO TABLE temp23.
-    INSERT `C` INTO TABLE temp23.
-    cl_abap_unit_assert=>assert_equals( exp = temp23
+    CLEAR temp25.
+    INSERT `B` INTO TABLE temp25.
+    INSERT `C` INTO TABLE temp25.
+    cl_abap_unit_assert=>assert_equals( exp = temp25
                                         act = <table> ).
     ASSIGN cut->ms_result-row->* TO <row>.
     cl_abap_unit_assert=>assert_equals( exp = `B`

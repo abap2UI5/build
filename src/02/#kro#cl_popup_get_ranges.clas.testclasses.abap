@@ -95,6 +95,7 @@ CLASS ltcl_test_roundtrip DEFINITION FINAL
     METHODS test_confirm             FOR TESTING RAISING cx_static_check.
     METHODS test_list_open_calls_pop FOR TESTING RAISING cx_static_check.
     METHODS test_delete_all          FOR TESTING RAISING cx_static_check.
+    METHODS test_list_open_unknown   FOR TESTING RAISING cx_static_check.
 
 ENDCLASS.
 
@@ -190,11 +191,30 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD test_list_open_unknown.
+
+    " the name comes from the client - one that is no filter calls nothing
+    " instead of raising CX_SY_ITAB_LINE_NOT_FOUND
+    DATA lo_pop TYPE REF TO /kro/cl_popup_get_ranges.
+    DATA temp10 TYPE string_table.
+    lo_pop = popup_create( ).
+
+    mo_action->ms_actual-event = `LIST_OPEN`.
+
+    CLEAR temp10.
+    INSERT `UNKNOWN` INTO TABLE temp10.
+    mo_action->ms_actual-t_event_arg = temp10.
+    lo_pop->/kro/if_app~main( mi_client ).
+
+    cl_abap_unit_assert=>assert_not_bound( mo_action->ms_next-o_app_call ).
+
+  ENDMETHOD.
+
   METHOD test_delete_all.
 
     DATA lo_pop TYPE REF TO /kro/cl_popup_get_ranges.
-    FIELD-SYMBOLS <temp10> LIKE LINE OF lo_pop->ms_result-t_filter.
-    DATA temp11 LIKE sy-tabix.
+    FIELD-SYMBOLS <temp12> LIKE LINE OF lo_pop->ms_result-t_filter.
+    DATA temp13 LIKE sy-tabix.
     lo_pop = popup_create( ).
 
     mo_action->ms_actual-event = `POPUP_DELETE_ALL`.
@@ -202,13 +222,13 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
 
 
-    temp11 = sy-tabix.
-    READ TABLE lo_pop->ms_result-t_filter INDEX 1 ASSIGNING <temp10>.
-    sy-tabix = temp11.
+    temp13 = sy-tabix.
+    READ TABLE lo_pop->ms_result-t_filter INDEX 1 ASSIGNING <temp12>.
+    sy-tabix = temp13.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
-    cl_abap_unit_assert=>assert_initial( <temp10>-t_range ).
+    cl_abap_unit_assert=>assert_initial( <temp12>-t_range ).
 
   ENDMETHOD.
 
@@ -224,12 +244,12 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
   METHOD popup_destroyed.
 
-    DATA temp12 LIKE sy-subrc.
+    DATA temp14 LIKE sy-subrc.
     DATA temp3 TYPE xsdboolean.
     READ TABLE mo_action->ms_next-t_action_front WITH KEY slot = /kro/if_client=>cs_view-popup method = `destroy` TRANSPORTING NO FIELDS.
-    temp12 = sy-subrc.
+    temp14 = sy-subrc.
 
-    temp3 = boolc( temp12 = 0 ).
+    temp3 = boolc( temp14 = 0 ).
     result = temp3.
 
   ENDMETHOD.
@@ -263,7 +283,7 @@ CLASS ltcl_popup_result IMPLEMENTATION.
     " a roundtrip with an event, after the first one - as the button press
     " of the user
     DATA temp10 TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp13 TYPE REF TO /kro/cl_ui5_client.
+    DATA temp15 TYPE REF TO /kro/cl_ui5_client.
     CREATE OBJECT temp10 TYPE /kro/cl_ui5_handler EXPORTING VAL = ``.
     CREATE OBJECT mo_action EXPORTING VAL = temp10.
     mo_action->mo_app->mo_app = io_app.
@@ -271,23 +291,23 @@ CLASS ltcl_popup_result IMPLEMENTATION.
     mo_action->ms_actual-event = iv_event.
     mo_action->ms_actual-t_event_arg = it_arg.
 
-    CREATE OBJECT temp13 TYPE /kro/cl_ui5_client EXPORTING ACTION = mo_action.
-    io_app->main( temp13 ).
+    CREATE OBJECT temp15 TYPE /kro/cl_ui5_client EXPORTING ACTION = mo_action.
+    io_app->main( temp15 ).
 
   ENDMETHOD.
 
   METHOD test_initial_not_confirmed.
 
-    DATA temp14 TYPE /kro/cl_popup_context=>ty_t_filter_multi.
-    DATA temp15 LIKE LINE OF temp14.
+    DATA temp16 TYPE /kro/cl_popup_context=>ty_t_filter_multi.
+    DATA temp17 LIKE LINE OF temp16.
     DATA temp11 TYPE /kro/cl_popup_context=>ty_t_range.
     DATA temp12 LIKE LINE OF temp11.
     DATA lo_pop TYPE REF TO /kro/cl_popup_get_ranges.
-    DATA temp16 TYPE REF TO /kro/if_popup_result.
-    DATA li_result LIKE temp16.
-    CLEAR temp14.
+    DATA temp18 TYPE REF TO /kro/if_popup_result.
+    DATA li_result LIKE temp18.
+    CLEAR temp16.
 
-    temp15-name = `MATNR`.
+    temp17-name = `MATNR`.
 
     CLEAR temp11.
 
@@ -295,14 +315,14 @@ CLASS ltcl_popup_result IMPLEMENTATION.
     temp12-option = `EQ`.
     temp12-low = `1`.
     INSERT temp12 INTO TABLE temp11.
-    temp15-t_range = temp11.
-    INSERT temp15 INTO TABLE temp14.
+    temp17-t_range = temp11.
+    INSERT temp17 INTO TABLE temp16.
 
-    lo_pop = /kro/cl_popup_get_ranges=>factory( temp14 ).
+    lo_pop = /kro/cl_popup_get_ranges=>factory( temp16 ).
 
-    temp16 ?= lo_pop.
+    temp18 ?= lo_pop.
 
-    li_result = temp16.
+    li_result = temp18.
 
     cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
 
@@ -310,20 +330,20 @@ CLASS ltcl_popup_result IMPLEMENTATION.
 
   METHOD test_confirmed.
 
-    DATA temp17 TYPE /kro/cl_popup_context=>ty_t_filter_multi.
-    DATA temp18 LIKE LINE OF temp17.
+    DATA temp19 TYPE /kro/cl_popup_context=>ty_t_filter_multi.
+    DATA temp20 LIKE LINE OF temp19.
     DATA temp13 TYPE /kro/cl_popup_context=>ty_t_range.
     DATA temp14 LIKE LINE OF temp13.
     DATA lo_pop TYPE REF TO /kro/cl_popup_get_ranges.
-    DATA temp19 TYPE REF TO /kro/if_popup_result.
-    DATA li_result LIKE temp19.
-    DATA temp20 TYPE REF TO /kro/cl_popup_context=>ty_t_filter_multi.
-    DATA lr_filter LIKE temp20.
-    FIELD-SYMBOLS <temp21> LIKE LINE OF lr_filter->*.
-    DATA temp22 LIKE sy-tabix.
-    CLEAR temp17.
+    DATA temp21 TYPE REF TO /kro/if_popup_result.
+    DATA li_result LIKE temp21.
+    DATA temp22 TYPE REF TO /kro/cl_popup_context=>ty_t_filter_multi.
+    DATA lr_filter LIKE temp22.
+    FIELD-SYMBOLS <temp23> LIKE LINE OF lr_filter->*.
+    DATA temp24 LIKE sy-tabix.
+    CLEAR temp19.
 
-    temp18-name = `MATNR`.
+    temp20-name = `MATNR`.
 
     CLEAR temp13.
 
@@ -331,48 +351,48 @@ CLASS ltcl_popup_result IMPLEMENTATION.
     temp14-option = `EQ`.
     temp14-low = `1`.
     INSERT temp14 INTO TABLE temp13.
-    temp18-t_range = temp13.
-    INSERT temp18 INTO TABLE temp17.
+    temp20-t_range = temp13.
+    INSERT temp20 INTO TABLE temp19.
 
-    lo_pop = /kro/cl_popup_get_ranges=>factory( temp17 ).
+    lo_pop = /kro/cl_popup_get_ranges=>factory( temp19 ).
     roundtrip( io_app   = lo_pop
                iv_event = `BUTTON_CONFIRM` ).
 
-    temp19 ?= lo_pop.
+    temp21 ?= lo_pop.
 
-    li_result = temp19.
+    li_result = temp21.
 
     cl_abap_unit_assert=>assert_true( li_result->check_confirmed( ) ).
 
-    temp20 ?= li_result->value( ).
+    temp22 ?= li_result->value( ).
 
-    lr_filter = temp20.
+    lr_filter = temp22.
 
 
-    temp22 = sy-tabix.
-    READ TABLE lr_filter->* INDEX 1 ASSIGNING <temp21>.
-    sy-tabix = temp22.
+    temp24 = sy-tabix.
+    READ TABLE lr_filter->* INDEX 1 ASSIGNING <temp23>.
+    sy-tabix = temp24.
     IF sy-subrc <> 0.
       ASSERT 1 = 0.
     ENDIF.
     cl_abap_unit_assert=>assert_equals( exp = `MATNR`
-                                        act = <temp21>-name ).
+                                        act = <temp23>-name ).
     cl_abap_unit_assert=>assert_initial( li_result->value_string( ) ).
 
   ENDMETHOD.
 
   METHOD test_cancelled.
 
-    DATA temp23 TYPE /kro/cl_popup_context=>ty_t_filter_multi.
-    DATA temp24 LIKE LINE OF temp23.
+    DATA temp25 TYPE /kro/cl_popup_context=>ty_t_filter_multi.
+    DATA temp26 LIKE LINE OF temp25.
     DATA temp15 TYPE /kro/cl_popup_context=>ty_t_range.
     DATA temp16 LIKE LINE OF temp15.
     DATA lo_pop TYPE REF TO /kro/cl_popup_get_ranges.
-    DATA temp25 TYPE REF TO /kro/if_popup_result.
-    DATA li_result LIKE temp25.
-    CLEAR temp23.
+    DATA temp27 TYPE REF TO /kro/if_popup_result.
+    DATA li_result LIKE temp27.
+    CLEAR temp25.
 
-    temp24-name = `MATNR`.
+    temp26-name = `MATNR`.
 
     CLEAR temp15.
 
@@ -380,16 +400,16 @@ CLASS ltcl_popup_result IMPLEMENTATION.
     temp16-option = `EQ`.
     temp16-low = `1`.
     INSERT temp16 INTO TABLE temp15.
-    temp24-t_range = temp15.
-    INSERT temp24 INTO TABLE temp23.
+    temp26-t_range = temp15.
+    INSERT temp26 INTO TABLE temp25.
 
-    lo_pop = /kro/cl_popup_get_ranges=>factory( temp23 ).
+    lo_pop = /kro/cl_popup_get_ranges=>factory( temp25 ).
     roundtrip( io_app   = lo_pop
                iv_event = `BUTTON_CANCEL` ).
 
-    temp25 ?= lo_pop.
+    temp27 ?= lo_pop.
 
-    li_result = temp25.
+    li_result = temp27.
 
     cl_abap_unit_assert=>assert_false( li_result->check_confirmed( ) ).
 

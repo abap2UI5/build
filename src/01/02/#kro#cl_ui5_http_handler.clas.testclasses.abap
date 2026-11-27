@@ -9,6 +9,9 @@ CLASS ltcl_test_http_handler DEFINITION FINAL
     METHODS test_http_post_ok      FOR TESTING RAISING cx_static_check.
     METHODS test_http_post_error   FOR TESTING RAISING cx_static_check.
     METHODS test_main_post_no_app  FOR TESTING RAISING cx_static_check.
+    " a draft that is gone (expired, cleaned up, another user's) answers a
+    " 410 with a fixed text, not the 500 dump
+    METHODS test_main_post_no_draft FOR TESTING RAISING cx_static_check.
     METHODS test_main_get_routing  FOR TESTING RAISING cx_static_check.
     METHODS test_main_post_routing FOR TESTING RAISING cx_static_check.
     METHODS test_main_unsupported  FOR TESTING RAISING cx_static_check.
@@ -174,6 +177,28 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD test_main_post_no_draft.
+
+    DATA ls_req TYPE /kro/cl_ui5_http_handler=>ty_s_http_req.
+    DATA ls_result TYPE /kro/cl_ui5_http_handler=>ty_s_http_res.
+    DATA temp8 TYPE xsdboolean.
+
+    ls_req-method = `POST`.
+    ls_req-body = `{"value":{"S_FRONT":{"ID":"0123456789ABCDEF0123456789ABCDEF","EVENT":"SAVE"}}}`.
+
+    ls_result = /kro/cl_ui5_http_handler=>_main( ls_req ).
+
+    cl_abap_unit_assert=>assert_equals( exp = 410
+                                        act = ls_result-status_code ).
+    cl_abap_unit_assert=>assert_char_cp( act = ls_result-body
+                                         exp = `NO_DRAFT_ENTRY_OF_PREVIOUS_REQUEST_FOUND - the session expired*` ).
+    " the fixed text only - no dump, no source position
+
+    temp8 = boolc( ls_result-body CS `unhandled exception` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp8 ).
+
+  ENDMETHOD.
+
   METHOD test_main_unsupported.
 
     " OPTIONS/PUT/... must answer 405, not fall through with status code 0
@@ -249,7 +274,7 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
 
     DATA ls_req TYPE /kro/cl_ui5_http_handler=>ty_s_http_req.
     DATA ls_result TYPE /kro/cl_ui5_http_handler=>ty_s_http_res.
-    DATA temp8 TYPE xsdboolean.
+    DATA temp9 TYPE xsdboolean.
 
     ls_req-method = `GET`.
 
@@ -259,8 +284,8 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
                                         act = ls_result-status_code ).
 
 
-    temp8 = boolc( ls_result-body CS `<!DOCTYPE html>` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp8 ).
+    temp9 = boolc( ls_result-body CS `<!DOCTYPE html>` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp9 ).
 
   ENDMETHOD.
 
@@ -446,7 +471,6 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA temp2 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp3 LIKE LINE OF temp2.
     DATA ls_result TYPE /kro/cl_ui5_http_handler=>ty_s_http_res.
-    DATA temp9 TYPE xsdboolean.
     DATA temp10 TYPE xsdboolean.
     DATA temp11 TYPE xsdboolean.
     DATA temp12 TYPE xsdboolean.
@@ -460,6 +484,7 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA temp20 TYPE xsdboolean.
     DATA temp21 TYPE xsdboolean.
     DATA temp22 TYPE xsdboolean.
+    DATA temp23 TYPE xsdboolean.
     CLEAR temp1.
     temp1-method = `GET`.
     temp1-path = `/sap/bc/z2ui5`.
@@ -476,69 +501,69 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
                                         act = ls_result-status_code ).
     " the page's preload registration and nothing of the page around it
 
-    temp9 = boolc( find( val = ls_result-body sub = `(function () {` ) = 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp9 ).
-
-    temp10 = boolc( ls_result-body CS `"z2ui5/Component.js": function()` ).
+    temp10 = boolc( find( val = ls_result-body sub = `(function () {` ) = 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp10 ).
+
+    temp11 = boolc( ls_result-body CS `"z2ui5/Component.js": function()` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp11 ).
     " (the modules, the tail among them, are delivered minified - the texts
     " below are terser's print of bundle/tail/embed.js, not its source lines)
     " ...the component a second time, under the name the control creates it
     " by when the page's own component is z2ui5 (the BSP of src/03/02 and
     " the app of the branch cloud)
 
-    temp11 = boolc( ls_result-body CS `"z2ui5/embed/frontend/Component.js": entries["z2ui5/Component.js"]` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp11 ).
-
-    temp12 = boolc( ls_result-body CS `componentName:"z2ui5.embed.frontend",` ).
+    temp12 = boolc( ls_result-body CS `"z2ui5/embed/frontend/Component.js": entries["z2ui5/Component.js"]` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp12 ).
+
+    temp13 = boolc( ls_result-body CS `componentName:"z2ui5.embed.frontend",` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp13 ).
     " ...and the one call the embedding control makes: the app is made by
     " the bundle's own module, with the installation's settings
 
-    temp13 = boolc( ls_result-body CS `create:function(settings){` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp13 ).
-
-    temp14 = boolc( ls_result-body CS `resolve(Embed.create(settings,installation))` ).
+    temp14 = boolc( ls_result-body CS `create:function(settings){` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp14 ).
 
-    temp15 = boolc( ls_result-body CS `"z2ui5/core/Embed.js": function()` ).
+    temp15 = boolc( ls_result-body CS `resolve(Embed.create(settings,installation))` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp15 ).
 
-    temp16 = boolc( ls_result-body CS `<!DOCTYPE` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp16 ).
+    temp16 = boolc( ls_result-body CS `"z2ui5/core/Embed.js": function()` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp16 ).
 
-    temp17 = boolc( ls_result-body CS `onInitComponent` ).
+    temp17 = boolc( ls_result-body CS `<!DOCTYPE` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp17 ).
 
-    temp18 = boolc( ls_result-body CS `ComponentSupport` ).
+    temp18 = boolc( ls_result-body CS `onInitComponent` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp18 ).
+
+    temp19 = boolc( ls_result-body CS `ComponentSupport` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp19 ).
     " ...and the module the embedding page recognises it by, with the
     " sibling BSPs the page itself hands the component as well
 
-    temp19 = boolc( ls_result-body CS `sap.ui.define("z2ui5/embed",function(){` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp19 ).
-
-    temp20 = boolc( ls_result-body CS `ccResourceRoot:"/sap/bc/ui5_ui5/sap/z2ui5_cci",` ).
+    temp20 = boolc( ls_result-body CS `sap.ui.define("z2ui5/embed",function(){` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp20 ).
 
-    temp21 = boolc( ls_result-body CS `cccResourceRoot:"/sap/bc/ui5_ui5/sap/z2ui5_ccc"` ).
+    temp21 = boolc( ls_result-body CS `ccResourceRoot:"/sap/bc/ui5_ui5/sap/z2ui5_cci",` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp21 ).
+
+    temp22 = boolc( ls_result-body CS `cccResourceRoot:"/sap/bc/ui5_ui5/sap/z2ui5_ccc"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp22 ).
     " ...and the path the node has on the system, for a page that reaches
     " it through a proxy's prefix (Component.init rebases the roots by it)
 
-    temp22 = boolc( ls_result-body CS `nodePath:"/sap/bc/z2ui5",` ).
+    temp23 = boolc( ls_result-body CS `nodePath:"/sap/bc/z2ui5",` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp22 ).
+        temp23 ).
 
   ENDMETHOD.
 
@@ -551,16 +576,16 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA temp5 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp6 LIKE LINE OF temp5.
     DATA ls_result TYPE /kro/cl_ui5_http_handler=>ty_s_http_res.
-    DATA temp23 TYPE xsdboolean.
+    DATA temp24 TYPE xsdboolean.
     DATA temp3 TYPE /kro/cl_ui5_http_handler=>ty_s_http_req.
     DATA temp7 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp8 LIKE LINE OF temp7.
-    DATA temp24 TYPE xsdboolean.
+    DATA temp25 TYPE xsdboolean.
     DATA temp4 TYPE /kro/cl_ui5_http_handler=>ty_s_http_req.
     DATA temp9 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp10 LIKE LINE OF temp9.
-    DATA temp25 TYPE xsdboolean.
     DATA temp26 TYPE xsdboolean.
+    DATA temp27 TYPE xsdboolean.
     CLEAR temp2.
     temp2-method = `GET`.
     temp2-path = `/sap/bc/z2ui5_other/`.
@@ -573,9 +598,9 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
 
     ls_result = /kro/cl_ui5_http_handler=>_main( temp2 ).
 
-    temp23 = boolc( ls_result-body CS `nodePath:"/sap/bc/z2ui5_other/",` ).
+    temp24 = boolc( ls_result-body CS `nodePath:"/sap/bc/z2ui5_other/",` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp23 ).
+        temp24 ).
 
     " a stack that reports no path - a direct call, a shim without the
     " header - leaves the field empty rather than out; Component.init reads
@@ -591,9 +616,9 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     temp3-t_params = temp7.
     ls_result = /kro/cl_ui5_http_handler=>_main( temp3 ).
 
-    temp24 = boolc( ls_result-body CS `nodePath:"",` ).
+    temp25 = boolc( ls_result-body CS `nodePath:"",` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp24 ).
+        temp25 ).
 
     " the path is what the stack reports of the request URL, and an ICF node
     " matches on its prefix - what could end the string literal of a script
@@ -610,13 +635,13 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     temp4-t_params = temp9.
     ls_result = /kro/cl_ui5_http_handler=>_main( temp4 ).
 
-    temp25 = boolc( ls_result-body CS `nodePath:"/sap/bc/z2ui5/a\"b\\c<\/script>",` ).
+    temp26 = boolc( ls_result-body CS `nodePath:"/sap/bc/z2ui5/a\"b\\c<\/script>",` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp25 ).
-
-    temp26 = boolc( ls_result-body CS `a"b\c</script>` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act =
         temp26 ).
+
+    temp27 = boolc( ls_result-body CS `a"b\c</script>` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act =
+        temp27 ).
 
   ENDMETHOD.
 
@@ -626,20 +651,20 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA temp11 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp12 LIKE LINE OF temp11.
     DATA ls_result TYPE /kro/cl_ui5_http_handler=>ty_s_http_res.
-    DATA temp27 TYPE xsdboolean.
     DATA temp28 TYPE xsdboolean.
     DATA temp29 TYPE xsdboolean.
     DATA temp30 TYPE xsdboolean.
     DATA temp31 TYPE xsdboolean.
     DATA temp32 TYPE xsdboolean.
+    DATA temp33 TYPE xsdboolean.
     DATA temp6 TYPE /kro/cl_ui5_http_handler=>ty_s_http_req.
     DATA temp13 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp14 LIKE LINE OF temp13.
-    DATA temp33 TYPE xsdboolean.
+    DATA temp34 TYPE xsdboolean.
     DATA temp7 TYPE /kro/cl_ui5_http_handler=>ty_s_http_req.
     DATA temp15 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp16 LIKE LINE OF temp15.
-    DATA temp34 TYPE xsdboolean.
+    DATA temp35 TYPE xsdboolean.
     CLEAR temp5.
     temp5-method = `GET`.
     temp5-path = `/sap/bc/z2ui5`.
@@ -660,28 +685,28 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = /kro/cl_ui5f_preload=>get_devtools( )
                                         act = ls_result-body ).
 
-    temp27 = boolc( ls_result-body CS `"z2ui5/devtools/DeveloperTools.js": function()` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp27 ).
-
-    temp28 = boolc( ls_result-body CS `"z2ui5/devtools/DeveloperTools.fragment.xml": '` ).
+    temp28 = boolc( ls_result-body CS `"z2ui5/devtools/DeveloperTools.js": function()` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp28 ).
 
-    temp29 = boolc( ls_result-body CS `<!DOCTYPE` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp29 ).
+    temp29 = boolc( ls_result-body CS `"z2ui5/devtools/DeveloperTools.fragment.xml": '` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp29 ).
 
-    temp30 = boolc( ls_result-body CS `z2ui5/embed` ).
+    temp30 = boolc( ls_result-body CS `<!DOCTYPE` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp30 ).
+
+    temp31 = boolc( ls_result-body CS `z2ui5/embed` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp31 ).
     " the eager half of the tools is the shell's, not the bundle's
 
-    temp31 = boolc( ls_result-body CS `"z2ui5/devtools/DevTools.js"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act =
-        temp31 ).
-
-    temp32 = boolc( ls_result-body CS `"z2ui5/devtools/Recorder.js"` ).
+    temp32 = boolc( ls_result-body CS `"z2ui5/devtools/DevTools.js"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act =
         temp32 ).
+
+    temp33 = boolc( ls_result-body CS `"z2ui5/devtools/Recorder.js"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act =
+        temp33 ).
 
     " the page's auto-open parameter is not the bundle's
 
@@ -697,8 +722,8 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     temp6-t_params = temp13.
     ls_result = /kro/cl_ui5_http_handler=>_main( temp6 ).
 
-    temp33 = boolc( ls_result-body CS `<!DOCTYPE html>` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp33 ).
+    temp34 = boolc( ls_result-body CS `<!DOCTYPE html>` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp34 ).
 
     " any other value of the parameter is the frontend bundle
 
@@ -714,9 +739,9 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     temp7-t_params = temp15.
     ls_result = /kro/cl_ui5_http_handler=>_main( temp7 ).
 
-    temp34 = boolc( ls_result-body CS `sap.ui.define("z2ui5/embed",function(){` ).
+    temp35 = boolc( ls_result-body CS `sap.ui.define("z2ui5/embed",function(){` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp34 ).
+        temp35 ).
 
   ENDMETHOD.
 
@@ -729,7 +754,6 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     " component with one view - and the control that view holds
     DATA lv_shell TYPE string.
     DATA lv_bundle TYPE string.
-    DATA temp35 TYPE xsdboolean.
     DATA temp36 TYPE xsdboolean.
     DATA temp37 TYPE xsdboolean.
     DATA temp38 TYPE xsdboolean.
@@ -740,42 +764,43 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA temp43 TYPE xsdboolean.
     DATA temp44 TYPE xsdboolean.
     DATA temp45 TYPE xsdboolean.
+    DATA temp46 TYPE xsdboolean.
     lv_shell  = /kro/cl_ui5f_preload=>get( ).
 
     lv_bundle = /kro/cl_ui5f_preload=>get_bundle( ).
 
-    temp35 = boolc( lv_shell CS `"z2ui5/Component.js": function()` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp35 ).
-
-    temp36 = boolc( lv_shell CS `"abap2ui5/page/view/Main.view.xml": '` ).
+    temp36 = boolc( lv_shell CS `"z2ui5/Component.js": function()` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp36 ).
 
-    temp37 = boolc( lv_shell CS `\x3cz2ui5:Container` ).
+    temp37 = boolc( lv_shell CS `"abap2ui5/page/view/Main.view.xml": '` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp37 ).
 
-    temp38 = boolc( lv_shell CS `"z2ui5/embed/Container.js": function()` ).
+    temp38 = boolc( lv_shell CS `\x3cz2ui5:Container` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp38 ).
 
-    temp39 = boolc( lv_shell CS `"z2ui5/core/` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp39 ).
+    temp39 = boolc( lv_shell CS `"z2ui5/embed/Container.js": function()` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp39 ).
 
-    temp40 = boolc( lv_shell CS `"z2ui5/devtools/` ).
+    temp40 = boolc( lv_shell CS `"z2ui5/core/` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp40 ).
 
-    temp41 = boolc( lv_bundle CS `"z2ui5/devtools/DevTools.js"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp41 ).
+    temp41 = boolc( lv_shell CS `"z2ui5/devtools/` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp41 ).
 
-    temp42 = boolc( lv_bundle CS `"z2ui5/devtools/Console.js"` ).
+    temp42 = boolc( lv_bundle CS `"z2ui5/devtools/DevTools.js"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp42 ).
 
-    temp43 = boolc( lv_bundle CS `"z2ui5/devtools/Recorder.js"` ).
+    temp43 = boolc( lv_bundle CS `"z2ui5/devtools/Console.js"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp43 ).
 
-    temp44 = boolc( lv_bundle CS `"z2ui5/devtools/DeveloperTools.js"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp44 ).
+    temp44 = boolc( lv_bundle CS `"z2ui5/devtools/Recorder.js"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp44 ).
 
-    temp45 = boolc( lv_bundle CS `"z2ui5/devtools/Picker.js"` ).
+    temp45 = boolc( lv_bundle CS `"z2ui5/devtools/DeveloperTools.js"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp45 ).
+
+    temp46 = boolc( lv_bundle CS `"z2ui5/devtools/Picker.js"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp46 ).
     cl_abap_unit_assert=>assert_not_initial( /kro/cl_ui5f_preload=>devtools_hash ).
     cl_abap_unit_assert=>assert_differs( exp = /kro/cl_ui5f_preload=>build_hash
                                          act = /kro/cl_ui5f_preload=>devtools_hash ).
@@ -788,7 +813,6 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA temp17 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp18 LIKE LINE OF temp17.
     DATA ls_result TYPE /kro/cl_ui5_http_handler=>ty_s_http_res.
-    DATA temp46 TYPE xsdboolean.
     DATA temp47 TYPE xsdboolean.
     DATA temp48 TYPE xsdboolean.
     DATA temp49 TYPE xsdboolean.
@@ -797,13 +821,14 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA temp52 TYPE xsdboolean.
     DATA temp53 TYPE xsdboolean.
     DATA temp54 TYPE xsdboolean.
+    DATA temp55 TYPE xsdboolean.
     DATA temp9 TYPE /kro/cl_ui5_http_handler=>ty_s_http_req.
     DATA temp19 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp20 LIKE LINE OF temp19.
     DATA temp10 TYPE /kro/cl_ui5_http_handler=>ty_s_http_req.
     DATA temp21 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp22 LIKE LINE OF temp21.
-    DATA temp55 TYPE xsdboolean.
+    DATA temp56 TYPE xsdboolean.
     CLEAR temp8.
     temp8-method = `GET`.
     temp8-path = `/sap/bc/z2ui5`.
@@ -824,40 +849,40 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = /kro/cl_ui5f_preload=>get_cc( )
                                         act = ls_result-body ).
 
-    temp46 = boolc( find( val = ls_result-body sub = `sap.ui.require.preload({` ) = 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp46 ).
-
-    temp47 = boolc( ls_result-body CS `"z2ui5/cc/Dirty.js": function()` ).
+    temp47 = boolc( find( val = ls_result-body sub = `sap.ui.require.preload({` ) = 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp47 ).
 
-    temp48 = boolc( ls_result-body CS `"z2ui5/cc/Websocket.js": function()` ).
+    temp48 = boolc( ls_result-body CS `"z2ui5/cc/Dirty.js": function()` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp48 ).
+
+    temp49 = boolc( ls_result-body CS `"z2ui5/cc/Websocket.js": function()` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp49 ).
     " ...and the module the frontend tells this bundle from any other 200
     " answer by (z2ui5/core/CustomControls)
 
-    temp49 = boolc( ls_result-body CS `sap.ui.define("z2ui5/cc/bundle", function () {` ).
+    temp50 = boolc( ls_result-body CS `sap.ui.define("z2ui5/cc/bundle", function () {` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp49 ).
+        temp50 ).
 
-    temp50 = boolc( ls_result-body CS `<!DOCTYPE` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp50 ).
-
-    temp51 = boolc( ls_result-body CS `z2ui5/embed` ).
+    temp51 = boolc( ls_result-body CS `<!DOCTYPE` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp51 ).
+
+    temp52 = boolc( ls_result-body CS `z2ui5/embed` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp52 ).
     " (a control names modules of the frontend bundle as its dependencies -
     " what the bundle does not do is carry one)
 
-    temp52 = boolc( ls_result-body CS `"z2ui5/Component.js"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp52 ).
-
-    temp53 = boolc( ls_result-body CS `"z2ui5/core/Lib.js"` ).
+    temp53 = boolc( ls_result-body CS `"z2ui5/Component.js"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp53 ).
 
-    temp54 = boolc( ls_result-body CS `"z2ui5/devtools/` ).
+    temp54 = boolc( ls_result-body CS `"z2ui5/core/Lib.js"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp54 ).
+
+    temp55 = boolc( ls_result-body CS `"z2ui5/devtools/` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp55 ).
 
     " the version the frontend asks with changes nothing about the answer:
     " a page loaded before a redeployment still gets the controls of today
@@ -893,8 +918,8 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     temp10-t_params = temp21.
     ls_result = /kro/cl_ui5_http_handler=>_main( temp10 ).
 
-    temp55 = boolc( ls_result-body CS `<!DOCTYPE html>` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp55 ).
+    temp56 = boolc( ls_result-body CS `<!DOCTYPE html>` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp56 ).
 
   ENDMETHOD.
 
@@ -907,7 +932,6 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     " is a bundle to ask for
     DATA lv_bundle TYPE string.
     DATA lv_cc TYPE string.
-    DATA temp56 TYPE xsdboolean.
     DATA temp57 TYPE xsdboolean.
     DATA temp58 TYPE xsdboolean.
     DATA temp59 TYPE xsdboolean.
@@ -918,47 +942,48 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA temp64 TYPE xsdboolean.
     DATA temp65 TYPE xsdboolean.
     DATA temp66 TYPE xsdboolean.
+    DATA temp67 TYPE xsdboolean.
     lv_bundle = /kro/cl_ui5f_preload=>get_bundle( ).
 
     lv_cc     = /kro/cl_ui5f_preload=>get_cc( ).
     " (the shell names two of them - the probe of cc/Dirty, the module the
     " controls bundle ends in - and registers none)
 
-    temp56 = boolc( lv_bundle CS `"z2ui5/cc/Dirty.js"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp56 ).
-
-    temp57 = boolc( lv_bundle CS `"z2ui5/cc/InputExt.js"` ).
+    temp57 = boolc( lv_bundle CS `"z2ui5/cc/Dirty.js"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp57 ).
 
-    temp58 = boolc( lv_bundle CS `"z2ui5/cc/UITableExt.js"` ).
+    temp58 = boolc( lv_bundle CS `"z2ui5/cc/InputExt.js"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp58 ).
 
-    temp59 = boolc( lv_bundle CS `"z2ui5/cc/Websocket.js"` ).
+    temp59 = boolc( lv_bundle CS `"z2ui5/cc/UITableExt.js"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp59 ).
 
-    temp60 = boolc( lv_bundle CS `"z2ui5/core/CustomControls.js": function()` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp60 ).
+    temp60 = boolc( lv_bundle CS `"z2ui5/cc/Websocket.js"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp60 ).
+
+    temp61 = boolc( lv_bundle CS `"z2ui5/core/CustomControls.js": function()` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp61 ).
     cl_abap_unit_assert=>assert_not_initial( /kro/cl_ui5f_preload=>cc_hash ).
 
-    temp61 = boolc( lv_bundle CS |ccBundle:"{ /kro/cl_ui5f_preload=>cc_hash }",| ).
+    temp62 = boolc( lv_bundle CS |ccBundle:"{ /kro/cl_ui5f_preload=>cc_hash }",| ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp61 ).
+        temp62 ).
 
-    temp62 = boolc( lv_bundle CS `@z2ui5-cc-version@` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp62 ).
+    temp63 = boolc( lv_bundle CS `@z2ui5-cc-version@` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp63 ).
     " ...and the controls are all there, in the bundle of their own
 
-    temp63 = boolc( lv_cc CS `"z2ui5/cc/CameraPicture.js": function()` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp63 ).
-
-    temp64 = boolc( lv_cc CS `"z2ui5/cc/InputExt.js": function()` ).
+    temp64 = boolc( lv_cc CS `"z2ui5/cc/CameraPicture.js": function()` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp64 ).
 
-    temp65 = boolc( lv_cc CS `"z2ui5/cc/MultiInputExt.js": function()` ).
+    temp65 = boolc( lv_cc CS `"z2ui5/cc/InputExt.js": function()` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp65 ).
 
-    temp66 = boolc( lv_cc CS `"z2ui5/cc/UITableExt.js": function()` ).
+    temp66 = boolc( lv_cc CS `"z2ui5/cc/MultiInputExt.js": function()` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp66 ).
+
+    temp67 = boolc( lv_cc CS `"z2ui5/cc/UITableExt.js": function()` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp67 ).
     cl_abap_unit_assert=>assert_differs( exp = /kro/cl_ui5f_preload=>build_hash
                                          act = /kro/cl_ui5f_preload=>cc_hash ).
     cl_abap_unit_assert=>assert_differs( exp = /kro/cl_ui5f_preload=>devtools_hash
@@ -974,13 +999,13 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     DATA temp23 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp24 LIKE LINE OF temp23.
     DATA ls_result TYPE /kro/cl_ui5_http_handler=>ty_s_http_res.
-    DATA temp67 TYPE xsdboolean.
     DATA temp68 TYPE xsdboolean.
     DATA temp69 TYPE xsdboolean.
     DATA temp70 TYPE xsdboolean.
     DATA temp71 TYPE xsdboolean.
     DATA temp72 TYPE xsdboolean.
     DATA temp73 TYPE xsdboolean.
+    DATA temp74 TYPE xsdboolean.
     CLEAR temp11.
     temp11-method = `GET`.
 
@@ -996,31 +1021,31 @@ CLASS ltcl_test_http_handler IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = 200
                                         act = ls_result-status_code ).
 
-    temp67 = boolc( ls_result-body CS `<!DOCTYPE html>` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp67 ).
+    temp68 = boolc( ls_result-body CS `<!DOCTYPE html>` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp68 ).
     " ...which is the app with the one view and the embed control in it,
     " told that it runs on the node itself, and carries nothing of the
     " frontend: neither its modules nor the module the bundle is recognised
     " by. Which class starts is not the page's business - no name in it
 
-    temp68 = boolc( ls_result-body CS `"z2ui5/embed/Container.js": function()` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp68 ).
-
-    temp69 = boolc( ls_result-body CS `"abap2ui5/page/view/Main.view.xml": '` ).
+    temp69 = boolc( ls_result-body CS `"z2ui5/embed/Container.js": function()` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp69 ).
 
-    temp70 = boolc( ls_result-body CS `data-settings='{"id" : "z2ui5", "componentData" : {"checkLocal" : true, "bundle" : "` && /kro/cl_ui5f_preload=>build_hash && `"}}'` ).
+    temp70 = boolc( ls_result-body CS `"abap2ui5/page/view/Main.view.xml": '` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp70 ).
+
+    temp71 = boolc( ls_result-body CS `data-settings='{"id" : "z2ui5", "componentData" : {"checkLocal" : true, "bundle" : "` && /kro/cl_ui5f_preload=>build_hash && `"}}'` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp70 ).
+        temp71 ).
 
-    temp71 = boolc( ls_result-body CS `"z2ui5/core/` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp71 ).
-
-    temp72 = boolc( ls_result-body CS `sap.ui.define("z2ui5/embed"` ).
+    temp72 = boolc( ls_result-body CS `"z2ui5/core/` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp72 ).
 
-    temp73 = boolc( to_upper( ls_result-body ) CS `/KRO/CL_UI5_APP_HI_WORLD` ).
+    temp73 = boolc( ls_result-body CS `sap.ui.define("z2ui5/embed"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp73 ).
+
+    temp74 = boolc( to_upper( ls_result-body ) CS `/KRO/CL_UI5_APP_HI_WORLD` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp74 ).
 
   ENDMETHOD.
 
@@ -1411,9 +1436,9 @@ CLASS ltcl_test_http_response IMPLEMENTATION.
     DATA temp15 LIKE LINE OF temp14.
     DATA temp16 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp17 LIKE LINE OF temp16.
-    DATA temp74 TYPE xsdboolean.
     DATA temp75 TYPE xsdboolean.
     DATA temp76 TYPE xsdboolean.
+    DATA temp77 TYPE xsdboolean.
     CLEAR temp13.
     temp13-theme = `sap_horizon`.
     temp13-src = `https://sdk.example/sap-ui-core.js`.
@@ -1495,14 +1520,14 @@ CLASS ltcl_test_http_response IMPLEMENTATION.
     ls_config-t_add_config = temp16.
     lv_body = shell_for_config( ls_config ).
 
-    temp74 = boolc( lv_body CS `onload=alert(1)` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp74 ).
-
-    temp75 = boolc( lv_body CS ` data-y='1'` ).
+    temp75 = boolc( lv_body CS `onload=alert(1)` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp75 ).
 
-    temp76 = boolc( lv_body CS ` 1abc='2'` ).
+    temp76 = boolc( lv_body CS ` data-y='1'` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp76 ).
+
+    temp77 = boolc( lv_body CS ` 1abc='2'` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp77 ).
     cl_abap_unit_assert=>assert_char_cp( exp = `* data-ok='3'*`
                                          act = lv_body ).
 
@@ -2302,6 +2327,10 @@ CLASS ltcl_test_http_response IMPLEMENTATION.
     cl_abap_unit_assert=>assert_not_initial( mo_mock->mv_cdata ).
     cl_abap_unit_assert=>assert_equals( exp = `text/plain; charset=UTF-8`
                                         act = header_value( `content-type` ) ).
+    " the exit's headers are lost with it - nosniff, which the text/plain
+    " body relies on, is the handler's own and stays
+    cl_abap_unit_assert=>assert_equals( exp = `nosniff`
+                                        act = header_value( `x-content-type-options` ) ).
 
   ENDMETHOD.
 
@@ -2318,9 +2347,9 @@ CLASS ltcl_test_http_response IMPLEMENTATION.
     DATA lv_source TYPE string.
     DATA lv_policy TYPE string.
     DATA lv_directive LIKE LINE OF lt_directive.
-        DATA temp77 TYPE xsdboolean.
         DATA temp78 TYPE xsdboolean.
-    DATA temp79 TYPE xsdboolean.
+        DATA temp79 TYPE xsdboolean.
+    DATA temp80 TYPE xsdboolean.
     CLEAR temp42.
 
     ls_config = temp42.
@@ -2338,21 +2367,21 @@ CLASS ltcl_test_http_response IMPLEMENTATION.
     LOOP AT lt_directive INTO lv_directive.
       IF lv_directive CS `script-src`.
 
-        temp77 = boolc( lv_directive CS lv_source ).
-        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp77 ).
+        temp78 = boolc( lv_directive CS lv_source ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp78 ).
         lv_checked = lv_checked + 1.
       ELSE.
 
-        temp78 = boolc( lv_directive CS lv_source ).
-        cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp78 ).
+        temp79 = boolc( lv_directive CS lv_source ).
+        cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp79 ).
       ENDIF.
     ENDLOOP.
     cl_abap_unit_assert=>assert_equals( exp = 1
                                         act = lv_checked ).
     " the tag around the policy is untouched
 
-    temp79 = boolc( lv_policy CP `<meta http-equiv="Content-Security-Policy" content="*"/>` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp79 ).
+    temp80 = boolc( lv_policy CP `<meta http-equiv="Content-Security-Policy" content="*"/>` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp80 ).
 
   ENDMETHOD.
 
@@ -2510,8 +2539,8 @@ CLASS ltcl_test_http_response IMPLEMENTATION.
     " taken over - one character between the tags and the browser refuses it
     DATA temp44 TYPE /kro/if_ui5_exit=>ty_s_http_config.
     DATA lv_body TYPE string.
-    DATA temp80 TYPE xsdboolean.
     DATA temp81 TYPE xsdboolean.
+    DATA temp82 TYPE xsdboolean.
     DATA lv_rest TYPE string.
     TYPES temp1 TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
 DATA lt_part TYPE temp1.
@@ -2523,13 +2552,13 @@ DATA lt_part TYPE temp1.
     lv_body = shell_for_config( temp44 ).
 
 
-    temp80 = boolc( find( val = lv_body sub = |<script>{ /kro/cl_ui5f_preload=>get( ) }</script>| ) >= 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp80 ).
-
-    temp81 = boolc( find( val = lv_body sub = |script-src 'self' '{ /kro/cl_ui5f_preload=>script_hash }'"| ) >= 0 ).
+    temp81 = boolc( find( val = lv_body sub = |<script>{ /kro/cl_ui5f_preload=>get( ) }</script>| ) >= 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp81 ).
+
+    temp82 = boolc( find( val = lv_body sub = |script-src 'self' '{ /kro/cl_ui5f_preload=>script_hash }'"| ) >= 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp82 ).
     " and it is the only inline script: the other tag is the bootstrap,
     " which loads UI5 by src (the preload itself is taken out first - an
     " embedded .js file may well spell <script in a string)
@@ -2552,8 +2581,8 @@ DATA lt_part TYPE temp1.
     " element: it becomes the CSS escape \3c
     DATA temp45 TYPE /kro/if_ui5_exit=>ty_s_http_config.
     DATA lv_body TYPE string.
-    DATA temp82 TYPE xsdboolean.
     DATA temp83 TYPE xsdboolean.
+    DATA temp84 TYPE xsdboolean.
     DATA temp46 TYPE /kro/if_ui5_exit=>ty_s_http_config.
     TYPES temp2 TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
 DATA lt_part TYPE temp2.
@@ -2565,12 +2594,12 @@ DATA lt_part TYPE temp2.
     lv_body = shell_for_config( temp45 ).
 
 
-    temp82 = boolc( find( val = lv_body sub = `<style>.a::after { content: '\3c /style>\3c script>x()\3c /script>'; }</style>` ) >= 0 ).
+    temp83 = boolc( find( val = lv_body sub = `<style>.a::after { content: '\3c /style>\3c script>x()\3c /script>'; }</style>` ) >= 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp82 ).
+        temp83 ).
 
-    temp83 = boolc( find( val = lv_body sub = `x()</script>` ) >= 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp83 ).
+    temp84 = boolc( find( val = lv_body sub = `x()</script>` ) >= 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp84 ).
 
     " no styles_css, no element: the page's own <style> is the only one
 
@@ -2594,11 +2623,11 @@ DATA lt_part TYPE temp2.
     DATA temp47 TYPE /kro/if_ui5_exit=>ty_s_http_config.
     DATA lv_body TYPE string.
     DATA lv_hints TYPE string.
-    DATA temp84 TYPE xsdboolean.
     DATA temp85 TYPE xsdboolean.
     DATA temp86 TYPE xsdboolean.
-    DATA temp48 TYPE /kro/if_ui5_exit=>ty_s_http_config.
     DATA temp87 TYPE xsdboolean.
+    DATA temp48 TYPE /kro/if_ui5_exit=>ty_s_http_config.
+    DATA temp88 TYPE xsdboolean.
     CLEAR temp47.
     temp47-theme = `sap_horizon`.
     temp47-src = `https://sdk.example/resources/sap-ui-core.js`.
@@ -2610,14 +2639,14 @@ DATA lt_part TYPE temp2.
                      |<link rel="preconnect" href="https://sdk.example" crossorigin>\n| &&
                      |<title>abap2UI5</title>|.
 
-    temp84 = boolc( find( val = lv_body sub = lv_hints ) >= 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp84 ).
-
-    temp85 = boolc( find( val = lv_body sub = lv_hints ) < find( val = lv_body sub = `<script>` ) ).
+    temp85 = boolc( find( val = lv_body sub = lv_hints ) >= 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp85 ).
 
-    temp86 = boolc( find( val = lv_body sub = |<script>{ /kro/cl_ui5f_preload=>get( ) }</script>| ) >= 0 ).
+    temp86 = boolc( find( val = lv_body sub = lv_hints ) < find( val = lv_body sub = `<script>` ) ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp86 ).
+
+    temp87 = boolc( find( val = lv_body sub = |<script>{ /kro/cl_ui5f_preload=>get( ) }</script>| ) >= 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp87 ).
 
     " an origin out of the exit is attribute-escaped like the src itself
 
@@ -2626,8 +2655,8 @@ DATA lt_part TYPE temp2.
     temp48-src = `https://a"b.example/x.js`.
     lv_body = shell_for_config( temp48 ).
 
-    temp87 = boolc( find( val = lv_body sub = `href="https://a&quot;b.example"` ) >= 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp87 ).
+    temp88 = boolc( find( val = lv_body sub = `href="https://a&quot;b.example"` ) >= 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp88 ).
 
   ENDMETHOD.
 
@@ -2636,8 +2665,8 @@ DATA lt_part TYPE temp2.
     " a UI5 served by the system itself: no hint at all
     DATA temp49 TYPE /kro/if_ui5_exit=>ty_s_http_config.
     DATA lv_body TYPE string.
-    DATA temp88 TYPE xsdboolean.
     DATA temp89 TYPE xsdboolean.
+    DATA temp90 TYPE xsdboolean.
     CLEAR temp49.
     temp49-theme = `sap_horizon`.
     temp49-src = `/sap/public/bc/ui5_ui5/1/resources/sap-ui-core.js`.
@@ -2645,11 +2674,11 @@ DATA lt_part TYPE temp2.
     lv_body = shell_for_config( temp49 ).
 
 
-    temp88 = boolc( find( val = lv_body sub = `rel="preconnect"` ) >= 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp88 ).
+    temp89 = boolc( find( val = lv_body sub = `rel="preconnect"` ) >= 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp89 ).
 
-    temp89 = boolc( find( val = lv_body sub = |<meta http-equiv="X-UA-Compatible" content="IE=edge">\n<title>abap2UI5</title>| ) >= 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp89 ).
+    temp90 = boolc( find( val = lv_body sub = |<meta http-equiv="X-UA-Compatible" content="IE=edge">\n<title>abap2UI5</title>| ) >= 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp90 ).
 
   ENDMETHOD.
 
@@ -2664,14 +2693,14 @@ DATA lt_part TYPE temp2.
     DATA ls_config LIKE temp50.
     DATA lv_body TYPE string.
     DATA lv_hint TYPE string.
-    DATA temp90 TYPE xsdboolean.
     DATA temp91 TYPE xsdboolean.
     DATA temp92 TYPE xsdboolean.
+    DATA temp93 TYPE xsdboolean.
     DATA temp51 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp52 LIKE LINE OF temp51.
-    DATA temp93 TYPE xsdboolean.
     DATA temp94 TYPE xsdboolean.
     DATA temp95 TYPE xsdboolean.
+    DATA temp96 TYPE xsdboolean.
     DATA lv_rest TYPE string.
     CLEAR temp50.
     temp50-theme = `sap_horizon`.
@@ -2692,20 +2721,20 @@ DATA lt_part TYPE temp2.
                                         act = occurrences( val = lv_body
                                                            sub = `rel="preload"` ) ).
 
-    temp90 = boolc( find( val = lv_body sub = |<link rel="preconnect" href="https://sdk.example" crossorigin>\n{ lv_hint }<title>| ) >= 0 ).
+    temp91 = boolc( find( val = lv_body sub = |<link rel="preconnect" href="https://sdk.example" crossorigin>\n{ lv_hint }<title>| ) >= 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp90 ).
+        temp91 ).
 
-    temp91 = boolc( find( val = lv_body sub = lv_hint ) < find( val = lv_body sub = `<script>` ) ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp91 ).
+    temp92 = boolc( find( val = lv_body sub = lv_hint ) < find( val = lv_body sub = `<script>` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp92 ).
 
     " the hash in the hint is the version the component asks the bundle by
     " (componentData.bundle), and the URL it names is the one the node
     " answers as immutable
 
-    temp92 = boolc( find( val = lv_body sub = |"bundle" : "{ /kro/cl_ui5f_preload=>build_hash }"| ) >= 0 ).
+    temp93 = boolc( find( val = lv_body sub = |"bundle" : "{ /kro/cl_ui5f_preload=>build_hash }"| ) >= 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp92 ).
+        temp93 ).
 
     CLEAR temp51.
 
@@ -2717,19 +2746,19 @@ DATA lt_part TYPE temp2.
     " lower-case hex: nothing encodeURIComponent( ) or an attribute escape
     " would change, so the two URLs cannot differ by an encoding
 
-    temp93 = boolc( /kro/cl_ui5f_preload=>build_hash CO `0123456789abcdef` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp93 ).
+    temp94 = boolc( /kro/cl_ui5f_preload=>build_hash CO `0123456789abcdef` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp94 ).
 
     " the hint is a <link>: the inline script is still the generated text
     " its hash was taken over, and still the only inline script
 
-    temp94 = boolc( find( val = lv_body sub = |<script>{ /kro/cl_ui5f_preload=>get( ) }</script>| ) >= 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp94 ).
-
-    temp95 = boolc( find( val = lv_body sub = |script-src 'self' '{ /kro/cl_ui5f_preload=>script_hash }'"| ) >= 0 ).
+    temp95 = boolc( find( val = lv_body sub = |<script>{ /kro/cl_ui5f_preload=>get( ) }</script>| ) >= 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp95 ).
+
+    temp96 = boolc( find( val = lv_body sub = |script-src 'self' '{ /kro/cl_ui5f_preload=>script_hash }'"| ) >= 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp96 ).
 
     lv_rest = replace( val  = lv_body
                              sub  = /kro/cl_ui5f_preload=>get( )
@@ -2854,8 +2883,8 @@ DATA lt_part TYPE temp2.
     DATA temp56 TYPE /kro/if_ui5_exit=>ty_s_http_config.
     DATA ls_config LIKE temp56.
     DATA lv_body TYPE string.
-    DATA temp96 TYPE xsdboolean.
     DATA temp97 TYPE xsdboolean.
+    DATA temp98 TYPE xsdboolean.
     DATA temp57 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp58 LIKE LINE OF temp57.
     CLEAR temp56.
@@ -2870,12 +2899,12 @@ DATA lt_part TYPE temp2.
                                         act = occurrences( val = lv_body
                                                            sub = `data-sap-ui-libs` ) ).
 
-    temp96 = boolc( find( val = lv_body sub = |data-sap-ui-bindingSyntax="complex" data-sap-ui-libs="sap.m"\ndata-sap-ui-theme="sap_horizon"| ) >= 0 ).
+    temp97 = boolc( find( val = lv_body sub = |data-sap-ui-bindingSyntax="complex" data-sap-ui-libs="sap.m"\ndata-sap-ui-theme="sap_horizon"| ) >= 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp96 ).
+        temp97 ).
 
-    temp97 = boolc( find( val = lv_body sub = `data-sap-ui-libs="sap.m"` ) > find( val = lv_body sub = `<script id="sap-ui-bootstrap"` ) ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp97 ).
+    temp98 = boolc( find( val = lv_body sub = `data-sap-ui-libs="sap.m"` ) > find( val = lv_body sub = `<script id="sap-ui-bootstrap"` ) ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp98 ).
 
     " other attributes of the exit do not take it away
 
@@ -2906,10 +2935,10 @@ DATA lt_part TYPE temp2.
     DATA temp28 LIKE LINE OF temp27.
     DATA ls_config LIKE temp59.
     DATA lv_body TYPE string.
-    DATA temp98 TYPE xsdboolean.
+    DATA temp99 TYPE xsdboolean.
     DATA temp60 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp61 LIKE LINE OF temp60.
-    DATA temp99 TYPE xsdboolean.
+    DATA temp100 TYPE xsdboolean.
     DATA temp62 TYPE /kro/if_client=>ty_t_name_value.
     DATA temp63 LIKE LINE OF temp62.
     CLEAR temp59.
@@ -2931,8 +2960,8 @@ DATA lt_part TYPE temp2.
                                         act = occurrences( val = lv_body
                                                            sub = `data-sap-ui-libs` ) ).
 
-    temp98 = boolc( find( val = lv_body sub = ` data-sap-ui-libs='sap.ui.table,sap.ui.layout'` ) >= 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp98 ).
+    temp99 = boolc( find( val = lv_body sub = ` data-sap-ui-libs='sap.ui.table,sap.ui.layout'` ) >= 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp99 ).
     cl_abap_unit_assert=>assert_equals( exp = 0
                                         act = occurrences( val = lv_body
                                                            sub = `data-sap-ui-libs="sap.m"` ) ).
@@ -2950,8 +2979,8 @@ DATA lt_part TYPE temp2.
                                         act = occurrences( val = lv_body
                                                            sub = `data-sap-ui-libs="sap.m"` ) ).
 
-    temp99 = boolc( find( val = lv_body sub = ` data-sap-ui-Libs='sap.f'` ) >= 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp99 ).
+    temp100 = boolc( find( val = lv_body sub = ` data-sap-ui-Libs='sap.f'` ) >= 0 ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp100 ).
 
     " ... and so does one that names them in data-sap-ui-config, whose libs
     " entry a data-sap-ui-libs attribute would override
@@ -2972,8 +3001,8 @@ DATA lt_part TYPE temp2.
   METHOD test_bundle_response.
     DATA temp29 TYPE /kro/cl_ui5_util_context=>ty_t_name_value.
     DATA temp30 LIKE LINE OF temp29.
-    DATA temp100 TYPE xsdboolean.
     DATA temp101 TYPE xsdboolean.
+    DATA temp102 TYPE xsdboolean.
 
     handler_create( ).
     CLEAR mo_mock->ms_req_info.
@@ -2991,15 +3020,15 @@ DATA lt_part TYPE temp2.
     cl_abap_unit_assert=>assert_equals( exp = 200
                                         act = mo_mock->mv_status ).
 
-    temp100 = boolc( find( val = mo_mock->mv_cdata sub = `(function () {` ) = 0 ).
+    temp101 = boolc( find( val = mo_mock->mv_cdata sub = `(function () {` ) = 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp100 ).
+        temp101 ).
     " the path the stack reported (get_req_info, ~path) is the one the
     " module tells the embedding page
 
-    temp101 = boolc( mo_mock->mv_cdata CS `nodePath:"/sap/bc/z2ui5",` ).
+    temp102 = boolc( mo_mock->mv_cdata CS `nodePath:"/sap/bc/z2ui5",` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp101 ).
+        temp102 ).
     cl_abap_unit_assert=>assert_equals( exp = `application/javascript; charset=UTF-8`
                                         act = header_value( `content-type` ) ).
     cl_abap_unit_assert=>assert_equals( exp = `nosniff`
@@ -3017,10 +3046,10 @@ DATA lt_part TYPE temp2.
   METHOD test_bundle_versioned.
     DATA temp31 TYPE /kro/cl_ui5_util_context=>ty_t_name_value.
     DATA temp32 LIKE LINE OF temp31.
-    DATA temp102 TYPE xsdboolean.
+    DATA temp103 TYPE xsdboolean.
     DATA temp33 TYPE /kro/cl_ui5_util_context=>ty_t_name_value.
     DATA temp34 LIKE LINE OF temp33.
-    DATA temp103 TYPE xsdboolean.
+    DATA temp104 TYPE xsdboolean.
 
     " asked for by its version, the bundle may be kept without asking again
     handler_create( ).
@@ -3038,8 +3067,8 @@ DATA lt_part TYPE temp2.
     cl_abap_unit_assert=>assert_equals( exp = 200
                                         act = mo_mock->mv_status ).
 
-    temp102 = boolc( mo_mock->mv_cdata CS `sap.ui.define("z2ui5/embed"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp102 ).
+    temp103 = boolc( mo_mock->mv_cdata CS `sap.ui.define("z2ui5/embed"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp103 ).
     cl_abap_unit_assert=>assert_equals( exp = `private, max-age=31536000, immutable`
                                         act = header_value( `cache-control` ) ).
 
@@ -3057,8 +3086,8 @@ DATA lt_part TYPE temp2.
     mo_mock->ms_req_info-t_params = temp33.
     mo_handler->main( ).
 
-    temp103 = boolc( mo_mock->mv_cdata CS `sap.ui.define("z2ui5/embed"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp103 ).
+    temp104 = boolc( mo_mock->mv_cdata CS `sap.ui.define("z2ui5/embed"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp104 ).
     cl_abap_unit_assert=>assert_equals( exp = `private, no-cache`
                                         act = header_value( `cache-control` ) ).
 
@@ -3385,7 +3414,7 @@ DATA lt_part TYPE temp2.
     DATA temp60 LIKE LINE OF temp59.
     DATA temp68 TYPE /kro/if_client=>ty_s_name_value.
     DATA temp69 TYPE /kro/if_client=>ty_s_name_value.
-    DATA temp104 TYPE xsdboolean.
+    DATA temp105 TYPE xsdboolean.
 
     handler_create( ).
     CLEAR mo_mock->ms_req_info.
@@ -3442,8 +3471,8 @@ DATA lt_part TYPE temp2.
     cl_abap_unit_assert=>assert_equals( exp = 200
                                         act = mo_mock->mv_status ).
 
-    temp104 = boolc( mo_mock->mv_cdata CS `<!DOCTYPE html>` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp104 ).
+    temp105 = boolc( mo_mock->mv_cdata CS `<!DOCTYPE html>` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp105 ).
 
   ENDMETHOD.
 
@@ -3454,7 +3483,7 @@ DATA lt_part TYPE temp2.
     " flips - a server without one simply has nothing to flip
     DATA lo_server TYPE REF TO ltcl_server_shape.
     DATA lo_handler TYPE REF TO /kro/cl_ui5_http_handler.
-    DATA temp105 TYPE xsdboolean.
+    DATA temp106 TYPE xsdboolean.
     CREATE OBJECT lo_server TYPE ltcl_server_shape.
     CREATE OBJECT lo_server->response TYPE ltcl_server_shape.
 
@@ -3464,8 +3493,8 @@ DATA lt_part TYPE temp2.
     cl_abap_unit_assert=>assert_bound( lo_handler->mo_server ).
     cl_abap_unit_assert=>assert_bound( lo_handler->mo_server->mo_server_onprem ).
 
-    temp105 = boolc( lo_handler->mo_response_onprem = lo_server->response ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp105 ).
+    temp106 = boolc( lo_handler->mo_response_onprem = lo_server->response ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp106 ).
 
   ENDMETHOD.
 

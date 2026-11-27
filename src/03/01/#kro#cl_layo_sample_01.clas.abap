@@ -221,24 +221,12 @@ mo_layout = /kro/cl_layo_manager=>factory( control  = /kro/cl_layo_manager=>m_ta
   ENDMETHOD.
 
   METHOD on_after_navigation.
-        DATA temp8 TYPE REF TO /kro/cl_layo_pop.
-        DATA app LIKE temp8.
 
-    TRY.
-
-
-        temp8 ?= client->get_app_prev( ).
-
-        app = temp8.
-        mo_layout = app->mo_layout.
-
-        render_main( ).
-
-      CATCH cx_root.
-        " not back from the layout popup (e.g. a restored draft) - the
-        " view still has to be displayed
-        render_main( ).
-    ENDTRY.
+    " back from the layout popup: take over the layout chosen there; on
+    " any other navigation (e.g. a restored draft) take_over( ) does
+    " nothing - the view is displayed either way
+    /kro/cl_layo_pop=>take_over( client = client layout = mo_layout ).
+    render_main( ).
 
   ENDMETHOD.
 

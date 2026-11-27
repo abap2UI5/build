@@ -1371,6 +1371,7 @@ CLASS ltcl_01_request IMPLEMENTATION.
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
     DATA lv_info TYPE string.
     DATA temp9 TYPE xsdboolean.
+    DATA temp10 TYPE xsdboolean.
 
     " the url comes off the request and is quoted in the 500 body: markup
     " and quotes a crafted request puts into it do not reach the body
@@ -1393,6 +1394,21 @@ CLASS ltcl_01_request IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals(
         exp = `/sap/bc/z2ui5?app_start=ZCL_X&q=a%20b%3C+c.d_e-f~g:h`
         act = /kro/cl_ui5_handler=>context_info_url_safe( `/sap/bc/z2ui5?app_start=ZCL_X&q=a%20b%3C+c.d_e-f~g:h` ) ).
+
+    " the event name and the draft id come off the request too - S_FRONT.EVENT
+    " is any string - and go through the same strip
+    CREATE OBJECT lo_handler->mo_action TYPE /kro/cl_ui5_action EXPORTING VAL = lo_handler.
+    lo_handler->mo_action->ms_actual-event = `SAVE<img src=x onerror="a()">`.
+    lo_handler->mo_action->mo_app->ms_draft-id_prev = `D1<b>`.
+    lo_handler->mv_request_parsed = abap_true.
+
+    lv_info = lo_handler->request_context_info( ).
+
+    cl_abap_unit_assert=>assert_char_cp( act = lv_info
+                                         exp = `*event SAVEimgsrc=xonerror=a, draft D1b,*` ).
+
+    temp10 = boolc( lv_info CA `<>"'` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp10 ).
 
   ENDMETHOD.
 
@@ -1582,9 +1598,9 @@ CLASS ltcl_02_response IMPLEMENTATION.
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
     DATA ls_response TYPE /kro/if_ui5_types=>ty_s_response.
     DATA lv_json TYPE string.
-    DATA temp10 TYPE xsdboolean.
     DATA temp11 TYPE xsdboolean.
     DATA temp12 TYPE xsdboolean.
+    DATA temp13 TYPE xsdboolean.
     CREATE OBJECT lo_handler EXPORTING val = ``.
 
     CLEAR ls_response.
@@ -1597,16 +1613,16 @@ CLASS ltcl_02_response IMPLEMENTATION.
 
 
 
-    temp10 = boolc( lv_json CS `S_FRONT` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp10 ).
-
-
-    temp11 = boolc( lv_json CS `MODEL` ).
+    temp11 = boolc( lv_json CS `S_FRONT` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp11 ).
 
 
-    temp12 = boolc( lv_json CS `{"name":"test"}` ).
+    temp12 = boolc( lv_json CS `MODEL` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp12 ).
+
+
+    temp13 = boolc( lv_json CS `{"name":"test"}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp13 ).
 
   ENDMETHOD.
 
@@ -1616,9 +1632,9 @@ CLASS ltcl_02_response IMPLEMENTATION.
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
     DATA ls_response TYPE /kro/if_ui5_types=>ty_s_response.
     DATA lv_json TYPE string.
-    DATA temp13 TYPE xsdboolean.
     DATA temp14 TYPE xsdboolean.
     DATA temp15 TYPE xsdboolean.
+    DATA temp16 TYPE xsdboolean.
     CREATE OBJECT lo_handler EXPORTING val = ``.
     ls_response-s_front-id = `ID123`.
 
@@ -1626,18 +1642,18 @@ CLASS ltcl_02_response IMPLEMENTATION.
     lv_json = lo_handler->response_abap_to_json( ls_response ).
 
 
-    temp13 = boolc( lv_json CS `MODEL` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp13 ).
+    temp14 = boolc( lv_json CS `MODEL` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp14 ).
 
-    temp14 = boolc( lv_json CS `S_FRONT` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp14 ).
+    temp15 = boolc( lv_json CS `S_FRONT` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp15 ).
 
     " and an explicitly empty one is treated the same
     ls_response-model = `{}`.
     lv_json = lo_handler->response_abap_to_json( ls_response ).
 
-    temp15 = boolc( lv_json CS `MODEL` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp15 ).
+    temp16 = boolc( lv_json CS `MODEL` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp16 ).
 
   ENDMETHOD.
 
@@ -1651,8 +1667,8 @@ CLASS ltcl_02_response IMPLEMENTATION.
     DATA temp37 TYPE xstring.
     DATA lv_ctrl TYPE string.
     DATA lv_json TYPE string.
-    DATA temp16 TYPE xsdboolean.
     DATA temp17 TYPE xsdboolean.
+    DATA temp18 TYPE xsdboolean.
     CREATE OBJECT lo_handler EXPORTING val = ``.
 
     temp37 = `01`.
@@ -1666,11 +1682,11 @@ CLASS ltcl_02_response IMPLEMENTATION.
     lv_json = lo_handler->response_abap_to_json( ls_response ).
 
 
-    temp16 = boolc( lv_json CA lv_ctrl ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp16 ).
+    temp17 = boolc( lv_json CA lv_ctrl ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp17 ).
 
-    temp17 = boolc( lv_json CS `"MODEL":{"NAME":"a\u0001b"}` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp17 ).
+    temp18 = boolc( lv_json CS `"MODEL":{"NAME":"a\u0001b"}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp18 ).
 
   ENDMETHOD.
 
@@ -1683,10 +1699,10 @@ CLASS ltcl_02_response IMPLEMENTATION.
     DATA ls_response TYPE /kro/if_ui5_types=>ty_s_response.
     DATA temp38 TYPE /kro/if_ui5_types=>ty_s_queued_action.
     DATA lv_json TYPE string.
-    DATA temp18 TYPE xsdboolean.
     DATA temp19 TYPE xsdboolean.
     DATA temp20 TYPE xsdboolean.
     DATA temp21 TYPE xsdboolean.
+    DATA temp22 TYPE xsdboolean.
     CREATE OBJECT lo_handler EXPORTING val = ``.
     ls_response-s_front-id = `ID123`.
 
@@ -1701,23 +1717,23 @@ CLASS ltcl_02_response IMPLEMENTATION.
     lv_json = lo_handler->response_abap_to_json( ls_response ).
 
 
-    temp18 = boolc( lv_json CS `"ACTIONS":[["CONTROL_BY_ID","tab","","setHiddenInPopin",{"A":1}]]` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
-        temp18 ).
-
-    temp19 = boolc( lv_json CS `"VIEWS":{"MAIN":{"XML":""},"POPUP":{"DESTROY":true}}` ).
+    temp19 = boolc( lv_json CS `"ACTIONS":[["CONTROL_BY_ID","tab","","setHiddenInPopin",{"A":1}]]` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp19 ).
 
-    temp20 = boolc( lv_json CS `"NAV":{"setNavRouting":"KEEP"}` ).
+    temp20 = boolc( lv_json CS `"VIEWS":{"MAIN":{"XML":""},"POPUP":{"DESTROY":true}}` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act =
         temp20 ).
+
+    temp21 = boolc( lv_json CS `"NAV":{"setNavRouting":"KEEP"}` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act =
+        temp21 ).
     " a response without a section carries no key for it
     CLEAR: ls_response-s_front-o_views, ls_response-s_front-o_nav.
     lv_json = lo_handler->response_abap_to_json( ls_response ).
 
-    temp21 = boolc( lv_json CS `"VIEWS"` OR lv_json CS `"NAV"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp21 ).
+    temp22 = boolc( lv_json CS `"VIEWS"` OR lv_json CS `"NAV"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp22 ).
     " ... and nothing else of the structure it is built from: the two
     " references used to leave as "O_VIEWS":null,"O_NAV":null
     cl_abap_unit_assert=>assert_equals(
@@ -1769,7 +1785,7 @@ CLASS ltcl_02_response IMPLEMENTATION.
   METHOD test_view_update_none.
 
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp22 TYPE xsdboolean.
+    DATA temp23 TYPE xsdboolean.
     DATA temp1 LIKE sy-subrc.
     CREATE OBJECT lo_handler EXPORTING val = ``.
 
@@ -1777,9 +1793,9 @@ CLASS ltcl_02_response IMPLEMENTATION.
 
     READ TABLE lo_handler->mo_action->ms_next-t_action_front WITH KEY method = `display` TRANSPORTING NO FIELDS.
     temp1 = sy-subrc.
-    temp22 = boolc( temp1 = 0 ).
+    temp23 = boolc( temp1 = 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act =
-        temp22 ).
+        temp23 ).
 
   ENDMETHOD.
 
@@ -1787,7 +1803,7 @@ CLASS ltcl_02_response IMPLEMENTATION.
 
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
     DATA temp39 TYPE REF TO ltcl_app_noop.
-    DATA temp23 TYPE xsdboolean.
+    DATA temp24 TYPE xsdboolean.
 
     " a bound value differs from its snapshot after main( ) - the model is
     " sent with no app opt-in of any kind: automatic model update is always on
@@ -1803,8 +1819,8 @@ CLASS ltcl_02_response IMPLEMENTATION.
     " the MODEL key itself IS the push - no updateModel action travels,
     " the frontend pushes into every open slot when a model arrived
 
-    temp23 = boolc( system_actions_of( lo_handler ) CS `updateModel` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp23 ).
+    temp24 = boolc( system_actions_of( lo_handler ) CS `updateModel` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp24 ).
     cl_abap_unit_assert=>assert_equals( exp = lo_handler->mo_action->mo_app->model_json_stringify( )
                                         act = lo_handler->ms_response-model ).
 
@@ -1813,7 +1829,7 @@ CLASS ltcl_02_response IMPLEMENTATION.
   METHOD test_auto_update_same.
 
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp24 TYPE xsdboolean.
+    DATA temp25 TYPE xsdboolean.
 
     " main( ) changed nothing - the response stays `{}` and no update flag is
     " set, so an idle event round-trip carries no model payload as before
@@ -1827,8 +1843,8 @@ CLASS ltcl_02_response IMPLEMENTATION.
                                         act = lo_handler->ms_response-model ).
     " an unchanged model asks for no push at all
 
-    temp24 = boolc( system_actions_of( lo_handler ) CS `updateModel` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp24 ).
+    temp25 = boolc( system_actions_of( lo_handler ) CS `updateModel` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp25 ).
 
   ENDMETHOD.
 
@@ -1836,7 +1852,7 @@ CLASS ltcl_02_response IMPLEMENTATION.
 
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
     DATA li_client TYPE REF TO /kro/if_client.
-    DATA temp25 TYPE xsdboolean.
+    DATA temp26 TYPE xsdboolean.
 
     " a roundtrip that re-displays a NESTED view without its MAIN view must
     " carry the model: the nested view inherits the MAIN model by UI5
@@ -1858,8 +1874,8 @@ CLASS ltcl_02_response IMPLEMENTATION.
         exp = lo_handler->mo_action->mo_app->model_json_stringify( )
         act = lo_handler->ms_response-model ).
 
-    temp25 = boolc( system_actions_of( lo_handler ) CS `updateModel` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp25 ).
+    temp26 = boolc( system_actions_of( lo_handler ) CS `updateModel` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp26 ).
 
   ENDMETHOD.
 
@@ -1952,7 +1968,7 @@ CLASS ltcl_02_response IMPLEMENTATION.
 
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_caller LIKE lo_handler->mo_action->mo_app.
-    DATA temp26 TYPE xsdboolean.
+    DATA temp27 TYPE xsdboolean.
 
     " the caller binds and changes a value and hops away in the same main( ):
     " no response of its own carries the change, so the container that
@@ -1968,8 +1984,8 @@ CLASS ltcl_02_response IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = lo_caller->mv_model_client_stale ).
     " the hop was taken: the handler now answers for the called app
 
-    temp26 = boolc( lo_handler->mo_action->mo_app = lo_caller ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp26 ).
+    temp27 = boolc( lo_handler->mo_action->mo_app = lo_caller ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp27 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = lo_handler->mo_action->mo_app->mv_model_client_stale ).
 
   ENDMETHOD.
@@ -2422,8 +2438,8 @@ CLASS ltcl_03_dispatch IMPLEMENTATION.
   METHOD test_nav_mode_resent.
 
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp27 TYPE xsdboolean.
     DATA temp28 TYPE xsdboolean.
+    DATA temp29 TYPE xsdboolean.
 
     " An app configures routing ONCE. main_end therefore re-sends the mode the
     " app carries whenever the roundtrip did not set one itself, so a later
@@ -2450,8 +2466,8 @@ CLASS ltcl_03_dispatch IMPLEMENTATION.
     lo_handler->main_end( ).
 
 
-    temp27 = boolc( system_actions_of( lo_handler ) CS `setNavRouting` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp27 ).
+    temp28 = boolc( system_actions_of( lo_handler ) CS `setNavRouting` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp28 ).
 
     CREATE OBJECT lo_handler EXPORTING val = ``.
     CREATE OBJECT lo_handler->mo_action->mo_app->mo_app TYPE ltcl_app_nav_loop.
@@ -2460,15 +2476,15 @@ CLASS ltcl_03_dispatch IMPLEMENTATION.
     lo_handler->main_end( ).
 
 
-    temp28 = boolc( system_actions_of( lo_handler ) CS `setNavRouting` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp28 ).
+    temp29 = boolc( system_actions_of( lo_handler ) CS `setNavRouting` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp29 ).
 
   ENDMETHOD.
 
   METHOD test_nav_mode_hop_default.
 
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp29 TYPE xsdboolean.
+    DATA temp30 TYPE xsdboolean.
 
     " A navigation hop into an app WITHOUT a mode of its own says DEFAULT
     " explicitly: the app's initial mode would travel as empty = "no change",
@@ -2499,8 +2515,8 @@ CLASS ltcl_03_dispatch IMPLEMENTATION.
     lo_handler->main_end( ).
 
 
-    temp29 = boolc( system_actions_of( lo_handler ) CS `setNavRouting` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp29 ).
+    temp30 = boolc( system_actions_of( lo_handler ) CS `setNavRouting` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp30 ).
 
     " while a hop into an app WITH a mode - its own, or the one a called app
     " inherits from its caller (z2ui5_cl_ui5_action) - still sends that mode
@@ -2881,10 +2897,10 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA temp4 TYPE REF TO ltcl_app_popup_caller.
     DATA temp56 TYPE REF TO ltcl_app_popup_bound.
     DATA lo_popup LIKE temp56.
-    DATA temp30 TYPE xsdboolean.
     DATA temp31 TYPE xsdboolean.
     DATA temp32 TYPE xsdboolean.
     DATA temp33 TYPE xsdboolean.
+    DATA temp34 TYPE xsdboolean.
     CREATE OBJECT temp4 TYPE ltcl_app_popup_caller.
     lo_test = /kro/cl_ui5_test=>start( temp4 )->event( `ROW_SELECT` ).
 
@@ -2895,18 +2911,18 @@ CLASS ltcl_04_nav IMPLEMENTATION.
 
     lo_popup = temp56.
 
-    temp30 = boolc( lo_test->nav_called( ) = lo_popup ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp30 ).
+    temp31 = boolc( lo_test->nav_called( ) = lo_popup ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp31 ).
     " ...opens its popup over the caller's table, which stays on screen...
 
-    temp31 = boolc( lo_test->popup_xml( ) CS `/MS_ROW/NAME` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp31 ).
-
-    temp32 = boolc( lo_test->view_xml( ) CS `/MT_TAB` ).
+    temp32 = boolc( lo_test->popup_xml( ) CS `/MS_ROW/NAME` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp32 ).
 
-    temp33 = boolc( lo_test->response( ) CS `"MAIN"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp33 ).
+    temp33 = boolc( lo_test->view_xml( ) CS `/MT_TAB` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp33 ).
+
+    temp34 = boolc( lo_test->response( ) CS `"MAIN"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp34 ).
     " ...and ships ITS model, which knows nothing of the caller's table -
     " the reason the frontend must not push it into the caller's view
     cl_abap_unit_assert=>assert_equals( exp = `edit me`
@@ -2919,8 +2935,8 @@ CLASS ltcl_04_nav IMPLEMENTATION.
 
     DATA lv_id TYPE string.
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp34 TYPE xsdboolean.
     DATA temp35 TYPE xsdboolean.
+    DATA temp36 TYPE xsdboolean.
     lv_id = caller_started( ).
 
     lo_handler = event_on( iv_id    = lv_id
@@ -2929,13 +2945,13 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     " a popup app with nothing bound: the popup opens, and no MODEL key
     " travels at all - the caller's view keeps what it has
 
-    temp34 = boolc( lo_handler->ms_response-s_front-app CS `POPUP_SILENT` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp34 ).
+    temp35 = boolc( lo_handler->ms_response-s_front-app CS `POPUP_SILENT` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp35 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = check_display( io_handler = lo_handler
                                                      iv_slot    = /kro/if_client=>cs_view-popup ) ).
 
-    temp35 = boolc( lo_handler->mv_response CS `"MODEL"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp35 ).
+    temp36 = boolc( lo_handler->mv_response CS `"MODEL"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp36 ).
 
   ENDMETHOD.
 
@@ -2951,7 +2967,7 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA temp57 TYPE REF TO ltcl_app_popup_caller.
     DATA temp58 TYPE REF TO ltcl_app_popup_bound.
     DATA lo_left LIKE temp58.
-    DATA temp36 TYPE xsdboolean.
+    DATA temp37 TYPE xsdboolean.
     CREATE OBJECT temp5 TYPE ltcl_app_popup_caller.
     lo_test = /kro/cl_ui5_test=>start( temp5
                                        )->event( `ROW_SELECT`
@@ -2968,8 +2984,8 @@ CLASS ltcl_04_nav IMPLEMENTATION.
                                         act = lo_left->ms_row-name ).
     cl_abap_unit_assert=>assert_initial( lo_test->nav_called( ) ).
 
-    temp36 = boolc( lo_test->response( ) CS `"MAIN"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp36 ).
+    temp37 = boolc( lo_test->response( ) CS `"MAIN"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp37 ).
     cl_abap_unit_assert=>assert_initial( lo_test->popup_xml( ) ).
     cl_abap_unit_assert=>assert_equals( exp = `one`
                                         act = lo_test->model( `/MT_TAB/0/NAME` ) ).
@@ -2989,7 +3005,7 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA lo_self TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_root TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp37 TYPE xsdboolean.
+    DATA temp38 TYPE xsdboolean.
     CREATE OBJECT temp6 TYPE ltcl_app_call_self.
     lo_start = started_with( temp6 ).
 
@@ -3009,8 +3025,8 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     lo_root = event_on( iv_id    = lo_back->ms_response-s_front-id
                               iv_event = `BACK` ).
 
-    temp37 = boolc( lo_root->ms_response-model CS `"root"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp37
+    temp38 = boolc( lo_root->ms_response-model CS `"root"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp38
                                       msg = lo_root->ms_response-model ).
 
   ENDMETHOD.
@@ -3027,8 +3043,8 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA temp7 TYPE REF TO ltcl_app_hop_caller.
     DATA lo_popup TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp38 TYPE xsdboolean.
     DATA temp39 TYPE xsdboolean.
+    DATA temp40 TYPE xsdboolean.
     CREATE OBJECT temp7 TYPE ltcl_app_hop_caller.
     lo_start = started_with( temp7 ).
 
@@ -3040,11 +3056,11 @@ CLASS ltcl_04_nav IMPLEMENTATION.
                               iv_event = `CLOSE` ).
 
 
-    temp38 = boolc( lo_back->ms_response-s_front-app CS `HOP_CALLER` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp38 ).
+    temp39 = boolc( lo_back->ms_response-s_front-app CS `HOP_CALLER` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp39 ).
 
-    temp39 = boolc( lo_back->ms_response-model CS `"changed"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp39
+    temp40 = boolc( lo_back->ms_response-model CS `"changed"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp40
                                       msg = |the way back did not push the hop-time change: { lo_back->ms_response-model }| ).
 
   ENDMETHOD.
@@ -3053,21 +3069,21 @@ CLASS ltcl_04_nav IMPLEMENTATION.
 
     DATA lo_outer TYPE REF TO ltcl_app_twice.
     DATA lo_start TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp40 TYPE xsdboolean.
-    DATA lo_inner TYPE REF TO /kro/cl_ui5_handler.
     DATA temp41 TYPE xsdboolean.
+    DATA lo_inner TYPE REF TO /kro/cl_ui5_handler.
     DATA temp42 TYPE xsdboolean.
     DATA temp43 TYPE xsdboolean.
-    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA temp44 TYPE xsdboolean.
+    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA temp45 TYPE xsdboolean.
+    DATA temp46 TYPE xsdboolean.
     CREATE OBJECT lo_outer TYPE ltcl_app_twice.
     lo_outer->mv_name = `outer`.
 
     lo_start = started_with( lo_outer ).
 
-    temp40 = boolc( lo_start->ms_response-model CS `"outer"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp40 ).
+    temp41 = boolc( lo_start->ms_response-model CS `"outer"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp41 ).
 
     " the hop: the inner instance answers, with ITS value under the same
     " attribute name
@@ -3075,16 +3091,16 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     lo_inner = event_on( iv_id    = lo_start->ms_response-s_front-id
                                iv_event = `CALL` ).
 
-    temp41 = boolc( lo_inner->ms_response-s_front-app CS `APP_TWICE` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp41 ).
+    temp42 = boolc( lo_inner->ms_response-s_front-app CS `APP_TWICE` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp42 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = check_display( io_handler = lo_inner
                                                      iv_slot    = /kro/if_client=>cs_view-main ) ).
 
-    temp42 = boolc( lo_inner->ms_response-model CS `"inner"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp42 ).
+    temp43 = boolc( lo_inner->ms_response-model CS `"inner"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp43 ).
 
-    temp43 = boolc( lo_inner->ms_response-model CS `"outer"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp43 ).
+    temp44 = boolc( lo_inner->ms_response-model CS `"outer"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp44 ).
     " two drafts, not one overwritten
     cl_abap_unit_assert=>assert_differs( exp = lo_start->ms_response-s_front-id
                                          act = lo_inner->ms_response-s_front-id ).
@@ -3097,11 +3113,11 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = check_display( io_handler = lo_back
                                                      iv_slot    = /kro/if_client=>cs_view-main ) ).
 
-    temp44 = boolc( lo_back->ms_response-model CS `"MV_NAME":"outer"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp44 ).
+    temp45 = boolc( lo_back->ms_response-model CS `"MV_NAME":"outer"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp45 ).
 
-    temp45 = boolc( lo_back->ms_response-model CS `"MV_FROM_INNER":"inner"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp45
+    temp46 = boolc( lo_back->ms_response-model CS `"MV_FROM_INNER":"inner"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp46
                                       msg = `the outer could not read the inner back` ).
 
   ENDMETHOD.
@@ -3110,15 +3126,15 @@ CLASS ltcl_04_nav IMPLEMENTATION.
 
     DATA lo_handler TYPE REF TO /kro/cl_ui5_handler.
     DATA temp8 TYPE REF TO ltcl_app_popup_caller.
-    DATA temp46 TYPE xsdboolean.
+    DATA temp47 TYPE xsdboolean.
     CREATE OBJECT temp8 TYPE ltcl_app_popup_caller.
     lo_handler = started_with( temp8 ).
 
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = check_display( io_handler = lo_handler
                                                      iv_slot    = /kro/if_client=>cs_view-main ) ).
 
-    temp46 = boolc( lo_handler->ms_response-model CS `"MT_TAB"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp46 ).
+    temp47 = boolc( lo_handler->ms_response-model CS `"MT_TAB"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp47 ).
     result = lo_handler->ms_response-s_front-id.
 
   ENDMETHOD.
@@ -3128,19 +3144,19 @@ CLASS ltcl_04_nav IMPLEMENTATION.
 
     DATA lo_start TYPE REF TO /kro/cl_ui5_handler.
     DATA temp9 TYPE REF TO ltcl_app_dref_caller.
-    DATA temp47 TYPE xsdboolean.
-    DATA lo_popup TYPE REF TO /kro/cl_ui5_handler.
     DATA temp48 TYPE xsdboolean.
+    DATA lo_popup TYPE REF TO /kro/cl_ui5_handler.
     DATA temp49 TYPE xsdboolean.
-    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA temp50 TYPE xsdboolean.
+    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA temp51 TYPE xsdboolean.
     DATA temp52 TYPE xsdboolean.
+    DATA temp53 TYPE xsdboolean.
     CREATE OBJECT temp9 TYPE ltcl_app_dref_caller.
     lo_start = started_with( temp9 ).
 
-    temp47 = boolc( lo_start->ms_response-model CS `"two"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp47 ).
+    temp48 = boolc( lo_start->ms_response-model CS `"two"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp48 ).
 
     " the hop saves the caller - its generic reference is detached for the
     " draft and has to be back before the popup app runs
@@ -3148,13 +3164,13 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     lo_popup = event_on( iv_id    = lo_start->ms_response-s_front-id
                                iv_event = `OPEN` ).
 
-    temp48 = boolc( lo_popup->ms_response-s_front-app CS `DREF_POPUP` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp48 ).
+    temp49 = boolc( lo_popup->ms_response-s_front-app CS `DREF_POPUP` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp49 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = check_display( io_handler = lo_popup
                                                      iv_slot    = /kro/if_client=>cs_view-popup ) ).
 
-    temp49 = boolc( lo_popup->ms_response-model CS `"MV_FROM_CALLER":"two"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp49
+    temp50 = boolc( lo_popup->ms_response-model CS `"MV_FROM_CALLER":"two"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp50
                                       msg = `the popup app could not read the caller's table` ).
 
     " the way back: the caller renders its table again, both rows
@@ -3162,16 +3178,16 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     lo_back = event_on( iv_id    = lo_popup->ms_response-s_front-id
                               iv_event = `CLOSE` ).
 
-    temp50 = boolc( lo_back->ms_response-s_front-app CS `DREF_CALLER` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp50 ).
+    temp51 = boolc( lo_back->ms_response-s_front-app CS `DREF_CALLER` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp51 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = check_display( io_handler = lo_back
                                                      iv_slot    = /kro/if_client=>cs_view-main ) ).
 
-    temp51 = boolc( lo_back->ms_response-model CS `"one"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp51 ).
-
-    temp52 = boolc( lo_back->ms_response-model CS `"two"` ).
+    temp52 = boolc( lo_back->ms_response-model CS `"one"` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp52 ).
+
+    temp53 = boolc( lo_back->ms_response-model CS `"two"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp53 ).
 
   ENDMETHOD.
 
@@ -3180,19 +3196,19 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA lo_start TYPE REF TO /kro/cl_ui5_handler.
     DATA temp10 TYPE REF TO ltcl_app_dref_caller.
     DATA lo_popup TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp53 TYPE xsdboolean.
-    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA temp54 TYPE xsdboolean.
+    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA temp55 TYPE xsdboolean.
     DATA temp56 TYPE xsdboolean.
+    DATA temp57 TYPE xsdboolean.
     CREATE OBJECT temp10 TYPE ltcl_app_dref_caller.
     lo_start = started_with( temp10 ).
 
     lo_popup = event_on( iv_id    = lo_start->ms_response-s_front-id
                                iv_event = `OPEN` ).
 
-    temp53 = boolc( lo_popup->ms_response-s_front-app CS `DREF_POPUP` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp53 ).
+    temp54 = boolc( lo_popup->ms_response-s_front-app CS `DREF_POPUP` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp54 ).
 
     " the popup app appends a row to the caller's runtime-built table and
     " leaves to the caller instance it holds: the caller renders three rows
@@ -3200,16 +3216,16 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     lo_back = event_on( iv_id    = lo_popup->ms_response-s_front-id
                               iv_event = `APPEND` ).
 
-    temp54 = boolc( lo_back->ms_response-s_front-app CS `DREF_CALLER` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp54 ).
+    temp55 = boolc( lo_back->ms_response-s_front-app CS `DREF_CALLER` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp55 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = check_display( io_handler = lo_back
                                                      iv_slot    = /kro/if_client=>cs_view-main ) ).
 
-    temp55 = boolc( lo_back->ms_response-model CS `"one"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp55 ).
+    temp56 = boolc( lo_back->ms_response-model CS `"one"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp56 ).
 
-    temp56 = boolc( lo_back->ms_response-model CS `"three"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp56
+    temp57 = boolc( lo_back->ms_response-model CS `"three"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp57
                                       msg = `the row the popup app appended was lost on the way back` ).
 
   ENDMETHOD.
@@ -3224,7 +3240,7 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA lo_callee TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_event TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp57 TYPE xsdboolean.
+    DATA temp58 TYPE xsdboolean.
     CREATE OBJECT temp11 TYPE ltcl_app_tag_caller.
     lo_start = started_with( temp11 ).
     lo_caller ?= lo_start->mo_action->mo_app->mo_app.
@@ -3258,8 +3274,8 @@ CLASS ltcl_04_nav IMPLEMENTATION.
                         iv_event = `BACK` ).
     lo_caller ?= lo_back->mo_action->mo_app->mo_app.
 
-    temp57 = boolc( lo_back->ms_response-s_front-app CS `TAG_CALLER` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp57 ).
+    temp58 = boolc( lo_back->ms_response-s_front-app CS `TAG_CALLER` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp58 ).
     cl_abap_unit_assert=>assert_initial( lo_caller->mv_seen ).
 
   ENDMETHOD.
@@ -3274,10 +3290,10 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA temp12 TYPE REF TO ltcl_app_back_caller.
     DATA lo_call TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp58 TYPE xsdboolean.
+    DATA temp59 TYPE xsdboolean.
     DATA lo_event TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_popup TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp59 TYPE xsdboolean.
+    DATA temp60 TYPE xsdboolean.
     CREATE OBJECT temp12 TYPE ltcl_app_back_caller.
     lo_start = started_with( temp12 ).
     lo_caller ?= lo_start->mo_action->mo_app->mo_app.
@@ -3298,8 +3314,8 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = lo_caller->mv_nav_back ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = lo_caller->mv_navigated ).
 
-    temp58 = boolc( lo_back->ms_response-s_front-app CS `BACK_CALLER` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp58 ).
+    temp59 = boolc( lo_back->ms_response-s_front-app CS `BACK_CALLER` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp59 ).
 
     " a plain event after the return is none
 
@@ -3321,8 +3337,8 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     lo_popup = event_on( iv_id    = lo_back->ms_response-s_front-id
                                iv_event = `CALL_POPUP` ).
 
-    temp59 = boolc( lo_popup->ms_response-s_front-app CS `HOP_POPUP` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp59 ).
+    temp60 = boolc( lo_popup->ms_response-s_front-app CS `HOP_POPUP` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp60 ).
     lo_back = event_on( iv_id    = lo_popup->ms_response-s_front-id
                         iv_event = `CLOSE` ).
     lo_caller ?= lo_back->mo_action->mo_app->mo_app.
@@ -3367,11 +3383,11 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA lo_start TYPE REF TO /kro/cl_ui5_handler.
     DATA temp14 TYPE REF TO ltcl_app_anim_caller.
     DATA lv_system TYPE string.
-    DATA temp60 TYPE xsdboolean.
     DATA temp61 TYPE xsdboolean.
-    DATA lo_plain TYPE REF TO /kro/cl_ui5_handler.
     DATA temp62 TYPE xsdboolean.
+    DATA lo_plain TYPE REF TO /kro/cl_ui5_handler.
     DATA temp63 TYPE xsdboolean.
+    DATA temp64 TYPE xsdboolean.
     CREATE OBJECT temp14 TYPE ltcl_app_anim_caller.
     lo_start = started_with( temp14 ).
 
@@ -3382,11 +3398,11 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     cl_abap_unit_assert=>assert_char_cp( exp = `*"appInstance":"*`
                                          act = lv_system ).
 
-    temp60 = boolc( lv_system CS `transitionBack` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp60 ).
-
-    temp61 = boolc( lv_system CS `navBack` ).
+    temp61 = boolc( lv_system CS `transitionBack` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp61 ).
+
+    temp62 = boolc( lv_system CS `navBack` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp62 ).
 
     " a display without a transition sends what it always sent - no name,
     " no instance, no direction
@@ -3397,11 +3413,11 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = check_display( io_handler = lo_plain
                                                      iv_slot    = /kro/if_client=>cs_view-main ) ).
 
-    temp62 = boolc( lv_system CS `"transition` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp62 ).
-
-    temp63 = boolc( lv_system CS `appInstance` ).
+    temp63 = boolc( lv_system CS `"transition` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp63 ).
+
+    temp64 = boolc( lv_system CS `appInstance` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp64 ).
 
   ENDMETHOD.
 
@@ -3412,11 +3428,11 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA lv_caller TYPE string.
     DATA lo_callee TYPE REF TO /kro/cl_ui5_handler.
     DATA lv_system TYPE string.
-    DATA temp64 TYPE xsdboolean.
     DATA temp65 TYPE xsdboolean.
-    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA temp66 TYPE xsdboolean.
+    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA temp67 TYPE xsdboolean.
+    DATA temp68 TYPE xsdboolean.
     CREATE OBJECT temp15 TYPE ltcl_app_anim_caller.
     lo_start = started_with( temp15 ).
 
@@ -3435,11 +3451,11 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     cl_abap_unit_assert=>assert_char_cp( exp = `*"transition":"fade"*`
                                          act = lv_system ).
 
-    temp64 = boolc( lv_system CS `navBack` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp64 ).
-
-    temp65 = boolc( lv_system CS lv_caller ).
+    temp65 = boolc( lv_system CS `navBack` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp65 ).
+
+    temp66 = boolc( lv_system CS lv_caller ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp66 ).
 
     " the leave returns to the caller restored from the stack - the way back
 
@@ -3447,15 +3463,15 @@ CLASS ltcl_04_nav IMPLEMENTATION.
                               iv_event = `BACK` ).
     lv_system = system_actions_of( lo_back ).
 
-    temp66 = boolc( lo_back->ms_response-s_front-app CS `ANIM_CALLER` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp66 ).
+    temp67 = boolc( lo_back->ms_response-s_front-app CS `ANIM_CALLER` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp67 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = lo_back->mo_action->ms_actual-check_nav_back ).
     cl_abap_unit_assert=>assert_char_cp( exp = `*"navBack":true*`
                                          act = lv_system ).
     " ...recognized, not asked for: the app's own transition_back stays off
 
-    temp67 = boolc( lv_system CS `transitionBack` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp67 ).
+    temp68 = boolc( lv_system CS `transitionBack` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp68 ).
     " ...with the caller's own transition - the one it leaves with on ITS
     " way back - and the SAME instance it arrived as: it came out of its
     " draft, so the frontend can tell it from the page being left
@@ -3473,8 +3489,8 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA lo_callee TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_fresh TYPE REF TO /kro/cl_ui5_handler.
     DATA lv_system TYPE string.
-    DATA temp68 TYPE xsdboolean.
     DATA temp69 TYPE xsdboolean.
+    DATA temp70 TYPE xsdboolean.
     CREATE OBJECT temp16 TYPE ltcl_app_anim_caller.
     lo_start = started_with( temp16 ).
 
@@ -3488,13 +3504,13 @@ CLASS ltcl_04_nav IMPLEMENTATION.
 
     lv_system = system_actions_of( lo_fresh ).
 
-    temp68 = boolc( lo_fresh->ms_response-s_front-app CS `ANIM_CALLER` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp68 ).
+    temp69 = boolc( lo_fresh->ms_response-s_front-app CS `ANIM_CALLER` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp69 ).
     cl_abap_unit_assert=>assert_char_cp( exp = `*"transition":"slide"*`
                                          act = lv_system ).
 
-    temp69 = boolc( lv_system CS `navBack` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp69 ).
+    temp70 = boolc( lv_system CS `navBack` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp70 ).
 
   ENDMETHOD.
 
@@ -3504,7 +3520,7 @@ CLASS ltcl_04_nav IMPLEMENTATION.
     DATA temp17 TYPE REF TO ltcl_app_anim_caller.
     DATA lo_prev TYPE REF TO /kro/cl_ui5_handler.
     DATA lv_system TYPE string.
-    DATA temp70 TYPE xsdboolean.
+    DATA temp71 TYPE xsdboolean.
     CREATE OBJECT temp17 TYPE ltcl_app_anim_caller.
     lo_start = started_with( temp17 ).
 
@@ -3516,8 +3532,8 @@ CLASS ltcl_04_nav IMPLEMENTATION.
                                          act = lv_system ).
     " an app's own step back is no return from another app
 
-    temp70 = boolc( lv_system CS `navBack` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp70 ).
+    temp71 = boolc( lv_system CS `navBack` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp71 ).
 
   ENDMETHOD.
 ENDCLASS.
@@ -3620,10 +3636,10 @@ CLASS ltcl_05_monitor IMPLEMENTATION.
     DATA ls_call TYPE /kro/if_ui5_monitor=>ty_s_roundtrip.
     FIELD-SYMBOLS <temp18> LIKE LINE OF mo_monitor->mt_calls.
     DATA temp19 LIKE sy-tabix.
-    DATA temp71 TYPE xsdboolean.
     DATA temp72 TYPE xsdboolean.
     DATA temp73 TYPE xsdboolean.
     DATA temp74 TYPE xsdboolean.
+    DATA temp75 TYPE xsdboolean.
     DATA lo_second TYPE REF TO /kro/cl_ui5_handler.
     FIELD-SYMBOLS <temp59> LIKE LINE OF mo_monitor->mt_calls.
     DATA temp60 LIKE sy-tabix.
@@ -3663,8 +3679,8 @@ CLASS ltcl_05_monitor IMPLEMENTATION.
     " handlers outlive the request)
     cl_abap_unit_assert=>assert_not_initial( ls_call-draft_id ).
 
-    temp71 = boolc( ls_res-body CS ls_call-draft_id ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp71 ).
+    temp72 = boolc( ls_res-body CS ls_call-draft_id ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp72 ).
     cl_abap_unit_assert=>assert_initial( lo_first->ms_response ).
     cl_abap_unit_assert=>assert_initial( lo_first->mv_request_json ).
     " ...and the tree the body was parsed into goes with it
@@ -3679,14 +3695,14 @@ CLASS ltcl_05_monitor IMPLEMENTATION.
                                         act = ls_call-bytes_response ).
     " the first render displays a view, so the model travels with it
 
-    temp72 = boolc( ls_call-bytes_model > 0 ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp72 ).
-
-    temp73 = boolc( ls_call-ms_total >= 0 ).
+    temp73 = boolc( ls_call-bytes_model > 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp73 ).
 
-    temp74 = boolc( ls_call-ms_total >= ls_call-ms_load ).
+    temp74 = boolc( ls_call-ms_total >= 0 ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp74 ).
+
+    temp75 = boolc( ls_call-ms_total >= ls_call-ms_load ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp75 ).
 
     " roundtrip 2: an event on the draft it wrote
 
@@ -3769,8 +3785,8 @@ CLASS ltcl_05_monitor IMPLEMENTATION.
     DATA ls_call TYPE /kro/if_ui5_monitor=>ty_s_roundtrip.
     FIELD-SYMBOLS <temp21> LIKE LINE OF mo_monitor->mt_calls.
     DATA temp22 LIKE sy-tabix.
-    DATA temp75 TYPE xsdboolean.
     DATA temp76 TYPE xsdboolean.
+    DATA temp77 TYPE xsdboolean.
     CREATE OBJECT temp20 TYPE ltcl_app_boom.
     lo_first = started_with( temp20 ).
 
@@ -3804,13 +3820,13 @@ CLASS ltcl_05_monitor IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = `CX_SY_ZERODIVIDE`
                                         act = ls_call-error_class ).
 
-    temp75 = boolc( ls_call-error_text CS `event BOOM` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp75 ).
+    temp76 = boolc( ls_call-error_text CS `event BOOM` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp76 ).
     " the error id the user sees is the one in the log
     cl_abap_unit_assert=>assert_not_initial( lx->ms_error-uuid ).
 
-    temp76 = boolc( ls_call-error_text CS lx->ms_error-uuid ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp76 ).
+    temp77 = boolc( ls_call-error_text CS lx->ms_error-uuid ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp77 ).
     cl_abap_unit_assert=>assert_equals(
         exp = /kro/cl_ui5_util_context=>rtti_get_classname_by_ref( lo_second->mo_action->mo_app->mo_app )
         act = ls_call-app ).
@@ -4118,10 +4134,10 @@ CLASS ltcl_06_draft IMPLEMENTATION.
     DATA lv_start TYPE /kro/if_ui5_types=>ty_s_response-s_front-id.
     DATA temp24 TYPE REF TO ltcl_app_poll.
     DATA lo_arm TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp77 TYPE xsdboolean.
+    DATA temp78 TYPE xsdboolean.
     DATA lv_first TYPE string.
     DATA lo_second TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp78 TYPE xsdboolean.
+    DATA temp79 TYPE xsdboolean.
     CREATE OBJECT temp24 TYPE ltcl_app_poll.
     lv_start = started_with( temp24 )->ms_response-s_front-id.
 
@@ -4131,9 +4147,9 @@ CLASS ltcl_06_draft IMPLEMENTATION.
     lo_arm = event_on( iv_id    = lv_start
                              iv_event = `ARM` ).
 
-    temp77 = boolc( lo_arm->mv_response CS `["START_TIMER","TICK","1000","","X"]` ).
+    temp78 = boolc( lo_arm->mv_response CS `["START_TIMER","TICK","1000","","X"]` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true
-        act = temp77
+        act = temp78
         msg = `the repeating timer is armed with its flag` ).
 
     " the browser re-arms the tick itself - the app answers a tick with no
@@ -4145,9 +4161,9 @@ CLASS ltcl_06_draft IMPLEMENTATION.
     lo_second->main_begin( ).
     lo_second->main_loop( ).
 
-    temp78 = boolc( lo_second->mv_response CS `START_TIMER` ).
+    temp79 = boolc( lo_second->mv_response CS `START_TIMER` ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false
-        act = temp78
+        act = temp79
         msg = `a tick of a repeating timer re-arms nothing` ).
     cl_abap_unit_assert=>assert_equals( exp = lv_first
                                         act = lo_second->ms_response-s_front-id
@@ -4704,9 +4720,9 @@ CLASS ltcl_07_timer IMPLEMENTATION.
     DATA lo_start TYPE REF TO /kro/cl_ui5_handler.
     DATA temp35 TYPE REF TO ltcl_app_timer.
     DATA lo_popup TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp79 TYPE xsdboolean.
-    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
     DATA temp80 TYPE xsdboolean.
+    DATA lo_back TYPE REF TO /kro/cl_ui5_handler.
+    DATA temp81 TYPE xsdboolean.
     DATA lo_event TYPE REF TO /kro/cl_ui5_handler.
     CREATE OBJECT temp35 TYPE ltcl_app_timer.
     lo_start = started_with( temp35 ).
@@ -4716,8 +4732,8 @@ CLASS ltcl_07_timer IMPLEMENTATION.
     lo_popup = event_on( iv_id    = lo_start->ms_response-s_front-id
                                iv_event = `CALL_POPUP` ).
 
-    temp79 = boolc( lo_popup->ms_response-s_front-app CS `HOP_POPUP` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp79 ).
+    temp80 = boolc( lo_popup->ms_response-s_front-app CS `HOP_POPUP` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp80 ).
     cl_abap_unit_assert=>assert_equals( exp = 1
                                         act = count_in( iv_text = lo_popup->mv_response
                                                         iv_sub  = c_stop ) ).
@@ -4731,8 +4747,8 @@ CLASS ltcl_07_timer IMPLEMENTATION.
     lo_back = event_on( iv_id    = lo_popup->ms_response-s_front-id
                               iv_event = `CLOSE` ).
 
-    temp80 = boolc( lo_back->ms_response-s_front-app CS `APP_TIMER` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp80 ).
+    temp81 = boolc( lo_back->ms_response-s_front-app CS `APP_TIMER` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp81 ).
     cl_abap_unit_assert=>assert_equals( exp = 1
                                         act = count_in( iv_text = lo_back->mv_response
                                                         iv_sub  = c_armed ) ).
@@ -4801,7 +4817,7 @@ CLASS ltcl_07_timer IMPLEMENTATION.
     DATA temp38 TYPE REF TO ltcl_app_timer.
     DATA lo_event TYPE REF TO /kro/cl_ui5_handler.
     DATA lo_restore TYPE REF TO /kro/cl_ui5_handler.
-    DATA temp81 TYPE xsdboolean.
+    DATA temp82 TYPE xsdboolean.
     CREATE OBJECT temp38 TYPE ltcl_app_timer.
     lo_start = started_with( temp38 ).
 
@@ -4815,8 +4831,8 @@ CLASS ltcl_07_timer IMPLEMENTATION.
     lo_restore->main_begin( ).
     lo_restore->main_loop( ).
 
-    temp81 = boolc( lo_restore->ms_response-s_front-app CS `APP_TIMER` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp81 ).
+    temp82 = boolc( lo_restore->ms_response-s_front-app CS `APP_TIMER` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp82 ).
     cl_abap_unit_assert=>assert_equals( exp = 1
                                         act = count_in( iv_text = lo_restore->mv_response
                                                         iv_sub  = c_armed ) ).
@@ -5017,8 +5033,8 @@ CLASS ltcl_08_harness IMPLEMENTATION.
     " the first start renders the table, the model carries its rows
     DATA lo_test TYPE REF TO /kro/cl_ui5_test.
     DATA temp41 TYPE REF TO ltcl_app_harness.
-    DATA temp82 TYPE xsdboolean.
     DATA temp83 TYPE xsdboolean.
+    DATA temp84 TYPE xsdboolean.
     DATA temp105 TYPE REF TO ltcl_app_harness.
     DATA lo_app LIKE temp105.
     FIELD-SYMBOLS <temp106> LIKE LINE OF lo_app->mt_tab.
@@ -5030,12 +5046,12 @@ CLASS ltcl_08_harness IMPLEMENTATION.
     DATA temp111 LIKE sy-tabix.
     FIELD-SYMBOLS <temp112> LIKE LINE OF lt_message.
     DATA temp113 LIKE sy-tabix.
-    DATA temp84 TYPE xsdboolean.
+    DATA temp85 TYPE xsdboolean.
     CREATE OBJECT temp41 TYPE ltcl_app_harness.
     lo_test = /kro/cl_ui5_test=>start( temp41 ).
 
-    temp82 = boolc( lo_test->view_xml( ) CS `/MT_TAB` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp82 ).
+    temp83 = boolc( lo_test->view_xml( ) CS `/MT_TAB` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp83 ).
     cl_abap_unit_assert=>assert_equals( exp = `two`
                                         act = lo_test->model( `/MT_TAB/1/NAME` ) ).
 
@@ -5043,8 +5059,8 @@ CLASS ltcl_08_harness IMPLEMENTATION.
     lo_test->set_model( path = `/MT_TAB/1/NAME`
                         val  = `zwei` )->event( `COUNT` ).
 
-    temp83 = boolc( lo_test->response( ) NS `"MAIN"` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp83 ).
+    temp84 = boolc( lo_test->response( ) NS `"MAIN"` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp84 ).
 
     temp105 ?= lo_test->app( ).
 
@@ -5093,8 +5109,8 @@ CLASS ltcl_08_harness IMPLEMENTATION.
                                         act = <temp112>-text ).
     " the view stays on screen, and the browser's model keeps the edit
 
-    temp84 = boolc( lo_test->view_xml( ) CS `COUNT` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp84 ).
+    temp85 = boolc( lo_test->view_xml( ) CS `COUNT` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp85 ).
     cl_abap_unit_assert=>assert_equals( exp = `zwei`
                                         act = lo_test->model( `/MT_TAB/1/NAME` ) ).
 
@@ -5183,7 +5199,7 @@ CLASS ltcl_08_harness IMPLEMENTATION.
     DATA temp43 TYPE REF TO ltcl_app_harness.
     DATA temp125 TYPE REF TO ltcl_app_harness.
     DATA lo_app LIKE temp125.
-    DATA temp85 TYPE xsdboolean.
+    DATA temp86 TYPE xsdboolean.
     CREATE OBJECT temp43 TYPE ltcl_app_harness.
     lo_test = /kro/cl_ui5_test=>start( temp43 )->event( `COUNT` ).
     lo_test->restore( ).
@@ -5197,8 +5213,8 @@ CLASS ltcl_08_harness IMPLEMENTATION.
                                         act = lo_app->mv_count ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = lo_app->mv_restored ).
 
-    temp85 = boolc( lo_test->view_xml( ) CS `/MT_TAB` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp85 ).
+    temp86 = boolc( lo_test->view_xml( ) CS `/MT_TAB` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp86 ).
     cl_abap_unit_assert=>assert_equals( exp = `two`
                                         act = lo_test->model( `/MT_TAB/1/NAME` ) ).
 
@@ -5254,7 +5270,7 @@ CLASS ltcl_08_harness IMPLEMENTATION.
     DATA lo_test TYPE REF TO /kro/cl_ui5_test.
     DATA temp46 TYPE REF TO ltcl_app_popup_bound.
     DATA temp127 TYPE REF TO ltcl_app_popup_bound.
-    DATA temp86 TYPE xsdboolean.
+    DATA temp87 TYPE xsdboolean.
     DATA temp128 TYPE REF TO ltcl_app_popup_bound.
     DATA lo_left LIKE temp128.
     CREATE OBJECT temp46 TYPE ltcl_app_popup_bound.
@@ -5263,8 +5279,8 @@ CLASS ltcl_08_harness IMPLEMENTATION.
     temp127 ?= lo_test->nav_called( ).
     cl_abap_unit_assert=>assert_bound( temp127 ).
 
-    temp86 = boolc( lo_test->popup_xml( ) CS `<Dialog>` ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp86 ).
+    temp87 = boolc( lo_test->popup_xml( ) CS `<Dialog>` ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp87 ).
     cl_abap_unit_assert=>assert_equals( exp = `edit me`
                                         act = lo_test->model( `/MS_ROW/NAME` ) ).
 
@@ -5285,8 +5301,8 @@ CLASS ltcl_08_harness IMPLEMENTATION.
     DATA temp47 TYPE REF TO ltcl_app_harness.
     DATA li_first TYPE REF TO /kro/if_app.
     DATA li_sticky TYPE REF TO /kro/if_app.
-    DATA temp87 TYPE xsdboolean.
     DATA temp88 TYPE xsdboolean.
+    DATA temp89 TYPE xsdboolean.
     DATA temp129 TYPE REF TO ltcl_app_harness.
     CREATE OBJECT temp47 TYPE ltcl_app_harness.
     lo_test = /kro/cl_ui5_test=>start( temp47 ).
@@ -5296,12 +5312,12 @@ CLASS ltcl_08_harness IMPLEMENTATION.
 
     li_sticky = lo_test->event( `STICKY` )->app( ).
 
-    temp87 = boolc( li_sticky = li_first ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp87 ).
+    temp88 = boolc( li_sticky = li_first ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_false act = temp88 ).
     " a stateful one keeps it, as the session keeps the handler
 
-    temp88 = boolc( lo_test->event( `COUNT` )->app( ) = li_sticky ).
-    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp88 ).
+    temp89 = boolc( lo_test->event( `COUNT` )->app( ) = li_sticky ).
+    cl_abap_unit_assert=>assert_equals( exp = abap_true act = temp89 ).
 
     temp129 ?= lo_test->app( ).
     cl_abap_unit_assert=>assert_equals( exp = 2

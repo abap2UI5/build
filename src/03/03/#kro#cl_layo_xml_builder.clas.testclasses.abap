@@ -107,6 +107,7 @@ CLASS ltcl_xml_builder DEFINITION FINAL FOR TESTING
     METHODS own_structures FOR TESTING.
     METHODS sub_col_controls FOR TESTING.
     METHODS table_without_toolbar FOR TESTING.
+    METHODS grid_span_beside_ref_field FOR TESTING.
 
     DATA mo_app    TYPE REF TO ltcl_app.
     DATA mi_client TYPE REF TO /kro/if_client.
@@ -855,6 +856,35 @@ cl_abap_unit_assert=>assert_true( /kro/cl_layo_xml_builder=>on_event_column_sort
 
   ENDMETHOD.
 
+  METHOD grid_span_beside_ref_field.
+
+    " a value span the reference field takes up completely is still a span
+    " of 1 - XL0 or S0 is none the grid takes
+    DATA temp47 TYPE /kro/cl_layo_manager=>ty_s_positions.
+    DATA position LIKE temp47.
+    DATA temp48 LIKE REF TO position.
+DATA grid_layout TYPE /kro/cl_layo_xml_builder=>ty_s_grid_layout.
+    CLEAR temp47.
+    temp47-reference_field = `WAERS`.
+    temp47-grid_value_xl = `1`.
+    temp47-grid_value_l = `4`.
+    temp47-grid_value_m = `1`.
+    temp47-grid_value_s = `2`.
+
+    position = temp47.
+
+
+    GET REFERENCE OF position INTO temp48.
+
+grid_layout = /kro/cl_layo_xml_builder=>get_grid_layout( temp48 ).
+
+    cl_abap_unit_assert=>assert_equals( exp = `XL1 L3 M1 S1`
+                                        act = grid_layout-value ).
+    cl_abap_unit_assert=>assert_equals( exp = `XL1 L1 M1 S2`
+                                        act = grid_layout-ref_field ).
+
+  ENDMETHOD.
+
   METHOD own_structures.
 
     DATA xml TYPE string.
@@ -896,19 +926,19 @@ cl_abap_unit_assert=>assert_true( /kro/cl_layo_xml_builder=>on_event_column_sort
   METHOD table_without_toolbar.
 
     DATA view TYPE REF TO /kro/cl_ui5_view_builder.
-    DATA temp47 LIKE REF TO mo_app->mv_search.
+    DATA temp49 LIKE REF TO mo_app->mv_search.
 DATA temp13 LIKE REF TO mo_app->mt_data.
     DATA exp TYPE string.
     view = /kro/cl_ui5_view_builder=>factory( ).
 
-    GET REFERENCE OF mo_app->mv_search INTO temp47.
+    GET REFERENCE OF mo_app->mv_search INTO temp49.
 
 GET REFERENCE OF mo_app->mt_data INTO temp13.
 /kro/cl_layo_xml_builder=>xml_build_table( i_data         = temp13
                                                 i_xml          = view
                                                 i_client       = mi_client
                                                 i_layout       = mo_app->mo_layout
-                                                i_search_value = temp47
+                                                i_search_value = temp49
                                                 i_headertext   = `Orders`
                                                 i_toolbar      = abap_false ).
 
