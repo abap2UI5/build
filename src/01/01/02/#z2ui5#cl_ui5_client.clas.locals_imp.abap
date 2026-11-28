@@ -151,8 +151,8 @@ CLASS lcl_initial_paths_filter IMPLEMENTATION.
       DATA lv_name TYPE string.
         TYPES temp2 TYPE STANDARD TABLE OF string WITH DEFAULT KEY.
 DATA lt_parts TYPE temp2.
-        DATA temp152 TYPE string.
-        DATA temp153 TYPE string.
+        DATA temp142 TYPE string.
+        DATA temp143 TYPE string.
     LOOP AT it_paths INTO lv_path.
 
       lv_name = to_upper( lv_path ).
@@ -166,13 +166,13 @@ DATA lt_parts TYPE temp2.
         SPLIT lv_name AT `/` INTO TABLE lt_parts.
         DELETE lt_parts WHERE table_line IS INITIAL.
 
-        CLEAR temp152.
+        CLEAR temp142.
 
-        READ TABLE lt_parts INTO temp153 INDEX lines( lt_parts ).
+        READ TABLE lt_parts INTO temp143 INDEX lines( lt_parts ).
         IF sy-subrc = 0.
-          temp152 = temp153.
+          temp142 = temp143.
         ENDIF.
-        lv_name = temp152.
+        lv_name = temp142.
       ENDIF.
       IF lv_name IS NOT INITIAL.
         INSERT lv_name INTO TABLE mt_names.
@@ -184,7 +184,7 @@ DATA lt_parts TYPE temp2.
 
   METHOD /z2ui5/if_ajson_filter~keep_node.
     DATA lv_name TYPE string.
-    DATA temp154 LIKE sy-subrc.
+    DATA temp144 LIKE sy-subrc.
     DATA temp5 TYPE xsdboolean.
 
     rv_keep = abap_true.
@@ -206,69 +206,14 @@ DATA lt_parts TYPE temp2.
     lv_name = to_upper( is_node-name ).
 
     READ TABLE mt_names WITH KEY table_line = lv_name TRANSPORTING NO FIELDS.
-    temp154 = sy-subrc.
-    IF NOT temp154 = 0. "#EC CI_SORTSEQ
+    temp144 = sy-subrc.
+    IF NOT temp144 = 0. "#EC CI_SORTSEQ
       RETURN.
     ENDIF.
 
 
     temp5 = boolc( lcl_node_value=>check_initial( is_node ) = abap_false ).
     rv_keep = temp5.
-
-  ENDMETHOD.
-
-ENDCLASS.
-
-
-" The serializable AND combination of two filters, behind
-" z2ui5_if_client~_bind( omit_initial* ) when the caller supplied a filter of
-" their own: both have to pass.
-"
-" NOT the vendored z2ui5_cl_ajson_filter_lib=>create_and_filter: its filter
-" class does not implement if_serializable_object, and the combined ref is
-" stored on mt_attri and serialized into the draft - the vendored form
-" passed every check here (the transpiler does not enforce serializability)
-" and failed only at db_save on a real system, as an APP_SERIALIZATION_ERROR
-" naming nothing. Serializing this class serializes both member refs, so the
-" caller's own filter still has to be serializable - check_raise_new says so
-" at bind time.
-CLASS lcl_and_filter DEFINITION FINAL.
-
-  PUBLIC SECTION.
-    INTERFACES /z2ui5/if_ajson_filter.
-    INTERFACES if_serializable_object.
-
-    METHODS constructor
-      IMPORTING
-        ii_first  TYPE REF TO /z2ui5/if_ajson_filter
-        ii_second TYPE REF TO /z2ui5/if_ajson_filter.
-
-  PROTECTED SECTION.
-  PRIVATE SECTION.
-    DATA mi_first  TYPE REF TO /z2ui5/if_ajson_filter.
-    DATA mi_second TYPE REF TO /z2ui5/if_ajson_filter.
-
-ENDCLASS.
-
-
-CLASS lcl_and_filter IMPLEMENTATION.
-
-  METHOD constructor.
-
-    mi_first  = ii_first.
-    mi_second = ii_second.
-
-  ENDMETHOD.
-
-
-  METHOD /z2ui5/if_ajson_filter~keep_node.
-
-    rv_keep = mi_first->keep_node( is_node  = is_node
-                                   iv_visit = iv_visit ).
-    IF rv_keep = abap_true.
-      rv_keep = mi_second->keep_node( is_node  = is_node
-                                      iv_visit = iv_visit ).
-    ENDIF.
 
   ENDMETHOD.
 

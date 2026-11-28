@@ -542,9 +542,9 @@ CLASS ltcl_02_cell DEFINITION FINAL INHERITING FROM ltcl_00_base
     " memo only ever holds a table the check passed for, and a refused
     " reference never replaces it
     METHODS std_verdict_memoised    FOR TESTING RAISING cx_static_check.
-    " the mapper and the filter of a cell bind land on the TABLE, and a
-    " second cell with a different mapper is refused like a second _bind( )
-    " of the table would be
+    " the filter of a cell bind lands on the TABLE, and a second cell with a
+    " different filter is refused like a second _bind( ) of the table would
+    " be
     METHODS cell_carries_options    FOR TESTING RAISING cx_static_check.
 ENDCLASS.
 
@@ -554,7 +554,6 @@ CLASS ltcl_02_cell IMPLEMENTATION.
   METHOD cell_carries_options.
 
     DATA lo_filter TYPE REF TO ltcl_test_filter.
-    DATA lo_mapper TYPE REF TO /z2ui5/if_ajson_mapping.
     DATA temp26 LIKE REF TO mo_app->mt_tab.
 DATA temp5 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA temp27 LIKE REF TO mo_app->mt_tab.
@@ -565,8 +564,6 @@ DATA temp6 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
 DATA temp7 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     CREATE OBJECT lo_filter TYPE ltcl_test_filter.
 
-    lo_mapper = /z2ui5/cl_ajson_mapping=>create_upper_case( ).
-
 
     GET REFERENCE OF mo_app->mt_tab INTO temp26.
 
@@ -574,21 +571,18 @@ CLEAR temp5.
 temp5-tab = temp26.
 temp5-tab_index = 1.
 temp5-custom_filter = lo_filter.
-temp5-custom_mapper = lo_mapper.
 bind( ir_val    = cell_name( 1 )
           is_config = temp5 ).
 
-    " stored on the table's row - the one the serializer applies them to
+    " stored on the table's row - the one the serializer applies it to
 
     GET REFERENCE OF mo_app->mt_tab INTO temp27.
 
 lr_tab = mo_bind->get_model( )->main_attri_search( temp27 ).
     cl_abap_unit_assert=>assert_equals( exp = lo_filter
                                         act = lr_tab->custom_filter ).
-    cl_abap_unit_assert=>assert_equals( exp = lo_mapper
-                                        act = lr_tab->custom_mapper ).
 
-    " the same options again, for another cell: no conflict
+    " the same option again, for another cell: no conflict
 
     GET REFERENCE OF mo_app->mt_tab INTO temp28.
 
@@ -596,11 +590,10 @@ CLEAR temp6.
 temp6-tab = temp28.
 temp6-tab_index = 2.
 temp6-custom_filter = lo_filter.
-temp6-custom_mapper = lo_mapper.
 bind( ir_val    = cell_name( 2 )
           is_config = temp6 ).
 
-    " a different mapper for a cell of the same table: refused, as the
+    " a different filter for a cell of the same table: refused, as the
     " table's own second bind would be - it used to be dropped silently
 
     GET REFERENCE OF mo_app->mt_tab INTO temp29.
@@ -608,10 +601,10 @@ bind( ir_val    = cell_name( 2 )
 CLEAR temp7.
 temp7-tab = temp29.
 temp7-tab_index = 1.
-temp7-custom_mapper = /z2ui5/cl_ajson_mapping=>create_lower_case( ).
+temp7-custom_filter = /z2ui5/cl_ajson_filter_lib=>create_empty_filter( ).
 expect_bind_error( ir_val    = cell_name( 1 )
                        is_config = temp7
-                       iv_text   = `Two different mappers` ).
+                       iv_text   = `Two different filters` ).
 
   ENDMETHOD.
 
@@ -1055,7 +1048,7 @@ ENDCLASS.
 
 
 " ---------------------------------------------------------------------------
-" 03 - the options: mapper, filter and the json flag are stored on the
+" 03 - the options: the filter and the json flag are stored on the
 " attribute row and travel with the draft. A later bind adopts what the row
 " does not carry yet, keeps what it has, and refuses a different
 " implementation or one that cannot be serialized
@@ -1064,11 +1057,11 @@ CLASS ltcl_03_options DEFINITION FINAL INHERITING FROM ltcl_00_base
   FOR TESTING RISK LEVEL HARMLESS DURATION MEDIUM.
 
   PRIVATE SECTION.
-    " the first bind stores all three
+    " the first bind stores both
     METHODS options_stored          FOR TESTING RAISING cx_static_check.
     " a plain first bind invents nothing
     METHODS plain_bind_stores_none  FOR TESTING RAISING cx_static_check.
-    " a later bind with a filter, a mapper or json adopts it
+    " a later bind with a filter or json adopts it
     METHODS later_bind_adopts       FOR TESTING RAISING cx_static_check.
     " a later plain bind keeps them - json only ever turns on
     METHODS later_plain_bind_keeps  FOR TESTING RAISING cx_static_check.
@@ -1079,8 +1072,7 @@ CLASS ltcl_03_options DEFINITION FINAL INHERITING FROM ltcl_00_base
     " the class name of a stored implementation is asked once per service -
     " a re-bind with a fresh instance reads it from the memo
     METHODS impl_name_memoised      FOR TESTING RAISING cx_static_check.
-    " a different mapper or filter for the same attribute is refused
-    METHODS different_mapper_refused FOR TESTING RAISING cx_static_check.
+    " a different filter for the same attribute is refused
     METHODS different_filter_refused FOR TESTING RAISING cx_static_check.
     " a filter that cannot be serialized is refused at bind time - on the
     " first bind and when a later bind would adopt it
@@ -1103,20 +1095,16 @@ CLASS ltcl_03_options IMPLEMENTATION.
   METHOD options_stored.
 
     DATA lo_filter TYPE REF TO ltcl_test_filter.
-    DATA lo_mapper TYPE REF TO /z2ui5/if_ajson_mapping.
     DATA temp54 LIKE REF TO mo_app->mv_value.
 DATA temp28 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA lr_attri LIKE mo_bind->mr_attri.
     CREATE OBJECT lo_filter TYPE ltcl_test_filter.
-
-    lo_mapper = /z2ui5/cl_ajson_mapping=>create_upper_case( ).
 
 
     GET REFERENCE OF mo_app->mv_value INTO temp54.
 
 CLEAR temp28.
 temp28-custom_filter = lo_filter.
-temp28-custom_mapper = lo_mapper.
 temp28-check_json = abap_true.
 bind( ir_val    = temp54
           is_config = temp28 ).
@@ -1125,8 +1113,6 @@ bind( ir_val    = temp54
     lr_attri = mo_bind->mr_attri.
     cl_abap_unit_assert=>assert_equals( exp = lo_filter
                                         act = lr_attri->custom_filter ).
-    cl_abap_unit_assert=>assert_equals( exp = lo_mapper
-                                        act = lr_attri->custom_mapper ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true
                                         act = lr_attri->check_json ).
 
@@ -1142,7 +1128,6 @@ bind( temp55 ).
 
     lr_attri = mo_bind->mr_attri.
     cl_abap_unit_assert=>assert_not_bound( lr_attri->custom_filter ).
-    cl_abap_unit_assert=>assert_not_bound( lr_attri->custom_mapper ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false
                                         act = lr_attri->check_json ).
 
@@ -1160,8 +1145,6 @@ bind( temp55 ).
 DATA temp29 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA temp58 LIKE REF TO mo_app->mv_value.
 DATA temp30 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp59 LIKE REF TO mo_app->mv_value.
-DATA temp31 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA lr_attri LIKE mo_bind->mr_attri.
     GET REFERENCE OF mo_app->mv_value INTO temp56.
 bind( temp56 ).
@@ -1179,22 +1162,14 @@ bind( ir_val    = temp57
     GET REFERENCE OF mo_app->mv_value INTO temp58.
 
 CLEAR temp30.
-temp30-custom_mapper = /z2ui5/cl_ajson_mapping=>create_upper_case( ).
+temp30-check_json = abap_true.
 bind( ir_val    = temp58
           is_config = temp30 ).
-
-    GET REFERENCE OF mo_app->mv_value INTO temp59.
-
-CLEAR temp31.
-temp31-check_json = abap_true.
-bind( ir_val    = temp59
-          is_config = temp31 ).
 
 
     lr_attri = mo_bind->mr_attri.
     cl_abap_unit_assert=>assert_equals( exp = lo_filter
                                         act = lr_attri->custom_filter ).
-    cl_abap_unit_assert=>assert_bound( lr_attri->custom_mapper ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true
                                         act = lr_attri->check_json ).
 
@@ -1203,30 +1178,28 @@ bind( ir_val    = temp59
   METHOD later_plain_bind_keeps.
 
     DATA lo_filter TYPE REF TO ltcl_test_filter.
+    DATA temp59 LIKE REF TO mo_app->mv_value.
+DATA temp31 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA temp60 LIKE REF TO mo_app->mv_value.
-DATA temp32 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp61 LIKE REF TO mo_app->mv_value.
     DATA lr_attri LIKE mo_bind->mr_attri.
     CREATE OBJECT lo_filter TYPE ltcl_test_filter.
 
+    GET REFERENCE OF mo_app->mv_value INTO temp59.
+
+CLEAR temp31.
+temp31-custom_filter = lo_filter.
+temp31-check_json = abap_true.
+bind( ir_val    = temp59
+          is_config = temp31 ).
+
+
     GET REFERENCE OF mo_app->mv_value INTO temp60.
-
-CLEAR temp32.
-temp32-custom_filter = lo_filter.
-temp32-custom_mapper = /z2ui5/cl_ajson_mapping=>create_upper_case( ).
-temp32-check_json = abap_true.
-bind( ir_val    = temp60
-          is_config = temp32 ).
-
-
-    GET REFERENCE OF mo_app->mv_value INTO temp61.
-bind( temp61 ).
+bind( temp60 ).
 
 
     lr_attri = mo_bind->mr_attri.
     cl_abap_unit_assert=>assert_equals( exp = lo_filter
                                         act = lr_attri->custom_filter ).
-    cl_abap_unit_assert=>assert_bound( lr_attri->custom_mapper ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true
                                         act = lr_attri->check_json ).
 
@@ -1235,27 +1208,25 @@ bind( temp61 ).
   METHOD same_impl_accepted.
 
     " a second INSTANCE of the same class - what every render creates anew
+    DATA temp61 LIKE REF TO mo_app->mv_value.
+DATA temp32 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA temp62 LIKE REF TO mo_app->mv_value.
 DATA temp33 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp63 LIKE REF TO mo_app->mv_value.
-DATA temp34 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
 DATA lv_path TYPE string.
+    GET REFERENCE OF mo_app->mv_value INTO temp61.
+
+CLEAR temp32.
+CREATE OBJECT temp32-custom_filter TYPE ltcl_test_filter.
+bind( ir_val    = temp61
+          is_config = temp32 ).
+
     GET REFERENCE OF mo_app->mv_value INTO temp62.
 
 CLEAR temp33.
 CREATE OBJECT temp33-custom_filter TYPE ltcl_test_filter.
-temp33-custom_mapper = /z2ui5/cl_ajson_mapping=>create_upper_case( ).
-bind( ir_val    = temp62
-          is_config = temp33 ).
 
-    GET REFERENCE OF mo_app->mv_value INTO temp63.
-
-CLEAR temp34.
-CREATE OBJECT temp34-custom_filter TYPE ltcl_test_filter.
-temp34-custom_mapper = /z2ui5/cl_ajson_mapping=>create_upper_case( ).
-
-lv_path = bind( ir_val    = temp63
-                          is_config = temp34 ).
+lv_path = bind( ir_val    = temp62
+                          is_config = temp33 ).
 
     cl_abap_unit_assert=>assert_equals( exp = `{/MV_VALUE}`
                                         act = lv_path ).
@@ -1267,28 +1238,28 @@ lv_path = bind( ir_val    = temp63
     " an app that keeps its filter in an attribute hands the SAME object to
     " every _bind( ) - the identity decides, no class name is looked up
     DATA lo_filter TYPE REF TO ltcl_test_filter.
+    DATA temp63 LIKE REF TO mo_app->mv_value.
+DATA temp34 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA temp64 LIKE REF TO mo_app->mv_value.
 DATA temp35 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp65 LIKE REF TO mo_app->mv_value.
-DATA temp36 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
 DATA lv_path TYPE string.
     CREATE OBJECT lo_filter TYPE ltcl_test_filter.
 
+
+    GET REFERENCE OF mo_app->mv_value INTO temp63.
+
+CLEAR temp34.
+temp34-custom_filter = lo_filter.
+bind( ir_val    = temp63
+          is_config = temp34 ).
 
     GET REFERENCE OF mo_app->mv_value INTO temp64.
 
 CLEAR temp35.
 temp35-custom_filter = lo_filter.
-bind( ir_val    = temp64
-          is_config = temp35 ).
 
-    GET REFERENCE OF mo_app->mv_value INTO temp65.
-
-CLEAR temp36.
-temp36-custom_filter = lo_filter.
-
-lv_path = bind( ir_val    = temp65
-                          is_config = temp36 ).
+lv_path = bind( ir_val    = temp64
+                          is_config = temp35 ).
 
     cl_abap_unit_assert=>assert_equals( exp = `{/MV_VALUE}`
                                         act = lv_path ).
@@ -1301,16 +1272,16 @@ lv_path = bind( ir_val    = temp65
     DATA lo_stored TYPE REF TO ltcl_test_filter.
     DATA lo_second TYPE REF TO ltcl_test_filter.
     DATA lo_third TYPE REF TO ltcl_test_filter.
+    DATA temp65 LIKE REF TO mo_app->mv_value.
+DATA temp36 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA temp66 LIKE REF TO mo_app->mv_value.
 DATA temp37 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA temp67 LIKE REF TO mo_app->mv_value.
 DATA temp38 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp68 LIKE REF TO mo_app->mv_value.
-DATA temp39 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     FIELD-SYMBOLS <memo> TYPE /z2ui5/cl_ui5_srv_bind=>ty_s_impl_name.
     DATA temp5 TYPE xsdboolean.
-    DATA temp69 LIKE REF TO mo_app->mv_value.
-DATA temp40 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    DATA temp68 LIKE REF TO mo_app->mv_value.
+DATA temp39 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     CREATE OBJECT lo_stored TYPE ltcl_test_filter.
 
     CREATE OBJECT lo_second TYPE ltcl_test_filter.
@@ -1318,34 +1289,34 @@ DATA temp40 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     CREATE OBJECT lo_third TYPE ltcl_test_filter.
 
 
-    GET REFERENCE OF mo_app->mv_value INTO temp66.
+    GET REFERENCE OF mo_app->mv_value INTO temp65.
 
-CLEAR temp37.
-temp37-custom_filter = lo_stored.
-bind( ir_val    = temp66
-          is_config = temp37 ).
+CLEAR temp36.
+temp36-custom_filter = lo_stored.
+bind( ir_val    = temp65
+          is_config = temp36 ).
     cl_abap_unit_assert=>assert_initial( mo_bind->mt_impl_names ).
 
     " the first re-bind with a fresh instance asks for both names ...
 
-    GET REFERENCE OF mo_app->mv_value INTO temp67.
+    GET REFERENCE OF mo_app->mv_value INTO temp66.
 
-CLEAR temp38.
-temp38-custom_filter = lo_second.
-bind( ir_val    = temp67
-          is_config = temp38 ).
+CLEAR temp37.
+temp37-custom_filter = lo_second.
+bind( ir_val    = temp66
+          is_config = temp37 ).
     cl_abap_unit_assert=>assert_equals( exp = 2
                                         act = lines( mo_bind->mt_impl_names ) ).
 
     " ... the next one only for the new instance: the stored one is read
     " from the memo, under the reference that is stored on the attribute
 
-    GET REFERENCE OF mo_app->mv_value INTO temp68.
+    GET REFERENCE OF mo_app->mv_value INTO temp67.
 
-CLEAR temp39.
-temp39-custom_filter = lo_third.
-bind( ir_val    = temp68
-          is_config = temp39 ).
+CLEAR temp38.
+temp38-custom_filter = lo_third.
+bind( ir_val    = temp67
+          is_config = temp38 ).
     cl_abap_unit_assert=>assert_equals( exp = 3
                                         act = lines( mo_bind->mt_impl_names ) ).
 
@@ -1360,118 +1331,94 @@ bind( ir_val    = temp68
 
     " a different implementation is still told apart through the memo
 
-    GET REFERENCE OF mo_app->mv_value INTO temp69.
+    GET REFERENCE OF mo_app->mv_value INTO temp68.
 
-CLEAR temp40.
-temp40-custom_filter = /z2ui5/cl_ajson_filter_lib=>create_empty_filter( ).
-expect_bind_error( ir_val    = temp69
-                       is_config = temp40
+CLEAR temp39.
+temp39-custom_filter = /z2ui5/cl_ajson_filter_lib=>create_empty_filter( ).
+expect_bind_error( ir_val    = temp68
+                       is_config = temp39
                        iv_text   = `Two different filters` ).
-
-  ENDMETHOD.
-
-  METHOD different_mapper_refused.
-
-    DATA temp70 LIKE REF TO mo_app->mv_value.
-DATA temp41 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp71 LIKE REF TO mo_app->mv_value.
-DATA temp42 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    GET REFERENCE OF mo_app->mv_value INTO temp70.
-
-CLEAR temp41.
-temp41-custom_mapper = /z2ui5/cl_ajson_mapping=>create_upper_case( ).
-bind( ir_val    = temp70
-          is_config = temp41 ).
-
-
-    GET REFERENCE OF mo_app->mv_value INTO temp71.
-
-CLEAR temp42.
-temp42-custom_mapper = /z2ui5/cl_ajson_mapping=>create_lower_case( ).
-expect_bind_error( ir_val    = temp71
-                       is_config = temp42
-                       iv_text   = `Two different mappers` ).
 
   ENDMETHOD.
 
   METHOD different_filter_refused.
 
-    DATA temp72 LIKE REF TO mo_app->mv_value.
-DATA temp43 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp73 LIKE REF TO mo_app->mv_value.
-DATA temp44 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    GET REFERENCE OF mo_app->mv_value INTO temp72.
+    DATA temp69 LIKE REF TO mo_app->mv_value.
+DATA temp40 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    DATA temp70 LIKE REF TO mo_app->mv_value.
+DATA temp41 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    GET REFERENCE OF mo_app->mv_value INTO temp69.
 
-CLEAR temp43.
-CREATE OBJECT temp43-custom_filter TYPE ltcl_test_filter.
-bind( ir_val    = temp72
-          is_config = temp43 ).
+CLEAR temp40.
+CREATE OBJECT temp40-custom_filter TYPE ltcl_test_filter.
+bind( ir_val    = temp69
+          is_config = temp40 ).
 
     " the framework's own row filter is another implementation
 
-    GET REFERENCE OF mo_app->mv_value INTO temp73.
+    GET REFERENCE OF mo_app->mv_value INTO temp70.
 
-CLEAR temp44.
-temp44-custom_filter = /z2ui5/cl_ajson_filter_lib=>create_empty_filter( ).
-expect_bind_error( ir_val    = temp73
-                       is_config = temp44
+CLEAR temp41.
+temp41-custom_filter = /z2ui5/cl_ajson_filter_lib=>create_empty_filter( ).
+expect_bind_error( ir_val    = temp70
+                       is_config = temp41
                        iv_text   = `Two different filters` ).
 
   ENDMETHOD.
 
   METHOD dead_filter_refused.
 
-    DATA temp74 LIKE REF TO mo_app->mv_value.
-DATA temp45 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp75 LIKE REF TO mo_app->mv_value.
-    DATA temp76 LIKE REF TO mo_app->mv_value.
-DATA temp46 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    GET REFERENCE OF mo_app->mv_value INTO temp74.
+    DATA temp71 LIKE REF TO mo_app->mv_value.
+DATA temp42 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    DATA temp72 LIKE REF TO mo_app->mv_value.
+    DATA temp73 LIKE REF TO mo_app->mv_value.
+DATA temp43 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    GET REFERENCE OF mo_app->mv_value INTO temp71.
 
-CLEAR temp45.
-CREATE OBJECT temp45-custom_filter TYPE ltcl_bnd_filter_dead.
-expect_bind_error( ir_val    = temp74
-                       is_config = temp45
+CLEAR temp42.
+CREATE OBJECT temp42-custom_filter TYPE ltcl_bnd_filter_dead.
+expect_bind_error( ir_val    = temp71
+                       is_config = temp42
                        iv_text   = `not serializable` ).
 
     " ...and the row stays unbound after the refusal, so the next bind is
     " a first one again
 
-    GET REFERENCE OF mo_app->mv_value INTO temp75.
-bind( temp75 ).
+    GET REFERENCE OF mo_app->mv_value INTO temp72.
+bind( temp72 ).
 
-    GET REFERENCE OF mo_app->mv_value INTO temp76.
+    GET REFERENCE OF mo_app->mv_value INTO temp73.
 
-CLEAR temp46.
-CREATE OBJECT temp46-custom_filter TYPE ltcl_bnd_filter_dead.
-expect_bind_error( ir_val    = temp76
-                       is_config = temp46
+CLEAR temp43.
+CREATE OBJECT temp43-custom_filter TYPE ltcl_bnd_filter_dead.
+expect_bind_error( ir_val    = temp73
+                       is_config = temp43
                        iv_text   = `not serializable` ).
 
   ENDMETHOD.
 
   METHOD options_per_attribute.
 
-    DATA temp77 LIKE REF TO mo_app->mv_value.
-DATA temp47 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp78 LIKE REF TO mo_app->xx.
+    DATA temp74 LIKE REF TO mo_app->mv_value.
+DATA temp44 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    DATA temp75 LIKE REF TO mo_app->xx.
     DATA lr_attri LIKE mo_bind->mr_attri.
-    GET REFERENCE OF mo_app->mv_value INTO temp77.
+    GET REFERENCE OF mo_app->mv_value INTO temp74.
 
-CLEAR temp47.
-temp47-custom_mapper = /z2ui5/cl_ajson_mapping=>create_upper_case( ).
-temp47-check_json = abap_true.
-bind( ir_val    = temp77
-          is_config = temp47 ).
+CLEAR temp44.
+CREATE OBJECT temp44-custom_filter TYPE ltcl_test_filter.
+temp44-check_json = abap_true.
+bind( ir_val    = temp74
+          is_config = temp44 ).
 
-    GET REFERENCE OF mo_app->xx INTO temp78.
-bind( temp78 ).
+    GET REFERENCE OF mo_app->xx INTO temp75.
+bind( temp75 ).
 
 
     lr_attri = mo_bind->mr_attri.
     cl_abap_unit_assert=>assert_equals( exp = `XX`
                                         act = lr_attri->name ).
-    cl_abap_unit_assert=>assert_not_bound( lr_attri->custom_mapper ).
+    cl_abap_unit_assert=>assert_not_bound( lr_attri->custom_filter ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false
                                         act = lr_attri->check_json ).
 
@@ -1479,18 +1426,18 @@ bind( temp78 ).
 
 
   METHOD json_on_struc_refused.
-        DATA temp79 LIKE REF TO mo_app->ms_deep.
-DATA temp48 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+        DATA temp76 LIKE REF TO mo_app->ms_deep.
+DATA temp45 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
         DATA lx_struc TYPE REF TO /z2ui5/cx_ui5_util_error.
 
     TRY.
 
-        GET REFERENCE OF mo_app->ms_deep INTO temp79.
+        GET REFERENCE OF mo_app->ms_deep INTO temp76.
 
-CLEAR temp48.
-temp48-check_json = abap_true.
-bind( ir_val    = temp79
-              is_config = temp48 ).
+CLEAR temp45.
+temp45-check_json = abap_true.
+bind( ir_val    = temp76
+              is_config = temp45 ).
         cl_abap_unit_assert=>fail( `json = abap_true on a STRUCTURE must be refused at bind time` ).
 
       CATCH /z2ui5/cx_ui5_util_error INTO lx_struc.
@@ -1503,17 +1450,17 @@ bind( ir_val    = temp79
   ENDMETHOD.
 
   METHOD json_on_table_refused.
-        DATA temp80 LIKE REF TO mo_app->mt_tab.
-DATA temp49 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+        DATA temp77 LIKE REF TO mo_app->mt_tab.
+DATA temp46 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
 
     TRY.
 
-        GET REFERENCE OF mo_app->mt_tab INTO temp80.
+        GET REFERENCE OF mo_app->mt_tab INTO temp77.
 
-CLEAR temp49.
-temp49-check_json = abap_true.
-bind( ir_val    = temp80
-              is_config = temp49 ).
+CLEAR temp46.
+temp46-check_json = abap_true.
+bind( ir_val    = temp77
+              is_config = temp46 ).
         cl_abap_unit_assert=>fail( `json = abap_true on a TABLE must be refused at bind time` ).
       CATCH /z2ui5/cx_ui5_util_error ##NO_HANDLER.
     ENDTRY.
@@ -1524,20 +1471,20 @@ bind( ir_val    = temp80
 
     " the first bind is plain and legal; the second one turns json on, which
     " is the adopt_new_options path rather than update_model_attri
-    DATA temp81 LIKE REF TO mo_app->ms_deep.
-        DATA temp82 LIKE REF TO mo_app->ms_deep.
-DATA temp50 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    GET REFERENCE OF mo_app->ms_deep INTO temp81.
-bind( temp81 ).
+    DATA temp78 LIKE REF TO mo_app->ms_deep.
+        DATA temp79 LIKE REF TO mo_app->ms_deep.
+DATA temp47 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    GET REFERENCE OF mo_app->ms_deep INTO temp78.
+bind( temp78 ).
 
     TRY.
 
-        GET REFERENCE OF mo_app->ms_deep INTO temp82.
+        GET REFERENCE OF mo_app->ms_deep INTO temp79.
 
-CLEAR temp50.
-temp50-check_json = abap_true.
-bind( ir_val    = temp82
-              is_config = temp50 ).
+CLEAR temp47.
+temp47-check_json = abap_true.
+bind( ir_val    = temp79
+              is_config = temp47 ).
         cl_abap_unit_assert=>fail( `a LATER bind must not be able to turn json on for a structure` ).
       CATCH /z2ui5/cx_ui5_util_error ##NO_HANDLER.
     ENDTRY.
@@ -1584,17 +1531,17 @@ CLASS ltcl_04_window IMPLEMENTATION.
 
   METHOD window_stored.
 
-    DATA temp83 LIKE REF TO mo_app->mt_tab.
-DATA temp51 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    GET REFERENCE OF mo_app->mt_tab INTO temp83.
+    DATA temp80 LIKE REF TO mo_app->mt_tab.
+DATA temp48 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    GET REFERENCE OF mo_app->mt_tab INTO temp80.
 
-CLEAR temp51.
-temp51-window = 10.
-temp51-window_total = 500.
-temp51-window_event = `ROWS`.
+CLEAR temp48.
+temp48-window = 10.
+temp48-window_total = 500.
+temp48-window_event = `ROWS`.
 cl_abap_unit_assert=>assert_equals( exp = `{/MT_TAB}`
-                                        act = bind( ir_val    = temp83
-                                                    is_config = temp51 ) ).
+                                        act = bind( ir_val    = temp80
+                                                    is_config = temp48 ) ).
     cl_abap_unit_assert=>assert_equals( exp = 10
                                         act = mo_bind->mr_attri->window_size ).
     cl_abap_unit_assert=>assert_equals( exp = 500
@@ -1606,21 +1553,21 @@ cl_abap_unit_assert=>assert_equals( exp = `{/MT_TAB}`
 
   METHOD plain_bind_keeps.
 
-    DATA temp84 LIKE REF TO mo_app->mt_tab.
-DATA temp52 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA temp85 LIKE REF TO mo_app->mt_tab.
-    GET REFERENCE OF mo_app->mt_tab INTO temp84.
+    DATA temp81 LIKE REF TO mo_app->mt_tab.
+DATA temp49 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    DATA temp82 LIKE REF TO mo_app->mt_tab.
+    GET REFERENCE OF mo_app->mt_tab INTO temp81.
 
-CLEAR temp52.
-temp52-window = 10.
-temp52-window_total = 500.
-temp52-window_event = `ROWS`.
-bind( ir_val    = temp84
-          is_config = temp52 ).
+CLEAR temp49.
+temp49-window = 10.
+temp49-window_total = 500.
+temp49-window_event = `ROWS`.
+bind( ir_val    = temp81
+          is_config = temp49 ).
     " a plain _bind( ) of the same table elsewhere in the view
 
-    GET REFERENCE OF mo_app->mt_tab INTO temp85.
-bind( temp85 ).
+    GET REFERENCE OF mo_app->mt_tab INTO temp82.
+bind( temp82 ).
     cl_abap_unit_assert=>assert_equals( exp = 10
                                         act = mo_bind->mr_attri->window_size ).
     cl_abap_unit_assert=>assert_equals( exp = 500
@@ -1632,14 +1579,14 @@ bind( temp85 ).
 
   METHOD no_table_refused.
 
-    DATA temp86 LIKE REF TO mo_app->mv_value.
-DATA temp53 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    GET REFERENCE OF mo_app->mv_value INTO temp86.
+    DATA temp83 LIKE REF TO mo_app->mv_value.
+DATA temp50 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    GET REFERENCE OF mo_app->mv_value INTO temp83.
 
-CLEAR temp53.
-temp53-window = 10.
-expect_bind_error( ir_val    = temp86
-                       is_config = temp53
+CLEAR temp50.
+temp50-window = 10.
+expect_bind_error( ir_val    = temp83
+                       is_config = temp50
                        iv_text   = `it is no internal table` ).
 
   ENDMETHOD.
@@ -1648,17 +1595,17 @@ expect_bind_error( ir_val    = temp86
 
     DATA lr_tab TYPE REF TO data.
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
-    DATA temp87 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    DATA temp84 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
 
     " what window_bind_tab( mr_tab ) hands over: the table the reference points to
     ASSIGN mo_app->mr_tab->* TO <tab>.
     GET REFERENCE OF <tab> INTO lr_tab.
 
-    CLEAR temp87.
-    temp87-window = 5.
+    CLEAR temp84.
+    temp84-window = 5.
     cl_abap_unit_assert=>assert_equals( exp = `{/MR_TAB/*}`
                                         act = bind( ir_val    = lr_tab
-                                                    is_config = temp87 ) ).
+                                                    is_config = temp84 ) ).
     cl_abap_unit_assert=>assert_equals( exp = 5
                                         act = mo_bind->mr_attri->window_size ).
 
@@ -1666,35 +1613,35 @@ expect_bind_error( ir_val    = temp86
 
   METHOD new_total_pushed.
 
-    DATA temp88 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-    DATA ls_config LIKE temp88.
-    DATA temp89 LIKE REF TO mo_app->mt_tab.
-    DATA temp90 LIKE REF TO mo_app->mt_tab.
-    DATA temp91 LIKE REF TO mo_app->mt_tab.
-    CLEAR temp88.
-    temp88-window = 10.
-    temp88-window_total = 500.
-    temp88-window_event = `ROWS`.
+    DATA temp85 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+    DATA ls_config LIKE temp85.
+    DATA temp86 LIKE REF TO mo_app->mt_tab.
+    DATA temp87 LIKE REF TO mo_app->mt_tab.
+    DATA temp88 LIKE REF TO mo_app->mt_tab.
+    CLEAR temp85.
+    temp85-window = 10.
+    temp85-window_total = 500.
+    temp85-window_event = `ROWS`.
 
-    ls_config = temp88.
+    ls_config = temp85.
 
-    GET REFERENCE OF mo_app->mt_tab INTO temp89.
-bind( ir_val    = temp89
+    GET REFERENCE OF mo_app->mt_tab INTO temp86.
+bind( ir_val    = temp86
           is_config = ls_config ).
     CLEAR mo_cont->mv_model_client_stale.
 
     " rendered again with the same total: nothing to push
 
-    GET REFERENCE OF mo_app->mt_tab INTO temp90.
-bind( ir_val    = temp90
+    GET REFERENCE OF mo_app->mt_tab INTO temp87.
+bind( ir_val    = temp87
           is_config = ls_config ).
     cl_abap_unit_assert=>assert_equals( exp = abap_false act = mo_cont->mv_model_client_stale ).
 
     " a new total - a filter in the app: the browser has to get it now
     ls_config-window_total = 42.
 
-    GET REFERENCE OF mo_app->mt_tab INTO temp91.
-bind( ir_val    = temp91
+    GET REFERENCE OF mo_app->mt_tab INTO temp88.
+bind( ir_val    = temp88
           is_config = ls_config ).
     cl_abap_unit_assert=>assert_equals( exp = abap_true act = mo_cont->mv_model_client_stale ).
 
@@ -1718,12 +1665,12 @@ bind( ir_val    = temp91
     " what window_bind_tab( val = mt_tab total = lines( lt_all ) ) hands
     " over: a reference to a value that lives nowhere in the app
     DATA lv_total TYPE i.
-    DATA temp92 LIKE REF TO mo_app->mv_value.
+    DATA temp89 LIKE REF TO mo_app->mv_value.
     FIELD-SYMBOLS <mark> TYPE /z2ui5/if_ui5_types=>ty_s_attri.
     DATA temp7 TYPE xsdboolean.
     DATA lr_mark LIKE REF TO <mark>.
-    DATA temp93 LIKE REF TO lv_total.
-DATA temp54 LIKE REF TO mo_app->mt_tab.
+    DATA temp90 LIKE REF TO lv_total.
+DATA temp51 LIKE REF TO mo_app->mt_tab.
 DATA temp10 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA lr_row TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri.
     DATA temp8 TYPE xsdboolean.
@@ -1733,8 +1680,8 @@ DATA temp10 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     " a first bind of another attribute builds the attribute table; a mark
     " on a row that is NOT bound shows whether the table is built anew
 
-    GET REFERENCE OF mo_app->mv_value INTO temp92.
-bind( temp92 ).
+    GET REFERENCE OF mo_app->mv_value INTO temp89.
+bind( temp89 ).
 
     READ TABLE mo_cont->mt_attri->* WITH KEY name = `MV_OTHER` ASSIGNING <mark>.
 
@@ -1745,17 +1692,17 @@ bind( temp92 ).
     lr_mark->name_client = `MARK`.
 
 
-    GET REFERENCE OF lv_total INTO temp93.
+    GET REFERENCE OF lv_total INTO temp90.
 
-GET REFERENCE OF mo_app->mt_tab INTO temp54.
+GET REFERENCE OF mo_app->mt_tab INTO temp51.
 
 CLEAR temp10.
 temp10-window = 10.
 temp10-window_total = lv_total.
-temp10-window_total_ref = temp93.
+temp10-window_total_ref = temp90.
 temp10-window_event = `ROWS`.
 cl_abap_unit_assert=>assert_equals( exp = `{/MT_TAB}`
-                                        act = bind( ir_val    = temp54
+                                        act = bind( ir_val    = temp51
                                                     is_config = temp10 ) ).
 
 
@@ -1794,34 +1741,34 @@ cl_abap_unit_assert=>assert_equals( exp = `{/MT_TAB}`
     " the same on a table that is bound already - the branch a second
     " render takes (adopt_new_options)
     DATA lv_total TYPE i.
-    DATA temp94 LIKE REF TO lv_total.
-DATA temp55 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
-DATA ls_config LIKE temp55.
-    DATA temp95 LIKE REF TO mo_app->mt_tab.
-    DATA temp96 LIKE REF TO mo_app->mt_tab.
+    DATA temp91 LIKE REF TO lv_total.
+DATA temp52 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
+DATA ls_config LIKE temp52.
+    DATA temp92 LIKE REF TO mo_app->mt_tab.
+    DATA temp93 LIKE REF TO mo_app->mt_tab.
     DATA lr_row TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri.
     DATA temp10 TYPE xsdboolean.
     lv_total = 7.
 
-    GET REFERENCE OF lv_total INTO temp94.
+    GET REFERENCE OF lv_total INTO temp91.
 
-CLEAR temp55.
-temp55-window = 10.
-temp55-window_total = lv_total.
-temp55-window_total_ref = temp94.
-temp55-window_event = `ROWS`.
+CLEAR temp52.
+temp52-window = 10.
+temp52-window_total = lv_total.
+temp52-window_total_ref = temp91.
+temp52-window_event = `ROWS`.
 
-ls_config = temp55.
+ls_config = temp52.
 
-    GET REFERENCE OF mo_app->mt_tab INTO temp95.
-bind( ir_val    = temp95
+    GET REFERENCE OF mo_app->mt_tab INTO temp92.
+bind( ir_val    = temp92
           is_config = ls_config ).
     lv_total = 8.
     ls_config-window_total = lv_total.
 
-    GET REFERENCE OF mo_app->mt_tab INTO temp96.
+    GET REFERENCE OF mo_app->mt_tab INTO temp93.
 cl_abap_unit_assert=>assert_equals( exp = `{/MT_TAB}`
-                                        act = bind( ir_val    = temp96
+                                        act = bind( ir_val    = temp93
                                                     is_config = ls_config ) ).
 
 
@@ -1836,8 +1783,8 @@ cl_abap_unit_assert=>assert_equals( exp = `{/MT_TAB}`
   ENDMETHOD.
 
   METHOD total_attribute.
-    DATA temp97 LIKE REF TO mo_app->mv_total.
-DATA temp56 LIKE REF TO mo_app->mt_tab.
+    DATA temp94 LIKE REF TO mo_app->mv_total.
+DATA temp53 LIKE REF TO mo_app->mt_tab.
 DATA temp11 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA lr_row TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri.
     DATA temp12 TYPE xsdboolean.
@@ -1847,17 +1794,17 @@ DATA temp11 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
 
     mo_app->mv_total = 500.
 
-    GET REFERENCE OF mo_app->mv_total INTO temp97.
+    GET REFERENCE OF mo_app->mv_total INTO temp94.
 
-GET REFERENCE OF mo_app->mt_tab INTO temp56.
+GET REFERENCE OF mo_app->mt_tab INTO temp53.
 
 CLEAR temp11.
 temp11-window = 10.
 temp11-window_total = mo_app->mv_total.
-temp11-window_total_ref = temp97.
+temp11-window_total_ref = temp94.
 temp11-window_event = `ROWS`.
 cl_abap_unit_assert=>assert_equals( exp = `{/MT_TAB}`
-                                        act = bind( ir_val    = temp56
+                                        act = bind( ir_val    = temp53
                                                     is_config = temp11 ) ).
 
 
@@ -1885,12 +1832,12 @@ cl_abap_unit_assert=>assert_equals( exp = `{/MT_TAB}`
   ENDMETHOD.
 
   METHOD total_attri_then_value.
-    DATA temp98 LIKE REF TO mo_app->mv_total.
-DATA temp57 LIKE REF TO mo_app->mt_tab.
+    DATA temp95 LIKE REF TO mo_app->mv_total.
+DATA temp54 LIKE REF TO mo_app->mt_tab.
 DATA temp12 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA lv_total TYPE i.
-    DATA temp99 LIKE REF TO lv_total.
-DATA temp58 LIKE REF TO mo_app->mt_tab.
+    DATA temp96 LIKE REF TO lv_total.
+DATA temp55 LIKE REF TO mo_app->mt_tab.
 DATA temp13 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     DATA lr_row TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri.
 
@@ -1898,30 +1845,30 @@ DATA temp13 TYPE /z2ui5/if_ui5_types=>ty_s_bind_config.
     " passed the attribute stops reading the attribute
     mo_app->mv_total = 500.
 
-    GET REFERENCE OF mo_app->mv_total INTO temp98.
+    GET REFERENCE OF mo_app->mv_total INTO temp95.
 
-GET REFERENCE OF mo_app->mt_tab INTO temp57.
+GET REFERENCE OF mo_app->mt_tab INTO temp54.
 
 CLEAR temp12.
 temp12-window = 10.
 temp12-window_total = mo_app->mv_total.
-temp12-window_total_ref = temp98.
+temp12-window_total_ref = temp95.
 temp12-window_event = `ROWS`.
-bind( ir_val    = temp57
+bind( ir_val    = temp54
           is_config = temp12 ).
 
     lv_total = 3.
 
-    GET REFERENCE OF lv_total INTO temp99.
+    GET REFERENCE OF lv_total INTO temp96.
 
-GET REFERENCE OF mo_app->mt_tab INTO temp58.
+GET REFERENCE OF mo_app->mt_tab INTO temp55.
 
 CLEAR temp13.
 temp13-window = 10.
 temp13-window_total = lv_total.
-temp13-window_total_ref = temp99.
+temp13-window_total_ref = temp96.
 temp13-window_event = `ROWS`.
-bind( ir_val    = temp58
+bind( ir_val    = temp55
           is_config = temp13 ).
 
 

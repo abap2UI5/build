@@ -146,25 +146,17 @@ CLASS /z2ui5/cl_ui5_srv_model DEFINITION PUBLIC FINAL.
         t_token TYPE STANDARD TABLE OF ty_s_fast WITH DEFAULT KEY,
       END OF ty_s_fast_state.
 
-    TYPES:
-      BEGIN OF ty_s_mapper_cache,
-        mapper TYPE REF TO /z2ui5/if_ajson_mapping,
-        ajson  TYPE REF TO /z2ui5/if_ajson,
-      END OF ty_s_mapper_cache.
-    TYPES ty_t_mapper_cache TYPE STANDARD TABLE OF ty_s_mapper_cache WITH DEFAULT KEY.
-
-    "! the compatibility branch of main_json_stringify - an attribute with
-    "! a custom_mapper or custom_filter of its own, through a scratch
-    "! instance per mapper (ct_mapper_cache) or the shared one (ci_default)
+    "! the omit_initial branch of main_json_stringify - an attribute with
+    "! a filter (_bind( omit_initial* )), through the shared scratch
+    "! instance ci_default
     METHODS json_custom_set
       IMPORTING
-        ir_attri        TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri
-        ir_ref          TYPE REF TO data
-        io_result       TYPE REF TO /z2ui5/if_ajson
+        ir_attri   TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri
+        ir_ref     TYPE REF TO data
+        io_result  TYPE REF TO /z2ui5/if_ajson
       CHANGING
-        ci_default      TYPE REF TO /z2ui5/if_ajson
-        ct_mapper_cache TYPE ty_t_mapper_cache
-        cs_fast         TYPE ty_s_fast_state
+        ci_default TYPE REF TO /z2ui5/if_ajson
+        cs_fast    TYPE ty_s_fast_state
       RAISING
         /z2ui5/cx_ajson_error.
 
@@ -991,8 +983,8 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
 
   METHOD main_json_to_attri.
 
-    DATA temp622 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp622.
+    DATA temp620 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp620.
       DATA lv_node TYPE string.
           DATA lx_refused TYPE REF TO cx_root.
     LOOP AT mt_attri->* REFERENCE INTO lr_attri
@@ -1052,11 +1044,11 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
     FIELD-SYMBOLS <val>  TYPE any.
     FIELD-SYMBOLS <copy> TYPE any.
 
-    DATA temp623 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp623.
+    DATA temp621 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp621.
           DATA lr_ref TYPE REF TO data.
       DATA lr_copy TYPE REF TO data.
-      DATA temp624 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_snapshot.
+      DATA temp622 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_snapshot.
     LOOP AT mt_attri->* REFERENCE INTO lr_attri "#EC CI_SORTSEQ
          WHERE bind = abap_true
                AND type_kind <> /z2ui5/cl_ui5_util_context=>cv_typedescr_typekind_dref
@@ -1075,10 +1067,10 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
       ASSIGN lr_copy->* TO <copy>.
       <copy> = <val>.
 
-      CLEAR temp624.
-      temp624-name = lr_attri->name.
-      temp624-o_data = lr_copy.
-      INSERT temp624 INTO TABLE result.
+      CLEAR temp622.
+      temp622-name = lr_attri->name.
+      temp622-o_data = lr_copy.
+      INSERT temp622 INTO TABLE result.
 
     ENDLOOP.
 
@@ -1089,8 +1081,8 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
     FIELD-SYMBOLS <val>  TYPE any.
     FIELD-SYMBOLS <copy> TYPE any.
 
-    DATA temp625 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp625.
+    DATA temp623 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp623.
           DATA lr_ref TYPE REF TO data.
       DATA lr_snap TYPE REF TO /z2ui5/cl_ui5_srv_model=>ty_s_snapshot.
     LOOP AT mt_attri->* REFERENCE INTO lr_attri "#EC CI_SORTSEQ
@@ -1128,13 +1120,12 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD main_json_stringify.
-        DATA temp626 TYPE REF TO /z2ui5/if_ajson.
-        DATA li_ajson_result LIKE temp626.
+        DATA temp624 TYPE REF TO /z2ui5/if_ajson.
+        DATA li_ajson_result LIKE temp624.
         DATA li_ajson_default TYPE REF TO /z2ui5/if_ajson.
-        DATA lt_mapper_cache TYPE ty_t_mapper_cache.
         DATA ls_fast TYPE ty_s_fast_state.
-        DATA temp627 LIKE LINE OF mt_attri->*.
-        DATA lr_attri LIKE REF TO temp627.
+        DATA temp625 LIKE LINE OF mt_attri->*.
+        DATA lr_attri LIKE REF TO temp625.
               DATA lr_ref TYPE REF TO data.
           FIELD-SYMBOLS <val> TYPE data.
             DATA lv_taken TYPE abap_bool.
@@ -1150,13 +1141,11 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
         " construction (attribute names come from RTTI), so the mapping is
         " a no-op on it
 
-        temp626 ?= /z2ui5/cl_ajson=>create_empty( ii_custom_mapping = /z2ui5/cl_ui5_util_json_fl=>mapper_upper( ) ).
+        temp624 ?= /z2ui5/cl_ajson=>create_empty( ii_custom_mapping = /z2ui5/cl_ui5_util_json_fl=>mapper_upper( ) ).
 
-        li_ajson_result = temp626.
-        " the scratch instance for a filtered attribute without a mapper
-        " of its own - created when the first such attribute asks for it
-
-
+        li_ajson_result = temp624.
+        " the scratch instance for a filtered attribute - created when the
+        " first such attribute asks for it
 
 
         " the fast path (json_fast_set): a bound table of flat rows is
@@ -1199,26 +1188,17 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
             CONTINUE.
           ENDIF.
 
-          " a mapper or filter is attached to an ajson INSTANCE, so those
-          " attributes keep the scratch-instance detour the direct set cannot
-          " express: convert into the scratch, filter, copy into the result
-          "
-          " This branch is COMPATIBILITY ONLY - _bind( custom_mapper ) and
-          " _bind( custom_filter ) are obsolete (the note on those parameters
-          " in z2ui5_if_client says why and what to write instead), and no app
-          " class in samples, samples-controls or samples-stack has ever
-          " reached them. Do not extend it, and do not route a new feature
-          " through it: the branch above is where a declarative flag belongs -
-          " omit_initial was built exactly there, out of the one filter this
-          " slot was really used for (create_empty_filter). Kept because a
-          " customer app that passes one must keep working
-          IF lr_attri->custom_mapper IS BOUND OR lr_attri->custom_filter IS BOUND.
-            json_custom_set( EXPORTING ir_attri        = lr_attri
-                                       ir_ref          = lr_ref
-                                       io_result       = li_ajson_result
-                             CHANGING  ci_default      = li_ajson_default
-                                       ct_mapper_cache = lt_mapper_cache
-                                       cs_fast         = ls_fast ).
+          " a filter is attached to an ajson INSTANCE, so an attribute bound
+          " with omit_initial keeps the scratch-instance detour the direct set
+          " cannot express: convert into the scratch, filter, copy into the
+          " result. The filter is the framework's own - the app-supplied
+          " mapper and filter of _bind( ) were removed on 2026-11-28
+          IF lr_attri->custom_filter IS BOUND.
+            json_custom_set( EXPORTING ir_attri   = lr_attri
+                                       ir_ref     = lr_ref
+                                       io_result  = li_ajson_result
+                             CHANGING  ci_default = li_ajson_default
+                                       cs_fast    = ls_fast ).
             CONTINUE.
           ENDIF.
 
@@ -1281,33 +1261,15 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD json_custom_set.
-      FIELD-SYMBOLS <mapper_cache> TYPE /z2ui5/cl_ui5_srv_model=>ty_s_mapper_cache.
-        DATA ajson LIKE <mapper_cache>-ajson.
-        DATA temp628 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_mapper_cache.
+    DATA ajson LIKE ci_default.
     FIELD-SYMBOLS <val> TYPE any.
 
-    IF ir_attri->custom_mapper IS BOUND.
-
-      READ TABLE ct_mapper_cache WITH KEY mapper = ir_attri->custom_mapper ASSIGNING <mapper_cache>. "#EC CI_SORTSEQ
-      IF <mapper_cache> IS ASSIGNED.
-
-        ajson = <mapper_cache>-ajson.
-      ELSE.
-        ajson = /z2ui5/cl_ajson=>create_empty(
-                    ii_custom_mapping = ir_attri->custom_mapper ).
-
-        CLEAR temp628.
-        temp628-mapper = ir_attri->custom_mapper.
-        temp628-ajson = ajson.
-        INSERT temp628 INTO TABLE ct_mapper_cache.
-      ENDIF.
-    ELSE.
-      IF ci_default IS NOT BOUND.
-        ci_default = /z2ui5/cl_ajson=>create_empty(
-                         ii_custom_mapping = /z2ui5/cl_ui5_util_json_fl=>mapper_upper( ) ).
-      ENDIF.
-      ajson = ci_default.
+    IF ci_default IS NOT BOUND.
+      ci_default = /z2ui5/cl_ajson=>create_empty(
+                       ii_custom_mapping = /z2ui5/cl_ui5_util_json_fl=>mapper_upper( ) ).
     ENDIF.
+
+    ajson = ci_default.
 
 
     ASSIGN ir_ref->* TO <val>.
@@ -1315,16 +1277,12 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
                 iv_path         = `/`
                 iv_val          = <val> ).
 
-    IF ir_attri->custom_filter IS BOUND.
-      ajson = ajson->filter( ir_attri->custom_filter ).
-    ENDIF.
+    ajson = ajson->filter( ir_attri->custom_filter ).
 
-    " a filter alone (omit_initial is one) keeps the upper-case names, so
-    " a namespaced component is grouped like on every other road
-    " (json_ns_text); a mapper of the app's own names the members itself
-    IF ir_attri->custom_mapper IS NOT BOUND
-        AND find( val = ir_attri->name_client
-                  sub = `//` ) < 0
+    " the filter keeps the upper-case names, so a namespaced component is
+    " grouped like on every other road (json_ns_text)
+    IF find( val = ir_attri->name_client
+             sub = `//` ) < 0
         AND /z2ui5/cl_ui5_util_context=>rtti_check_namespaced( ir_ref ) = abap_true.
       json_fast_token( EXPORTING iv_json   = json_ns_text( ajson->mt_json_tree )
                                  iv_path   = ir_attri->name_client
@@ -1378,8 +1336,8 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD json_fast_token.
-    DATA temp629 TYPE ty_s_fast.
-    DATA ls_token LIKE temp629.
+    DATA temp626 TYPE ty_s_fast.
+    DATA ls_token LIKE temp626.
 
     " The tree keeps deciding the shape of the document - the order of the
     " keys, a dissolved structure's nesting (/MS/T is an object MS around
@@ -1391,12 +1349,12 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
       cs_fast-uuid = /z2ui5/cl_ui5_util_context=>uuid_get_c32( ).
     ENDIF.
 
-    CLEAR temp629.
-    temp629-token = |z2ui5-fast-{ cs_fast-uuid }-{ lines( cs_fast-t_token ) + 1 }|.
-    temp629-json = iv_json.
-    temp629-path = iv_path.
+    CLEAR temp626.
+    temp626-token = |z2ui5-fast-{ cs_fast-uuid }-{ lines( cs_fast-t_token ) + 1 }|.
+    temp626-json = iv_json.
+    temp626-path = iv_path.
 
-    ls_token = temp629.
+    ls_token = temp626.
     INSERT ls_token INTO TABLE cs_fast-t_token.
     io_result->set( iv_path = iv_path
                     iv_val  = ls_token-token ).
@@ -1405,8 +1363,8 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
 
   METHOD json_ns_set.
     FIELD-SYMBOLS <val> TYPE any.
-    DATA temp630 TYPE REF TO /z2ui5/if_ajson.
-    DATA li_scratch LIKE temp630.
+    DATA temp627 TYPE REF TO /z2ui5/if_ajson.
+    DATA li_scratch LIKE temp627.
 
     ev_taken = abap_false.
     " the common value has no namespaced component anywhere and is set
@@ -1421,9 +1379,9 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
     " the scratch is the result's twin - the same mapping, the same
     " options - so every node is the one the result would have held
 
-    temp630 ?= /z2ui5/cl_ajson=>create_empty( ii_custom_mapping = /z2ui5/cl_ui5_util_json_fl=>mapper_upper( ) ).
+    temp627 ?= /z2ui5/cl_ajson=>create_empty( ii_custom_mapping = /z2ui5/cl_ui5_util_json_fl=>mapper_upper( ) ).
 
-    li_scratch = temp630.
+    li_scratch = temp627.
     li_scratch->set( iv_ignore_empty = abap_false
                      iv_path         = `/`
                      iv_val          = <val> ).
@@ -1458,7 +1416,7 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
         DATA lv_path TYPE string.
         DATA lv_first LIKE abap_true.
         DATA ls_item LIKE LINE OF it_tree.
-        DATA temp631 LIKE LINE OF ct_buffer.
+        DATA temp628 LIKE LINE OF ct_buffer.
 
     " ajson's own serializer, compact (lcl_json_serializer): an array by
     " index, an object by name, a string escaped as the fast path escapes
@@ -1489,8 +1447,8 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
         INSERT `}` INTO TABLE ct_buffer.
       WHEN /z2ui5/if_ajson_types=>node_type-string.
 
-        temp631 = |"{ /z2ui5/cl_ui5_util_context=>c_escape_json( is_node-value ) }"|.
-        INSERT temp631 INTO TABLE ct_buffer.
+        temp628 = |"{ /z2ui5/cl_ui5_util_context=>c_escape_json( is_node-value ) }"|.
+        INSERT temp628 INTO TABLE ct_buffer.
       WHEN /z2ui5/if_ajson_types=>node_type-null.
         INSERT `null` INTO TABLE ct_buffer.
       WHEN OTHERS.
@@ -1506,11 +1464,11 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
     DATA lv_first TYPE abap_bool VALUE abap_true.
 
     DATA lt_member TYPE /z2ui5/cl_ui5_srv_model=>ty_t_ns_member.
-    DATA temp632 LIKE LINE OF lt_member.
-    DATA lr_member LIKE REF TO temp632.
-        DATA temp633 LIKE LINE OF ct_buffer.
-        DATA temp634 LIKE LINE OF ct_buffer.
-        DATA temp635 LIKE LINE OF ct_buffer.
+    DATA temp629 LIKE LINE OF lt_member.
+    DATA lr_member LIKE REF TO temp629.
+        DATA temp630 LIKE LINE OF ct_buffer.
+        DATA temp631 LIKE LINE OF ct_buffer.
+        DATA temp632 LIKE LINE OF ct_buffer.
     lt_member = json_ns_object_members( it_tree = it_tree
                                               iv_path = iv_path ).
 
@@ -1528,17 +1486,17 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
       lv_first = abap_false.
       IF lr_member->sub IS INITIAL.
 
-        temp633 = |"{ lr_member->key }":|.
-        INSERT temp633 INTO TABLE ct_buffer.
+        temp630 = |"{ lr_member->key }":|.
+        INSERT temp630 INTO TABLE ct_buffer.
       ELSEIF lr_member->key = lv_group.
 
-        temp634 = |"{ lr_member->sub }":|.
-        INSERT temp634 INTO TABLE ct_buffer.
+        temp631 = |"{ lr_member->sub }":|.
+        INSERT temp631 INTO TABLE ct_buffer.
       ELSE.
         lv_group = lr_member->key.
 
-        temp635 = |"{ lr_member->key }":\{"{ lr_member->sub }":|.
-        INSERT temp635 INTO TABLE ct_buffer.
+        temp632 = |"{ lr_member->key }":\{"{ lr_member->sub }":|.
+        INSERT temp632 INTO TABLE ct_buffer.
       ENDIF.
       json_ns_node( EXPORTING it_tree   = it_tree
                               is_node   = lr_member->node
@@ -1587,8 +1545,8 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
 
     DATA lt_ns TYPE string_table.
 
-    DATA temp636 LIKE LINE OF ct_member.
-    DATA lr_member LIKE REF TO temp636.
+    DATA temp633 LIKE LINE OF ct_member.
+    DATA lr_member LIKE REF TO temp633.
     DATA lv_ns LIKE LINE OF lt_ns.
     LOOP AT ct_member REFERENCE INTO lr_member WHERE sub IS NOT INITIAL. "#EC CI_SORTSEQ
       INSERT lr_member->key INTO TABLE lt_ns.
@@ -1647,8 +1605,8 @@ CLASS /z2ui5/cl_ui5_srv_model IMPLEMENTATION.
     DATA lt_segment TYPE string_table.
     DATA lv_path    TYPE string.
 
-    DATA temp637 LIKE LINE OF cs_fast-t_token.
-    DATA lr_fast LIKE REF TO temp637.
+    DATA temp634 LIKE LINE OF cs_fast-t_token.
+    DATA lr_fast LIKE REF TO temp634.
       DATA lv_last TYPE i.
       DATA lv_segment LIKE LINE OF lt_segment.
         DATA lv_type TYPE /z2ui5/if_ajson_types=>ty_node_type.
@@ -1849,9 +1807,9 @@ DATA lt_used TYPE temp1.
   ENDMETHOD.
 
   METHOD json_cell.
-        DATA temp638 TYPE string.
-        DATA temp639 TYPE string.
-        DATA temp640 TYPE string.
+        DATA temp635 TYPE string.
+        DATA temp636 TYPE string.
+        DATA temp637 TYPE string.
 
     " the one rendering ajson uses for every elementary value: the string
     " template, which decides the sign, the decimals and the exponent by
@@ -1865,27 +1823,27 @@ DATA lt_used TYPE temp1.
       WHEN `D`.
 
         IF iv_cell IS INITIAL.
-          temp638 = `""`.
+          temp635 = `""`.
         ELSE.
-          temp638 = |"{ result(4) }-{ result+4(2) }-{ result+6(2) }"|.
+          temp635 = |"{ result(4) }-{ result+4(2) }-{ result+6(2) }"|.
         ENDIF.
-        result = temp638.
+        result = temp635.
       WHEN `T`.
 
         IF iv_cell IS INITIAL.
-          temp639 = `""`.
+          temp636 = `""`.
         ELSE.
-          temp639 = |"{ result(2) }:{ result+2(2) }:{ result+4(2) }"|.
+          temp636 = |"{ result(2) }:{ result+2(2) }:{ result+4(2) }"|.
         ENDIF.
-        result = temp639.
+        result = temp636.
       WHEN `B`.
 
         IF iv_cell IS NOT INITIAL.
-          temp640 = `true`.
+          temp637 = `true`.
         ELSE.
-          temp640 = `false`.
+          temp637 = `false`.
         ENDIF.
-        result = temp640.
+        result = temp637.
       WHEN `U`.
         " a packed field typed timestamp or timestampl: ajson's
         " format_timestamp / format_timestampl, an ISO instant in UTC -
@@ -1985,9 +1943,9 @@ DATA lt_used TYPE temp1.
         DATA lv_kind TYPE string.
         DATA lt_member TYPE string_table.
         DATA lv_member LIKE LINE OF lt_member.
-          DATA temp641 TYPE REF TO data.
+          DATA temp638 TYPE REF TO data.
         FIELD-SYMBOLS <row> TYPE ANY.
-          DATA temp642 TYPE REF TO data.
+          DATA temp639 TYPE REF TO data.
     ASSIGN ir_ref->* TO <val>.
 
     CASE io_json->get_node_type( iv_path ).
@@ -2025,10 +1983,10 @@ DATA lt_used TYPE temp1.
             CONTINUE.
           ENDIF.
 
-GET REFERENCE OF <comp> INTO temp641.
+GET REFERENCE OF <comp> INTO temp638.
 json_quote_lossy( io_json = io_json
                             iv_path = |{ iv_path }/{ lv_member }|
-                            ir_ref  = temp641 ).
+                            ir_ref  = temp638 ).
         ENDLOOP.
 
       WHEN /z2ui5/if_ajson_types=>node_type-array.
@@ -2041,10 +1999,10 @@ json_quote_lossy( io_json = io_json
 
         LOOP AT <tab> ASSIGNING <row>.
 
-GET REFERENCE OF <row> INTO temp642.
+GET REFERENCE OF <row> INTO temp639.
 json_quote_lossy( io_json = io_json
                             iv_path = |{ iv_path }/{ sy-tabix }|
-                            ir_ref  = temp642 ).
+                            ir_ref  = temp639 ).
         ENDLOOP.
 
     ENDCASE.
@@ -2053,8 +2011,8 @@ json_quote_lossy( io_json = io_json
 
   METHOD json_ns_members.
 
-    DATA temp643 LIKE LINE OF it_comp.
-    DATA lr_comp LIKE REF TO temp643.
+    DATA temp640 LIKE LINE OF it_comp.
+    DATA lr_comp LIKE REF TO temp640.
       DATA ls_member TYPE /z2ui5/cl_ui5_srv_model=>ty_s_ns_member.
     LOOP AT it_comp REFERENCE INTO lr_comp.
 
@@ -2075,13 +2033,13 @@ json_quote_lossy( io_json = io_json
     DATA lt_inner  TYPE string_table.
     DATA lv_group  TYPE string.
 
-    DATA temp644 LIKE LINE OF it_member.
-    DATA lr_member LIKE REF TO temp644.
+    DATA temp641 LIKE LINE OF it_member.
+    DATA lr_member LIKE REF TO temp641.
       DATA lv_text TYPE string.
-        DATA temp645 LIKE LINE OF lt_member.
-        DATA temp646 LIKE LINE OF lt_member.
-        DATA temp647 LIKE LINE OF lt_inner.
-      DATA temp648 LIKE LINE OF lt_member.
+        DATA temp642 LIKE LINE OF lt_member.
+        DATA temp643 LIKE LINE OF lt_member.
+        DATA temp644 LIKE LINE OF lt_inner.
+      DATA temp645 LIKE LINE OF lt_member.
     LOOP AT it_member REFERENCE INTO lr_member.
       ASSIGN COMPONENT lr_member->name OF STRUCTURE is_row TO <cell>.
       IF sy-subrc <> 0.
@@ -2097,25 +2055,25 @@ json_quote_lossy( io_json = io_json
       " follow each other and its object closes at the first other key
       IF lv_group IS NOT INITIAL AND lr_member->key <> lv_group.
 
-        temp645 = |"{ lv_group }":\{{ concat_lines_of( table = lt_inner sep = `,` ) }\}|.
-        INSERT temp645 INTO TABLE lt_member.
+        temp642 = |"{ lv_group }":\{{ concat_lines_of( table = lt_inner sep = `,` ) }\}|.
+        INSERT temp642 INTO TABLE lt_member.
         CLEAR: lv_group, lt_inner.
       ENDIF.
       IF lr_member->sub IS INITIAL.
 
-        temp646 = |"{ lr_member->key }":{ lv_text }|.
-        INSERT temp646 INTO TABLE lt_member.
+        temp643 = |"{ lr_member->key }":{ lv_text }|.
+        INSERT temp643 INTO TABLE lt_member.
       ELSE.
         lv_group = lr_member->key.
 
-        temp647 = |"{ lr_member->sub }":{ lv_text }|.
-        INSERT temp647 INTO TABLE lt_inner.
+        temp644 = |"{ lr_member->sub }":{ lv_text }|.
+        INSERT temp644 INTO TABLE lt_inner.
       ENDIF.
     ENDLOOP.
     IF lv_group IS NOT INITIAL.
 
-      temp648 = |"{ lv_group }":\{{ concat_lines_of( table = lt_inner sep = `,` ) }\}|.
-      INSERT temp648 INTO TABLE lt_member.
+      temp645 = |"{ lv_group }":\{{ concat_lines_of( table = lt_inner sep = `,` ) }\}|.
+      INSERT temp645 INTO TABLE lt_member.
     ENDIF.
     result = `{` && concat_lines_of( table = lt_member
                                      sep   = `,` ) && `}`.
@@ -2130,11 +2088,11 @@ json_quote_lossy( io_json = io_json
     " app filled it, a card manifest loaded later
     " assigned first, not tested inline: a built-in in an IS INITIAL
     " operand does not compile after the 7.02 downport (#2664)
-    DATA temp649 TYPE string.
+    DATA temp646 TYPE string.
     DATA lv_json TYPE string.
-    temp649 = iv_json.
+    temp646 = iv_json.
 
-    lv_json = condense( temp649 ).
+    lv_json = condense( temp646 ).
     IF lv_json IS INITIAL.
       io_result->set_null( iv_path ).
       RETURN.
@@ -2145,8 +2103,8 @@ json_quote_lossy( io_json = io_json
   ENDMETHOD.
 
   METHOD main_attri_db_load.
-    DATA temp650 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp650.
+    DATA temp647 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp647.
 
     main_attri_db_load_resolve( ).
 
@@ -2172,8 +2130,8 @@ json_quote_lossy( io_json = io_json
     " (attri_get_val_ref). This loop used to visit every row without an
     " owner - a dynamic ASSIGN and an RTTI call each - only to rebuild the
     " descriptor the prefilter no longer reads.
-    DATA temp651 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp651.
+    DATA temp648 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp648.
           DATA lr_ref TYPE REF TO data.
       FIELD-SYMBOLS <live> TYPE data.
           DATA x TYPE REF TO cx_root.
@@ -2319,8 +2277,8 @@ json_quote_lossy( io_json = io_json
     " every bound row, and the chain of parents above it: the method used
     " to look one level down only, while its promise (and the restore that
     " decides on it) is about every dissolved child
-    DATA temp652 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp652.
+    DATA temp649 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp649.
       DATA lv_name LIKE lr_attri->name.
         DATA lr_up TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri.
     LOOP AT mt_attri->* REFERENCE INTO lr_attri   "#EC CI_SORTSEQ
@@ -2450,15 +2408,15 @@ json_quote_lossy( io_json = io_json
     DATA lt_dref TYPE ty_t_ref_idx.
     FIELD-SYMBOLS <dref> TYPE any.
     FIELD-SYMBOLS <val_deref> TYPE any.
-    DATA temp653 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp653.
+    DATA temp650 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp650.
       DATA lv_path_dref TYPE string.
-      DATA temp654 TYPE REF TO data.
+      DATA temp651 TYPE REF TO data.
 DATA temp140 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_ref_idx.
       DATA lo_descr TYPE REF TO cl_abap_typedescr.
-    DATA temp655 LIKE LINE OF lt_dref.
-    DATA lr_dref LIKE REF TO temp655.
-        DATA temp656 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_ref_idx.
+    DATA temp652 LIKE LINE OF lt_dref.
+    DATA lr_dref LIKE REF TO temp652.
+        DATA temp653 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_ref_idx.
 
     " what an earlier save on this instance detached is gone: put back by
     " main_attri_reattach, or replaced by the parse of main_attri_db_load.
@@ -2501,11 +2459,11 @@ DATA temp140 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_ref_idx.
         CONTINUE.
       ENDIF.
 
-GET REFERENCE OF <dref> INTO temp654.
+GET REFERENCE OF <dref> INTO temp651.
 
 CLEAR temp140.
 temp140-name = lr_attri->name.
-temp140-ref = temp654.
+temp140-ref = temp651.
 INSERT temp140 INTO TABLE lt_dref.
 
       IF dref_check_payload( ir_attri = lr_attri
@@ -2576,10 +2534,10 @@ INSERT temp140 INTO TABLE lt_dref.
       ASSIGN lr_dref->ref->* TO <dref>.
       IF <dref> IS BOUND.
 
-        CLEAR temp656.
-        temp656-name = lr_dref->name.
-        temp656-ref = <dref>.
-        INSERT temp656 INTO TABLE mt_detached.
+        CLEAR temp653.
+        temp653-name = lr_dref->name.
+        temp653-ref = <dref>.
+        INSERT temp653 INTO TABLE mt_detached.
       ENDIF.
       CLEAR <dref>.
     ENDLOOP.
@@ -2626,8 +2584,8 @@ INSERT temp140 INTO TABLE lt_dref.
     " search compares travels as text (type_name, type_kind, kind)
     DATA lt_total TYPE string_table.
 
-    DATA temp657 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp657.
+    DATA temp654 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp654.
       DATA ls_row TYPE /z2ui5/if_ui5_types=>ty_s_attri.
     LOOP AT mt_attri->* REFERENCE INTO lr_attri   "#EC CI_SORTSEQ
          WHERE window_total_name IS NOT INITIAL.
@@ -2651,18 +2609,18 @@ INSERT temp140 INTO TABLE lt_dref.
 
     " a row without a kind (written by a draft older than the component)
     " is kept: nothing says it is a leaf
-    DATA temp658 LIKE sy-subrc.
-    DATA temp659 LIKE sy-subrc.
+    DATA temp655 LIKE sy-subrc.
+    DATA temp656 LIKE sy-subrc.
     DATA lv_parent LIKE ir_attri->name_parent.
       DATA lr_up TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri.
-    temp659 = sy-subrc.
+    temp656 = sy-subrc.
     READ TABLE it_total WITH KEY table_line = ir_attri->name TRANSPORTING NO FIELDS.
-    temp658 = sy-subrc.
-    sy-subrc = temp659.
+    temp655 = sy-subrc.
+    sy-subrc = temp656.
     IF ir_attri->bind = abap_true
         OR ir_attri->kind <> /z2ui5/cl_ui5_util_context=>cv_typedescr_kind_elem
         OR ir_attri->name_ref IS NOT INITIAL
-        OR temp658 = 0. "#EC CI_SORTSEQ
+        OR temp655 = 0. "#EC CI_SORTSEQ
       result = abap_true.
       RETURN.
     ENDIF.
@@ -2689,11 +2647,11 @@ INSERT temp140 INTO TABLE lt_dref.
 
     FIELD-SYMBOLS <dref> TYPE any.
 
-    DATA temp660 LIKE LINE OF mt_detached.
-    DATA lr_detached LIKE REF TO temp660.
+    DATA temp657 LIKE LINE OF mt_detached.
+    DATA lr_detached LIKE REF TO temp657.
       DATA lv_path TYPE string.
-    DATA temp661 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp661.
+    DATA temp658 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp658.
     LOOP AT mt_detached REFERENCE INTO lr_detached.
 
       lv_path = |MO_APP->{ lr_detached->name }|.
@@ -2724,16 +2682,16 @@ INSERT temp140 INTO TABLE lt_dref.
   METHOD ref_idx_put.
 
     DATA lr_idx TYPE REF TO /z2ui5/cl_ui5_srv_model=>ty_s_ref_idx.
-      DATA temp662 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_ref_idx.
+      DATA temp659 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_ref_idx.
     READ TABLE mt_ref_idx REFERENCE INTO lr_idx WITH TABLE KEY name = iv_name.
     IF sy-subrc = 0.
       lr_idx->ref = ir_ref.
     ELSE.
 
-      CLEAR temp662.
-      temp662-name = iv_name.
-      temp662-ref = ir_ref.
-      INSERT temp662 INTO TABLE mt_ref_idx.
+      CLEAR temp659.
+      temp659-name = iv_name.
+      temp659-ref = ir_ref.
+      INSERT temp659 INTO TABLE mt_ref_idx.
     ENDIF.
 
   ENDMETHOD.
@@ -2843,8 +2801,8 @@ INSERT temp140 INTO TABLE lt_dref.
   METHOD attri_search.
 
     DATA lo_datadescr TYPE REF TO cl_abap_typedescr.
-    DATA temp663 LIKE LINE OF mt_ref_idx.
-    DATA lr_idx LIKE REF TO temp663.
+    DATA temp660 LIKE LINE OF mt_ref_idx.
+    DATA lr_idx LIKE REF TO temp660.
       DATA lr_hit TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri.
           DATA lr_fresh TYPE REF TO data.
     lo_datadescr = /z2ui5/cl_ui5_util_context=>rtti_get_typedescr_by_data_ref( val ).
@@ -2910,8 +2868,8 @@ INSERT temp140 INTO TABLE lt_dref.
   METHOD attri_search_scan.
 
     DATA lv_name_val LIKE io_descr->absolute_name.
-    DATA temp664 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp664.
+    DATA temp661 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp661.
       DATA temp2 TYPE xsdboolean.
           DATA lr_ref TYPE REF TO data.
     lv_name_val = io_descr->absolute_name.
@@ -2969,20 +2927,20 @@ INSERT temp140 INTO TABLE lt_dref.
 
     DATA lr_ref TYPE REF TO data.
     DATA lo_descr TYPE REF TO cl_abap_typedescr.
-    DATA temp665 TYPE /z2ui5/if_ui5_types=>ty_s_attri.
+    DATA temp662 TYPE /z2ui5/if_ui5_types=>ty_s_attri.
     lr_ref = attri_get_val_ref( name ).
     ref_idx_put( iv_name = name
                  ir_ref  = lr_ref ).
 
     lo_descr = /z2ui5/cl_ui5_util_context=>rtti_get_typedescr_by_data_ref( lr_ref ).
 
-    CLEAR temp665.
-    temp665-name = name.
-    temp665-o_typedescr = lo_descr.
-    temp665-type_name = lo_descr->absolute_name.
-    temp665-type_kind = lo_descr->type_kind.
-    temp665-kind = lo_descr->kind.
-    result = temp665.
+    CLEAR temp662.
+    temp662-name = name.
+    temp662-o_typedescr = lo_descr.
+    temp662-type_name = lo_descr->absolute_name.
+    temp662-type_kind = lo_descr->type_kind.
+    temp662-kind = lo_descr->kind.
+    result = temp662.
 
   ENDMETHOD.
 
@@ -2991,7 +2949,7 @@ INSERT temp140 INTO TABLE lt_dref.
     DATA lr_ref_tmp TYPE REF TO data.
     DATA lr_ref TYPE REF TO data.
     DATA lo_descr TYPE REF TO cl_abap_typedescr.
-        DATA temp666 TYPE /z2ui5/if_ui5_types=>ty_s_attri.
+        DATA temp663 TYPE /z2ui5/if_ui5_types=>ty_s_attri.
     lr_ref_tmp = attri_get_val_ref( ir_attri->name ).
 
     IF /z2ui5/cl_ui5_util_context=>check_unassign_initial( lr_ref_tmp ) IS NOT INITIAL.
@@ -3015,14 +2973,14 @@ INSERT temp140 INTO TABLE lt_dref.
       WHEN OTHERS.
 
 
-        CLEAR temp666.
-        temp666-name = |{ ir_attri->name }->*|.
-        temp666-name_parent = ir_attri->name.
-        temp666-o_typedescr = lo_descr.
-        temp666-type_name = lo_descr->absolute_name.
-        temp666-type_kind = lo_descr->type_kind.
-        temp666-kind = lo_descr->kind.
-        INSERT temp666 INTO TABLE result.
+        CLEAR temp663.
+        temp663-name = |{ ir_attri->name }->*|.
+        temp663-name_parent = ir_attri->name.
+        temp663-o_typedescr = lo_descr.
+        temp663-type_name = lo_descr->absolute_name.
+        temp663-type_kind = lo_descr->type_kind.
+        temp663-kind = lo_descr->kind.
+        INSERT temp663 INTO TABLE result.
 
     ENDCASE.
 
@@ -3034,10 +2992,10 @@ INSERT temp140 INTO TABLE lt_dref.
     DATA lr_ref TYPE REF TO object.
     DATA li_client TYPE REF TO /z2ui5/if_client.
     DATA lt_attri TYPE abap_attrdescr_tab.
-    DATA temp667 TYPE string.
-    DATA lv_prefix LIKE temp667.
-    DATA temp668 LIKE LINE OF lt_attri.
-    DATA lr_attri LIKE REF TO temp668.
+    DATA temp664 TYPE string.
+    DATA lv_prefix LIKE temp664.
+    DATA temp665 LIKE LINE OF lt_attri.
+    DATA lr_attri LIKE REF TO temp665.
           DATA ls_new TYPE /z2ui5/if_ui5_types=>ty_s_attri.
     lr_val = attri_get_val_ref( ir_attri->name ).
 
@@ -3074,12 +3032,12 @@ INSERT temp140 INTO TABLE lt_dref.
 
 
     IF ir_attri->name IS NOT INITIAL.
-      temp667 = |{ ir_attri->name }->|.
+      temp664 = |{ ir_attri->name }->|.
     ELSE.
-      CLEAR temp667.
+      CLEAR temp664.
     ENDIF.
 
-    lv_prefix = temp667.
+    lv_prefix = temp664.
 
 
 
@@ -3122,13 +3080,13 @@ INSERT temp140 INTO TABLE lt_dref.
     TYPES temp2 TYPE STANDARD TABLE OF REF TO data WITH DEFAULT KEY.
 DATA lt_refs TYPE temp2.
 
-    DATA temp669 LIKE LINE OF ct_result.
-    DATA lr_row LIKE REF TO temp669.
-    DATA temp670 LIKE LINE OF it_attri.
-    DATA lr_attri LIKE REF TO temp670.
+    DATA temp666 LIKE LINE OF ct_result.
+    DATA lr_row LIKE REF TO temp666.
+    DATA temp667 LIKE LINE OF it_attri.
+    DATA lr_attri LIKE REF TO temp667.
           DATA ls_new TYPE /z2ui5/if_ui5_types=>ty_s_attri.
           DATA lr_ref TYPE REF TO data.
-          DATA temp671 LIKE sy-subrc.
+          DATA temp668 LIKE sy-subrc.
     LOOP AT ct_result REFERENCE INTO lr_row.
       TRY.
           INSERT attri_get_val_ref( lr_row->name ) INTO TABLE lt_refs.
@@ -3150,8 +3108,8 @@ DATA lt_refs TYPE temp2.
           lr_ref = attri_get_val_ref( ls_new-name ).
 
           READ TABLE lt_refs WITH KEY table_line = lr_ref TRANSPORTING NO FIELDS.
-          temp671 = sy-subrc.
-          IF temp671 = 0. "#EC CI_SORTSEQ
+          temp668 = sy-subrc.
+          IF temp668 = 0. "#EC CI_SORTSEQ
             CONTINUE.
           ENDIF.
           ls_new-name_parent = iv_parent.
@@ -3169,8 +3127,8 @@ DATA lt_refs TYPE temp2.
       DATA lv_name TYPE string.
       DATA lr_ref TYPE REF TO data.
     DATA lt_attri TYPE abap_component_tab.
-    DATA temp672 LIKE LINE OF lt_attri.
-    DATA lr_comp LIKE REF TO temp672.
+    DATA temp669 LIKE LINE OF lt_attri.
+    DATA lr_comp LIKE REF TO temp669.
       DATA ls_new TYPE /z2ui5/if_ui5_types=>ty_s_attri.
     lr_val = attri_get_val_ref( ir_attri->name ).
 
@@ -3202,7 +3160,7 @@ DATA lt_refs TYPE temp2.
   ENDMETHOD.
 
   METHOD dissolve.
-      DATA temp673 LIKE sy-subrc.
+      DATA temp670 LIKE sy-subrc.
 
     " DO ... TIMES with the pending check inside the body, not
     " WHILE line_exists( ... ): the v702 downport of the transpiled browser
@@ -3222,9 +3180,9 @@ DATA lt_refs TYPE temp2.
       " serialize/deserialize ref de-duplication silently breaks
 
       READ TABLE mt_attri->* WITH KEY check_dissolved = abap_false TRANSPORTING NO FIELDS.
-      temp673 = sy-subrc.
+      temp670 = sy-subrc.
       IF mt_attri->* IS NOT INITIAL
-          AND NOT temp673 = 0. "#EC CI_SORTSEQ
+          AND NOT temp670 = 0. "#EC CI_SORTSEQ
         EXIT.
       ENDIF.
 
@@ -3262,13 +3220,13 @@ DATA lt_refs TYPE temp2.
     DATA lt_resolved TYPE ty_t_resolved.
     FIELD-SYMBOLS <ref> TYPE any.
 
-    DATA temp674 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp674.
+    DATA temp671 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp671.
           DATA lr_ref TYPE REF TO data.
-      DATA temp675 TYPE ty_s_resolved.
-      DATA ls_resolved LIKE temp675.
-    DATA temp676 LIKE LINE OF lt_resolved.
-    DATA lr_res LIKE REF TO temp676.
+      DATA temp672 TYPE ty_s_resolved.
+      DATA ls_resolved LIKE temp672.
+    DATA temp673 LIKE LINE OF lt_resolved.
+    DATA lr_res LIKE REF TO temp673.
     LOOP AT mt_attri->* REFERENCE INTO lr_attri   "#EC CI_SORTSEQ
          WHERE check_dissolved = abap_true
                AND (    type_kind = /z2ui5/cl_ui5_util_context=>cv_typedescr_typekind_table
@@ -3284,13 +3242,13 @@ DATA lt_refs TYPE temp2.
       ref_idx_put( iv_name = lr_attri->name
                    ir_ref  = lr_ref ).
 
-      CLEAR temp675.
-      temp675-name = lr_attri->name.
-      temp675-type_kind = lr_attri->type_kind.
-      temp675-attri = lr_attri.
-      temp675-ref = lr_ref.
+      CLEAR temp672.
+      temp672-name = lr_attri->name.
+      temp672-type_kind = lr_attri->type_kind.
+      temp672-attri = lr_attri.
+      temp672-ref = lr_ref.
 
-      ls_resolved = temp675.
+      ls_resolved = temp672.
       IF lr_attri->type_kind = /z2ui5/cl_ui5_util_context=>cv_typedescr_typekind_dref.
         ASSIGN lr_ref->* TO <ref>.
         ls_resolved-deref = <ref>.
@@ -3326,8 +3284,8 @@ DATA lt_refs TYPE temp2.
   ENDMETHOD.
 
   METHOD entry_refs_pair_table.
-    DATA temp677 LIKE LINE OF it_resolved.
-    DATA lr_other LIKE REF TO temp677.
+    DATA temp674 LIKE LINE OF it_resolved.
+    DATA lr_other LIKE REF TO temp674.
 
     IF check_alias_capable( ir_res->name ) = abap_false.
       RETURN.
@@ -3420,8 +3378,8 @@ DATA lt_refs TYPE temp2.
   ENDMETHOD.
 
   METHOD entry_refs_pair_dref.
-    DATA temp678 LIKE LINE OF it_resolved.
-    DATA lr_other LIKE REF TO temp678.
+    DATA temp675 LIKE LINE OF it_resolved.
+    DATA lr_other LIKE REF TO temp675.
 
     IF ir_res->deref IS NOT BOUND.
       RETURN.
@@ -3503,8 +3461,8 @@ DATA lt_refs TYPE temp2.
 
   METHOD refs_below_set.
 
-    DATA temp679 LIKE LINE OF mt_attri->*.
-    DATA lr_child LIKE REF TO temp679.
+    DATA temp676 LIKE LINE OF mt_attri->*.
+    DATA lr_child LIKE REF TO temp676.
     LOOP AT mt_attri->* REFERENCE INTO lr_child USING KEY parent
          WHERE name_parent = iv_parent.
       IF iv_to IS INITIAL.
@@ -3521,14 +3479,14 @@ DATA lt_refs TYPE temp2.
   ENDMETHOD.
 
   METHOD dissolve_run.
-      DATA temp680 TYPE /z2ui5/if_ui5_types=>ty_s_attri.
-      DATA ls_attri LIKE temp680.
-      DATA temp681 LIKE REF TO ls_attri.
+      DATA temp677 TYPE /z2ui5/if_ui5_types=>ty_s_attri.
+      DATA ls_attri LIKE temp677.
+      DATA temp678 LIKE REF TO ls_attri.
 DATA lt_init TYPE /z2ui5/if_ui5_types=>ty_t_attri.
-    DATA temp682 TYPE /z2ui5/if_ui5_types=>ty_t_attri.
-    DATA lt_attri_new LIKE temp682.
-    DATA temp683 LIKE LINE OF mt_attri->*.
-    DATA lr_attri LIKE REF TO temp683.
+    DATA temp679 TYPE /z2ui5/if_ui5_types=>ty_t_attri.
+    DATA lt_attri_new LIKE temp679.
+    DATA temp680 LIKE LINE OF mt_attri->*.
+    DATA lr_attri LIKE REF TO temp680.
         DATA ls_entry TYPE /z2ui5/if_ui5_types=>ty_s_attri.
           DATA lt_attri_struc TYPE /z2ui5/if_ui5_types=>ty_t_attri.
               DATA lt_attri_oref TYPE /z2ui5/if_ui5_types=>ty_t_attri.
@@ -3536,20 +3494,20 @@ DATA lt_init TYPE /z2ui5/if_ui5_types=>ty_t_attri.
 
     IF mt_attri->* IS INITIAL.
 
-      CLEAR temp680.
+      CLEAR temp677.
 
-      ls_attri = temp680.
+      ls_attri = temp677.
 
-      GET REFERENCE OF ls_attri INTO temp681.
+      GET REFERENCE OF ls_attri INTO temp678.
 
-lt_init = diss_oref( temp681 ).
+lt_init = diss_oref( temp678 ).
       INSERT LINES OF lt_init INTO TABLE mt_attri->*.
     ENDIF.
 
 
-    CLEAR temp682.
+    CLEAR temp679.
 
-    lt_attri_new = temp682.
+    lt_attri_new = temp679.
 
 
 
@@ -3613,10 +3571,10 @@ lt_init = diss_oref( temp681 ).
     " instead of the whole table copied and then the unbound majority
     " deleted from the copy again
     DATA lt_attri TYPE /z2ui5/if_ui5_types=>ty_t_attri.
-    DATA temp684 LIKE LINE OF mt_attri->*.
-    DATA lr_bound LIKE REF TO temp684.
-    DATA temp685 LIKE LINE OF lt_attri.
-    DATA lr_old LIKE REF TO temp685.
+    DATA temp681 LIKE LINE OF mt_attri->*.
+    DATA lr_bound LIKE REF TO temp681.
+    DATA temp682 LIKE LINE OF lt_attri.
+    DATA lr_old LIKE REF TO temp682.
       DATA lr_attri TYPE REF TO /z2ui5/if_ui5_types=>ty_s_attri.
     LOOP AT mt_attri->* REFERENCE INTO lr_bound   "#EC CI_SORTSEQ
          WHERE bind = abap_true.
@@ -3638,13 +3596,12 @@ lt_init = diss_oref( temp681 ).
       READ TABLE mt_attri->* REFERENCE INTO lr_attri WITH TABLE KEY name = lr_old->name.
       IF sy-subrc = 0.
         " restore everything update_model_attri stored on the bound attribute -
-        " dropping the mapper/filter refs here would silently serialize the
-        " attribute unmapped after a refresh, and dropping the window of a
+        " dropping the filter ref here would silently serialize the attribute
+        " unfiltered after a refresh, and dropping the window of a
         " window_bind_tab( ) table would send it without its total and the
         " app event that loads more
         lr_attri->bind                = lr_old->bind.
         lr_attri->name_client         = lr_old->name_client.
-        lr_attri->custom_mapper       = lr_old->custom_mapper.
         lr_attri->custom_filter       = lr_old->custom_filter.
         lr_attri->check_json          = lr_old->check_json.
         lr_attri->window_size         = lr_old->window_size.
@@ -3734,8 +3691,8 @@ lt_init = diss_oref( temp681 ).
       DATA lv_tabix TYPE i.
       FIELD-SYMBOLS <delta_row> TYPE any.
       DATA lv_row_path TYPE string.
-        DATA temp686 TYPE REF TO data.
-      DATA temp687 TYPE REF TO data.
+        DATA temp683 TYPE REF TO data.
+      DATA temp684 TYPE REF TO data.
 
     " ONE work row per table for the old values delta_apply_field keeps
     " aside - a select-all toggle over a thousand rows used to allocate a
@@ -3772,8 +3729,8 @@ lt_init = diss_oref( temp681 ).
       READ TABLE ct_tab INDEX lv_tabix ASSIGNING <delta_row>.
       IF <delta_row> IS ASSIGNED.
 
-GET REFERENCE OF <delta_row> INTO temp686.
-lr_target = delta_row_target( ir_row      = temp686
+GET REFERENCE OF <delta_row> INTO temp683.
+lr_target = delta_row_target( ir_row      = temp683
                                       iv_ref_rows = lv_ref_rows ).
       ENDIF.
       IF lr_target IS NOT BOUND.
@@ -3799,13 +3756,13 @@ lr_target = delta_row_target( ir_row      = temp686
         CREATE DATA lr_work_row LIKE <delta_row>.
       ENDIF.
 
-GET REFERENCE OF <delta_row> INTO temp687.
+GET REFERENCE OF <delta_row> INTO temp684.
 delta_apply_row( EXPORTING io_delta      = io_delta
                                  iv_row_path   = lv_row_path
                                  iv_table      = iv_table
                                  iv_row        = lv_tabix
                                  iv_row_parent = iv_row_parent
-                                 ir_row        = temp687
+                                 ir_row        = temp684
                                  ir_work_row   = lr_work_row
                        CHANGING  ct_col_kind   = lt_col_kind ).
     ENDLOOP.
@@ -3821,7 +3778,7 @@ delta_apply_row( EXPORTING io_delta      = io_delta
     DATA lv_fld LIKE LINE OF lt_fld.
       FIELD-SYMBOLS <comp> TYPE any.
       DATA lv_ns_taken TYPE abap_bool.
-      DATA temp688 TYPE REF TO data.
+      DATA temp685 TYPE REF TO data.
 DATA temp141 TYPE REF TO data.
 DATA temp34 TYPE /z2ui5/if_client=>ty_s_model_skip.
     ASSIGN ir_row->* TO <row>.
@@ -3868,7 +3825,7 @@ DATA temp34 TYPE /z2ui5/if_client=>ty_s_model_skip.
         CONTINUE.
       ENDIF.
 
-GET REFERENCE OF <before> INTO temp688.
+GET REFERENCE OF <before> INTO temp685.
 
 GET REFERENCE OF <comp> INTO temp141.
 
@@ -3881,7 +3838,7 @@ delta_apply_field( EXPORTING io_delta    = io_delta
                                    iv_path     = |{ iv_row_path }/{ lv_fld }|
                                    is_cell     = temp34
                                    ir_comp     = temp141
-                                   ir_before   = temp688
+                                   ir_before   = temp685
                          CHANGING  ct_col_kind = ct_col_kind ).
     ENDLOOP.
 
@@ -3924,7 +3881,7 @@ delta_apply_field( EXPORTING io_delta    = io_delta
     DATA lt_sub TYPE string_table.
     DATA lv_sub LIKE LINE OF lt_sub.
       DATA lv_name TYPE string.
-      DATA temp689 TYPE REF TO data.
+      DATA temp686 TYPE REF TO data.
 DATA temp142 TYPE REF TO data.
 DATA temp35 TYPE /z2ui5/if_client=>ty_s_model_skip.
 
@@ -3956,7 +3913,7 @@ DATA temp35 TYPE /z2ui5/if_client=>ty_s_model_skip.
       ev_taken = abap_true.
       " the cell under the component's own name - in t_model_skipped too
 
-GET REFERENCE OF <before> INTO temp689.
+GET REFERENCE OF <before> INTO temp686.
 
 GET REFERENCE OF <comp> INTO temp142.
 
@@ -3969,7 +3926,7 @@ delta_apply_field( EXPORTING io_delta    = io_delta
                                    iv_path     = |{ lv_path }/{ lv_sub }|
                                    is_cell     = temp35
                                    ir_comp     = temp142
-                                   ir_before   = temp689
+                                   ir_before   = temp686
                          CHANGING  ct_col_kind = ct_col_kind ).
     ENDLOOP.
 
@@ -4001,19 +3958,19 @@ delta_apply_field( EXPORTING io_delta    = io_delta
 
     DATA lt_fld TYPE string_table.
     DATA lv_fld LIKE LINE OF lt_fld.
-      DATA temp690 TYPE /z2ui5/if_client=>ty_s_model_skip.
+      DATA temp687 TYPE /z2ui5/if_client=>ty_s_model_skip.
     lt_fld = io_delta->members( iv_row_path ).
 
     LOOP AT lt_fld INTO lv_fld.
 
-      CLEAR temp690.
-      temp690-name = iv_table.
-      temp690-row = iv_row.
-      temp690-field = lv_fld.
-      temp690-row_parent = iv_row_parent.
+      CLEAR temp687.
+      temp687-name = iv_table.
+      temp687-row = iv_row.
+      temp687-field = lv_fld.
+      temp687-row_parent = iv_row_parent.
       delta_trace_skipped( io_delta = io_delta
                            iv_path  = |{ iv_row_path }/{ lv_fld }|
-                           is_cell  = temp690 ).
+                           is_cell  = temp687 ).
     ENDLOOP.
 
   ENDMETHOD.
@@ -4027,15 +3984,15 @@ delta_apply_field( EXPORTING io_delta    = io_delta
     " Surrounding blanks are not a spelling, ` 1 ` names row index 1 like
     " every other ABAP numeric text (delta_malformed_survives pins it)
     DATA lv_key TYPE string.
-        DATA temp691 TYPE i.
+        DATA temp688 TYPE i.
     lv_key = condense( iv_key ).
     IF lv_key IS INITIAL OR lv_key CN `0123456789`.
       RETURN.
     ENDIF.
     TRY.
 
-        temp691 = iv_key.
-        result = temp691 + 1.
+        temp688 = iv_key.
+        result = temp688 + 1.
       CATCH cx_root.
         " more digits than an integer holds
         result = 0.
@@ -4287,9 +4244,10 @@ delta_apply_field( EXPORTING io_delta    = io_delta
               " changes nothing. Deliberately kept a replace: a top-level
               " structure attribute is written the same way
               " (whole_value_apply), and the two have to agree. The one
-              " sender of a genuinely PARTIAL object is the obsolete
-              " _bind( custom_filter ) dropping a non-initial field - such a
-              " field is cleared here, exactly as on the attribute level
+              " sender of a genuinely PARTIAL object was the app-supplied
+              " _bind( custom_filter ), removed 2026-11-28, which could drop a
+              " non-initial field - such a field is cleared here, exactly as
+              " on the attribute level
               json_to_abap( io_json = io_delta->slice( iv_path )
                             ir_ref  = ir_comp ).
             ENDIF.
@@ -4324,8 +4282,8 @@ delta_apply_field( EXPORTING io_delta    = io_delta
   METHOD delta_col_kind.
 
     FIELD-SYMBOLS <comp> TYPE any.
-    DATA temp692 TYPE ty_s_col_kind.
-    DATA ls_col_kind LIKE temp692.
+    DATA temp689 TYPE ty_s_col_kind.
+    DATA ls_col_kind LIKE temp689.
 
     READ TABLE ct_col_kind REFERENCE INTO er_col_kind
          WITH TABLE KEY field = is_cell-field.
@@ -4335,11 +4293,11 @@ delta_apply_field( EXPORTING io_delta    = io_delta
 
     ASSIGN ir_comp->* TO <comp>.
 
-    CLEAR temp692.
-    temp692-field = is_cell-field.
-    temp692-type_kind = /z2ui5/cl_ui5_util_context=>rtti_get_type_kind( <comp> ).
+    CLEAR temp689.
+    temp689-field = is_cell-field.
+    temp689-type_kind = /z2ui5/cl_ui5_util_context=>rtti_get_type_kind( <comp> ).
 
-    ls_col_kind = temp692.
+    ls_col_kind = temp689.
     " the table kind only where there is a table: rtti_check_table_standard on
     " a REF TO data sees the reference itself and answers no - which is
     " what keeps a delta from being followed through such a column
@@ -4497,8 +4455,8 @@ delta_apply_field( EXPORTING io_delta    = io_delta
     FIELD-SYMBOLS <kept> TYPE any.
     DATA lt_keep     TYPE ty_t_keep.
     DATA lt_col_kind TYPE ty_t_col_kind.
-    DATA temp693 LIKE LINE OF lt_keep.
-    DATA lr_keep LIKE REF TO temp693.
+    DATA temp690 LIKE LINE OF lt_keep.
+    DATA lr_keep LIKE REF TO temp690.
     ASSIGN ir_ref->* TO <val>.
     json_to_abap_keep( EXPORTING ir_ref  = ir_ref
                        CHANGING  ct_keep = lt_keep ).
@@ -4542,10 +4500,10 @@ delta_apply_field( EXPORTING io_delta    = io_delta
         DATA lv_kind TYPE string.
         DATA lt_member TYPE string_table.
         DATA lv_member LIKE LINE OF lt_member.
-          DATA temp694 TYPE REF TO data.
+          DATA temp691 TYPE REF TO data.
 DATA temp143 TYPE /z2ui5/if_client=>ty_s_model_skip.
 DATA lr_col_kind TYPE REF TO /z2ui5/cl_ui5_srv_model=>ty_s_col_kind.
-          DATA temp695 TYPE REF TO data.
+          DATA temp692 TYPE REF TO data.
     ASSIGN ir_ref->* TO <val>.
 
     CASE io_json->get_node_type( iv_path ).
@@ -4588,20 +4546,20 @@ DATA lr_col_kind TYPE REF TO /z2ui5/cl_ui5_srv_model=>ty_s_col_kind.
             CONTINUE.
           ENDIF.
 
-GET REFERENCE OF <comp> INTO temp694.
+GET REFERENCE OF <comp> INTO temp691.
 
 CLEAR temp143.
 temp143-field = lv_name.
 
 delta_col_kind( EXPORTING is_cell     = temp143
-                                    ir_comp     = temp694
+                                    ir_comp     = temp691
                           IMPORTING er_col_kind = lr_col_kind
                           CHANGING  ct_col_kind = ct_col_kind ).
 
-GET REFERENCE OF <comp> INTO temp695.
+GET REFERENCE OF <comp> INTO temp692.
 json_to_abap_member( io_json      = io_json
                                iv_path      = |{ iv_path }/{ lv_member }|
-                               ir_comp      = temp695
+                               ir_comp      = temp692
                                iv_type_kind = lr_col_kind->type_kind
                                iv_keep      = iv_keep ).
         ENDLOOP.
@@ -4691,9 +4649,9 @@ json_to_abap_member( io_json      = io_json
     DATA lr_value TYPE REF TO data.
     DATA lv_kind TYPE string.
     DATA lt_comp TYPE abap_component_tab.
-    DATA temp696 LIKE LINE OF lt_comp.
-    DATA lr_attri LIKE REF TO temp696.
-          DATA temp697 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_keep.
+    DATA temp693 LIKE LINE OF lt_comp.
+    DATA lr_attri LIKE REF TO temp693.
+          DATA temp694 TYPE /z2ui5/cl_ui5_srv_model=>ty_s_keep.
     ASSIGN ir_ref->* TO <val>.
 
 
@@ -4721,10 +4679,10 @@ json_to_abap_member( io_json      = io_json
           ASSIGN lr_value->* TO <value>.
           <value> = <comp>.
 
-          CLEAR temp697.
-          temp697-comp = lr_comp.
-          temp697-value = lr_value.
-          INSERT temp697 INTO TABLE ct_keep.
+          CLEAR temp694.
+          temp694-comp = lr_comp.
+          temp694-value = lr_value.
+          INSERT temp694 INTO TABLE ct_keep.
         WHEN /z2ui5/cl_ui5_util_context=>cv_typedescr_typekind_struct1
             OR /z2ui5/cl_ui5_util_context=>cv_typedescr_typekind_struct2.
           json_to_abap_keep( EXPORTING ir_ref  = lr_comp
@@ -4740,7 +4698,7 @@ json_to_abap_member( io_json      = io_json
     FIELD-SYMBOLS <tab> TYPE STANDARD TABLE.
     DATA lv_kind TYPE string.
     FIELD-SYMBOLS <row> TYPE ANY.
-      DATA temp698 TYPE REF TO data.
+      DATA temp695 TYPE REF TO data.
     ASSIGN ir_ref->* TO <val>.
 
 
@@ -4764,10 +4722,10 @@ json_to_abap_member( io_json      = io_json
     LOOP AT <tab> ASSIGNING <row>.
       " ajson numbers the items of an array from 1
 
-GET REFERENCE OF <row> INTO temp698.
+GET REFERENCE OF <row> INTO temp695.
 json_ns_to_abap( io_json = io_json
                        iv_path = |{ iv_path }/{ sy-tabix }|
-                       ir_ref  = temp698 ).
+                       ir_ref  = temp695 ).
     ENDLOOP.
 
   ENDMETHOD.
@@ -4777,16 +4735,16 @@ json_ns_to_abap( io_json = io_json
     FIELD-SYMBOLS <val>  TYPE any.
     FIELD-SYMBOLS <comp> TYPE any.
     DATA lt_comp TYPE abap_component_tab.
-    DATA temp699 LIKE LINE OF lt_comp.
-    DATA lr_comp LIKE REF TO temp699.
+    DATA temp696 LIKE LINE OF lt_comp.
+    DATA lr_comp LIKE REF TO temp696.
       DATA lv_ns TYPE string.
       DATA lv_field TYPE string.
         DATA lv_sub TYPE string.
-        DATA temp700 TYPE REF TO data.
-          DATA temp701 TYPE REF TO data.
+        DATA temp697 TYPE REF TO data.
+          DATA temp698 TYPE REF TO data.
       DATA lv_node_type TYPE /z2ui5/if_ajson_types=>ty_node_type.
-        DATA temp702 TYPE REF TO data.
-        DATA temp703 TYPE REF TO data.
+        DATA temp699 TYPE REF TO data.
+        DATA temp700 TYPE REF TO data.
     ASSIGN ir_ref->* TO <val>.
 
 
@@ -4809,16 +4767,16 @@ json_ns_to_abap( io_json = io_json
 
         lv_sub = |{ iv_path }/{ lr_comp->name }|.
 
-GET REFERENCE OF <comp> INTO temp700.
+GET REFERENCE OF <comp> INTO temp697.
 IF lr_comp->type->kind <> /z2ui5/cl_ui5_util_context=>cv_typedescr_kind_elem
             AND lr_comp->type->kind <> /z2ui5/cl_ui5_util_context=>cv_typedescr_kind_ref
             AND io_json->exists( lv_sub ) = abap_true
-            AND /z2ui5/cl_ui5_util_context=>rtti_check_namespaced( temp700 ) = abap_true.
+            AND /z2ui5/cl_ui5_util_context=>rtti_check_namespaced( temp697 ) = abap_true.
 
-GET REFERENCE OF <comp> INTO temp701.
+GET REFERENCE OF <comp> INTO temp698.
 json_ns_to_abap( io_json = io_json
                            iv_path = lv_sub
-                           ir_ref  = temp701 ).
+                           ir_ref  = temp698 ).
         ENDIF.
         CONTINUE.
       ENDIF.
@@ -4831,16 +4789,16 @@ json_ns_to_abap( io_json = io_json
       IF lv_node_type = /z2ui5/if_ajson_types=>node_type-object
           OR lv_node_type = /z2ui5/if_ajson_types=>node_type-array.
 
-GET REFERENCE OF <comp> INTO temp702.
+GET REFERENCE OF <comp> INTO temp699.
 json_to_abap( io_json = io_json->slice( lv_sub )
-                      ir_ref  = temp702 ).
+                      ir_ref  = temp699 ).
       ELSEIF lv_node_type IS NOT INITIAL.
 
-GET REFERENCE OF <comp> INTO temp703.
+GET REFERENCE OF <comp> INTO temp700.
 scalar_apply( io_model     = io_json
                       iv_path      = lv_sub
                       iv_node_type = lv_node_type
-                      ir_ref       = temp703 ).
+                      ir_ref       = temp700 ).
       ENDIF.
     ENDLOOP.
 
@@ -4860,12 +4818,12 @@ scalar_apply( io_model     = io_json
     " delta_apply_field). The refused value is quoted when the node carries
     " one - a scalar does; an object, an array and the table node of a
     " delta path do not, so the entry names the attribute alone there
-    DATA temp704 TYPE /z2ui5/if_client=>ty_s_model_skip.
-    DATA ls_skip LIKE temp704.
-    CLEAR temp704.
-    temp704-name = iv_name.
+    DATA temp701 TYPE /z2ui5/if_client=>ty_s_model_skip.
+    DATA ls_skip LIKE temp701.
+    CLEAR temp701.
+    temp701-name = iv_name.
 
-    ls_skip = temp704.
+    ls_skip = temp701.
     TRY.
         ls_skip-value = io_model->get_string( iv_path ).
       CATCH cx_root ##NO_HANDLER.
