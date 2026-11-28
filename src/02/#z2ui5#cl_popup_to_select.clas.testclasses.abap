@@ -254,6 +254,7 @@ CLASS ltcl_test_roundtrip DEFINITION FINAL
     METHODS test_cancel               FOR TESTING RAISING cx_static_check.
     METHODS test_search_filters       FOR TESTING RAISING cx_static_check.
     METHODS test_multi_keeps_selection FOR TESTING RAISING cx_static_check.
+    METHODS test_confirm_keeps_caller_tab FOR TESTING RAISING cx_static_check.
 
 ENDCLASS.
 
@@ -508,6 +509,28 @@ CLASS ltcl_test_roundtrip IMPLEMENTATION.
 
     temp3 = boolc( temp23 = 0 ).
     result = temp3.
+
+  ENDMETHOD.
+
+  METHOD test_confirm_keeps_caller_tab.
+
+    " mr_tab is the caller's table and stays readable once the popup has
+    " returned - callers compare it with the chosen rows to see which of the
+    " offered rows were left unticked
+    DATA lo_pop TYPE REF TO /z2ui5/cl_popup_to_select.
+    FIELD-SYMBOLS <lt_tab> TYPE STANDARD TABLE.
+    lo_pop = popup_create( ).
+    select_row( io_pop   = lo_pop
+                iv_index = 1 ).
+
+    mo_action->ms_actual-event = `CONFIRM`.
+    lo_pop->/z2ui5/if_app~main( mi_client ).
+
+
+    cl_abap_unit_assert=>assert_bound( lo_pop->mr_tab ).
+    ASSIGN lo_pop->mr_tab->* TO <lt_tab>.
+    cl_abap_unit_assert=>assert_equals( exp = 2
+                                        act = lines( <lt_tab> ) ).
 
   ENDMETHOD.
 
