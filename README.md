@@ -90,7 +90,9 @@ What a delivery is made of:
      node), and the handler calls the renamed framework. The branch `702`
      comes without the launchpad BSP, and so does a standard delivery.
    - **cloud**: the HTTP service becomes `<NAME>` (`/NS/UI5`), with its
-     inbound service, communication scenario and handler. Not carried: the
+     inbound service, communication scenario and handler - renamed in the
+     same `abaplint --rename` as step 1, by abaplint's renamers of HTTP, SCO2
+     and SIA6 (from `@abaplint/cli` 2.120.124), and checked here. Not carried: the
      SUSH of the HTTP service (its object name is a hash the system derives,
      the system creates it with the service) and the launchpad integration
      (IAM app, business catalog), which names that hash and the deployed

@@ -31,8 +31,9 @@
 //      every literal naming a renamed object, in the start app every class
 //      name (the config class and the sample apps live under the same prefix)
 //   3. src/03 of abap2UI5, the service package: for standard abap2UI5's
-//      tools/bsp_rename (ICF node, handler), for cloud the renamer of this
-//      file (HTTP service, its communication scenario, handler) - see
+//      tools/bsp_rename (ICF node, handler); for cloud the HTTP service, its
+//      inbound service, IAM app and handler come with step 1 (abaplint's
+//      renamers of HTTP, SCO2 and SIA6) and are checked here - see
 //      renameCloudService for what a renamed cloud delivery does not carry
 //   4. .abapgit.xml, LICENSE, README.md, abaplint.jsonc and src/ in <out>:
 //      src/01 abap2UI5, src/02.. the addons
@@ -329,8 +330,7 @@ function renameFramework(N, variant, checkout, abaplint) {
   // along, which are linted with their own config on main. The rename only
   // has to parse; whether every reference followed is what the lint of the
   // result says, with the config of the variant
-  const renameCfg = rootRenameConfig(JSON.parse(strip(template.split("znamespace_").join(N.prefix))));
-  renameCfg.rules = { parser_error: true };
+  const renameCfg = renameConfig(template, N, variant);
   // at the checkout's root - rootRenameConfig says why
   const cfg = join(checkout, "rename_run.json");
   writeFileSync(cfg, JSON.stringify(renameCfg, null, 2));
@@ -396,6 +396,40 @@ function renameFramework(N, variant, checkout, abaplint) {
   }
   if (long.length) throw new Error(`too long under this name:\n  ${long.join("\n  ")}`);
   return src;
+}
+
+// the run config of the rename: abap2UI5's rename.jsonc for the prefix, at
+// the checkout's root, parser_error as its only rule. For cloud the service
+// package's objects come along (renameCloudService says which), each under
+// the name of the HTTP service - before the catch-all pattern, abaplint takes
+// the first one that matches
+export function renameConfig(template, N, variant) {
+  const cfg = rootRenameConfig(JSON.parse(strip(template.split("znamespace_").join(N.prefix))));
+  cfg.rules = { parser_error: true };
+  if (variant !== "cloud") return cfg;
+  const exclude = cfg.global.exclude ?? [];
+  if (!exclude.includes("/src/03/")) throw new Error("rename.jsonc: src/03 is no longer excluded - abap2UI5 changed its rename config");
+  cfg.global = { ...cfg.global, exclude: [...exclude.filter((e) => e !== "/src/03/"), ...CLOUD_NOT_RENAMED] };
+  cfg.rename = { ...cfg.rename, patterns: [...cloudServicePatterns(N), ...cfg.rename.patterns] };
+  return cfg;
+}
+
+// what of the cloud service package is not renamed and not delivered:
+// renameCloudService says why
+const CLOUD_NOT_RENAMED = ["/src/03/02/", "\\.sush\\.xml$"];
+
+// the HTTP service Z2UI5, its inbound service Z2UI5_HTTP and that one's IAM
+// app Z2UI5_HTTP_IBS: abaplint's renamers of HTTP, SCO2 and SIA6 (from
+// 2.120.124) rewrite the object and what refers to it - the inbound service
+// its HTTP service, the IAM app its inbound service, the HTTP service its
+// handler class when that one is renamed
+export function cloudServicePatterns(N) {
+  const S = N.service;
+  return [
+    { type: "^HTTP$", oldName: `^${OLD}$`, newName: S },
+    { type: "^SCO2$", oldName: `^${OLD}_http$`, newName: `${S}_HTTP` },
+    { type: "^SIA6$", oldName: `^${OLD}_http_ibs$`, newName: `${S}_HTTP_IBS` },
+  ];
 }
 
 // the z2ui5_* objects of a src folder, lower case, from the file names
@@ -507,12 +541,13 @@ function renameStandardService(N, checkout, target) {
   }
 }
 
-// cloud: the HTTP service, its inbound service and communication scenario
-// and the handler on if_http_service_extension. abaplint and tools/bsp_rename
-// know none of these object types; they are few and carry their names as
-// plain values, which are rewritten here.
+// cloud: the HTTP service, its inbound service and communication scenario,
+// the IAM app of that one and the handler on if_http_service_extension.
+// abaplint renames them with the rest (renameConfig, cloudServicePatterns);
+// what is left here is the text that names the service (the descriptions,
+// "HTTP Service Z2UI5") and the check of the result.
 //
-// What a renamed cloud delivery does NOT carry:
+// What a renamed cloud delivery does NOT carry (CLOUD_NOT_RENAMED):
 //   * the SUSH (the HTTP service's authorization defaults): its object name
 //     is a hash the system derives from the service, not a name that could
 //     be rewritten. The system creates the entry with the HTTP service
@@ -521,66 +556,43 @@ function renameStandardService(N, checkout, target) {
 //     app of the cloud branch (Z2UI5_UI5R), neither of which exists renamed
 // The result runs as an HTTP service; a launchpad tile for it is set up in
 // the system (README of the branch).
-export function renameCloudService(N, source, target) {
-  console.log(`\n== src/03: HTTP service ${N.service} (cloud)`);
-  const handler = `${N.prefix}cl_ui5_icf_handler`.toUpperCase();
-  rmSync(target, { recursive: true, force: true });
-  mkdirSync(join(target, "01"), { recursive: true });
-  cpSync(join(source, "package.devc.xml"), join(target, "package.devc.xml"));
-
-  // file of src/03/01 -> its new name and the values rewritten in it. Every
-  // value has to be found: a file abap2UI5 changed stops the run
+export function renameCloudService(N, target) {
+  console.log(`\n== src/03: HTTP service ${N.service} (cloud, abaplint's HTTP/SCO2/SIA6 renamers)`);
   const S = N.service;
-  const plan = {
-    "package.devc.xml": { name: "package.devc.xml", values: [] },
-    "z2ui5.http.xml": {
-      name: `${fileStem(S)}.http.xml`,
-      values: [["<HTTPID>Z2UI5</HTTPID>", `<HTTPID>${S}</HTTPID>`], ["<ID>Z2UI5</ID>", `<ID>${S}</ID>`],
-        ["<SERVICEHANDLER>Z2UI5_CL_UI5_ICF_HANDLER</SERVICEHANDLER>", `<SERVICEHANDLER>${handler}</SERVICEHANDLER>`]],
-    },
-    "z2ui5_http.sco2.xml": {
-      name: `${fileStem(S)}_http.sco2.xml`,
-      values: [["<IBS_ID>Z2UI5_HTTP</IBS_ID>", `<IBS_ID>${S}_HTTP</IBS_ID>`], ["<NAME>Z2UI5_HTTP</NAME>", `<NAME>${S}_HTTP</NAME>`],
-        ["<HTTP_SERVICE_ID>Z2UI5</HTTP_SERVICE_ID>", `<HTTP_SERVICE_ID>${S}</HTTP_SERVICE_ID>`],
-        ["HTTP Service Z2UI5</DESCRIPTION>", `HTTP Service ${S}</DESCRIPTION>`]],
-    },
-    "z2ui5_http_ibs.sia6.xml": {
-      name: `${fileStem(S)}_http_ibs.sia6.xml`,
-      values: [["<NAME>Z2UI5_HTTP_IBS</NAME>", `<NAME>${S}_HTTP_IBS</NAME>`], ["<APP_ID>Z2UI5_HTTP_IBS</APP_ID>", `<APP_ID>${S}_HTTP_IBS</APP_ID>`],
-        ["<SECONDARY_ID>Z2UI5_HTTP</SECONDARY_ID>", `<SECONDARY_ID>${S}_HTTP</SECONDARY_ID>`],
-        ["HTTP Service Z2UI5</DESCRIPTION>", `HTTP Service ${S}</DESCRIPTION>`]],
-    },
-    "z2ui5_cl_ui5_icf_handler.clas.xml": {
-      name: `${fileStem(handler)}.clas.xml`,
-      values: [["<CLSNAME>Z2UI5_CL_UI5_ICF_HANDLER</CLSNAME>", `<CLSNAME>${handler}</CLSNAME>`],
-        ["HTTP Service Z2UI5</DESCRIPT>", `HTTP Service ${S}</DESCRIPT>`]],
-    },
-    "z2ui5_cl_ui5_icf_handler.clas.abap": {
-      name: `${fileStem(handler)}.clas.abap`,
-      values: [["z2ui5_cl_ui5_icf_handler", handler.toLowerCase()], ["z2ui5_cl_ui5_http_handler=>", `${N.prefix}cl_ui5_http_handler=>`]],
-    },
+  const handler = `${N.prefix}cl_ui5_icf_handler`.toUpperCase();
+  const stem = fileStem(S);
+  // what abaplint has to have written: every object under its new name
+  const expected = {
+    "package.devc.xml": [],
+    [`${stem}.http.xml`]: [`<HTTPID>${S}</HTTPID>`, `<ID>${S}</ID>`, `<SERVICEHANDLER>${handler}</SERVICEHANDLER>`],
+    [`${stem}_http.sco2.xml`]: [`<IBS_ID>${S}_HTTP</IBS_ID>`, `<NAME>${S}_HTTP</NAME>`, `<HTTP_SERVICE_ID>${S}</HTTP_SERVICE_ID>`],
+    [`${stem}_http_ibs.sia6.xml`]: [`<NAME>${S}_HTTP_IBS</NAME>`, `<APP_ID>${S}_HTTP_IBS</APP_ID>`, `<SECONDARY_ID>${S}_HTTP</SECONDARY_ID>`],
+    [`${fileStem(handler)}.clas.xml`]: [`<CLSNAME>${handler}</CLSNAME>`],
+    [`${fileStem(handler)}.clas.abap`]: [handler.toLowerCase(), `${N.prefix}cl_ui5_http_handler=>`],
   };
-  const dropped = [];
-  for (const file of readdirSync(join(source, "01"))) {
-    if (file.endsWith(".sush.xml")) { dropped.push(file); continue; }
-    const p = plan[file];
-    if (!p) throw new Error(`src/cloud/01/03/01/${file}: an object this renamer does not know - abap2UI5 changed its cloud service`);
-    let text = readFileSync(join(source, "01", file), "utf8");
-    for (const [from, to] of p.values) {
-      if (!text.includes(from)) throw new Error(`src/cloud/01/03/01/${file}: ${from} not found - abap2UI5 changed its cloud service`);
-      text = text.split(from).join(to);
+  const dir = join(target, "01");
+  if (!existsSync(dir)) throw new Error("src/03/01 is not in the renamed tree - abap2UI5 changed its cloud service");
+  const top = readdirSync(target).sort();
+  if (top.join() !== "01,package.devc.xml") throw new Error(`src/03: ${top.join(", ")} - expected 01 and package.devc.xml alone`);
+  const files = readdirSync(dir).sort();
+  if (files.join() !== Object.keys(expected).sort().join()) {
+    throw new Error(`src/03/01: ${files.join(", ")}\n  expected ${Object.keys(expected).sort().join(", ")} - abap2UI5 changed its cloud service, or abaplint renamed differently`);
+  }
+  for (const file of files) {
+    const path = join(dir, file);
+    // the descriptions name the service, as text
+    const text = readFileSync(path, "utf8").split(`HTTP Service ${OLD.toUpperCase()}<`).join(`HTTP Service ${S}<`);
+    for (const value of expected[file]) {
+      if (!text.toLowerCase().includes(value.toLowerCase())) throw new Error(`src/03/01/${file}: ${value} not found`);
     }
     // what is left may name the product (abap2UI5), not an object
     const left = /(?<![A-Za-z0-9_/#])z2ui5/i.exec(text);
-    if (left) throw new Error(`src/cloud/01/03/01/${file}: still names ${text.slice(left.index, left.index + 40).split("\n")[0]}`);
-    writeFileSync(join(target, "01", p.name), text);
-  }
-  for (const file of Object.keys(plan)) {
-    if (!existsSync(join(source, "01", file))) throw new Error(`src/cloud/01/03/01/${file} is gone - abap2UI5 changed its cloud service`);
+    if (left) throw new Error(`src/03/01/${file}: still names ${text.slice(left.index, left.index + 40).split("\n")[0]}`);
+    writeFileSync(path, text);
   }
   noOriginalFileNames(target, N);
-  console.log(`   handler ${handler.toLowerCase()} calls ${N.prefix}cl_ui5_http_handler`);
-  console.log(`   not carried: ${dropped.join(", ") || "(no SUSH)"}, the launchpad integration (03/02)`);
+  console.log(`   ${files.length - 1} objects, handler ${handler.toLowerCase()} calls ${N.prefix}cl_ui5_http_handler`);
+  console.log("   not carried: the SUSH, the launchpad integration (03/02)");
 }
 
 // ---------------------------------------------------------------------------
@@ -723,7 +735,7 @@ function deliver(o) {
   console.log(`abap2UI5 ${variant} as ${N.label}  (${OLD}_ -> ${N.prefix}, branch ${branch})`);
   const checkout = stage(variant, join(here, "work", `stage-${fileStem(N.label).replace(/#/g, "")}-${variant}`));
   const src = renameFramework(N, variant, checkout, abaplint);
-  if (variant === "cloud") renameCloudService(N, join(checkout, "src/03"), join(src, "03"));
+  if (variant === "cloud") renameCloudService(N, join(src, "03"));
   else renameStandardService(N, checkout, join(src, "03"));
 
   const out = o.out ? resolve(o.out) : join(here, "out", branch);
