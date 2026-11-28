@@ -66,10 +66,10 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
 
 
   METHOD z2ui5_if_client~follow_up_action.
-    DATA temp155 TYPE string.
-    DATA temp156 TYPE string.
-    DATA lv_arg LIKE temp155.
-        DATA temp157 TYPE z2ui5_if_ui5_types=>ty_s_nav-set_hash_listener.
+    DATA temp145 TYPE string.
+    DATA temp146 TYPE string.
+    DATA lv_arg LIKE temp145.
+        DATA temp147 TYPE z2ui5_if_ui5_types=>ty_s_nav-set_hash_listener.
         DATA temp1 TYPE xsdboolean.
 
     " The five navigation branches of the CASE below configure how the
@@ -94,14 +94,14 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
     ENDIF.
 
 
-    CLEAR temp155.
+    CLEAR temp145.
 
-    READ TABLE t_arg INTO temp156 INDEX 1.
+    READ TABLE t_arg INTO temp146 INDEX 1.
     IF sy-subrc = 0.
-      temp155 = temp156.
+      temp145 = temp146.
     ENDIF.
 
-    lv_arg = temp155.
+    lv_arg = temp145.
 
     CASE val.
       WHEN z2ui5_if_client=>cs_event-hash_routing.
@@ -143,11 +143,11 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
         " and an app asserts it in view_display( ), so every render carries it
 
         IF lv_arg IS INITIAL.
-          temp157 = ` `.
+          temp147 = ` `.
         ELSE.
-          temp157 = lv_arg.
+          temp147 = lv_arg.
         ENDIF.
-        mo_action->ms_next-s_nav-set_hash_listener = temp157.
+        mo_action->ms_next-s_nav-set_hash_listener = temp147.
         RETURN.
 
       WHEN z2ui5_if_client=>cs_event-app_state_set_active.
@@ -204,9 +204,9 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
     DATA temp5 TYPE xsdboolean.
         DATA lo_comp LIKE mo_action->mo_handler->ms_request-s_front-o_comp_data.
         DATA lo_params TYPE REF TO z2ui5_if_ajson.
-        DATA temp158 LIKE LINE OF lo_params->mt_json_tree.
-        DATA lr_comp LIKE REF TO temp158.
-          DATA temp159 TYPE z2ui5_if_client=>ty_s_name_value.
+        DATA temp148 LIKE LINE OF lo_params->mt_json_tree.
+        DATA lr_comp LIKE REF TO temp148.
+          DATA temp149 TYPE z2ui5_if_client=>ty_s_name_value.
 
     CLEAR result.
     result-event = mo_action->ms_actual-event.
@@ -276,10 +276,10 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
              WHERE name = `1`.
 
 
-          CLEAR temp159.
-          temp159-n = shift_left( val = shift_right( val = lr_comp->path sub = `/` ) sub = `/` ).
-          temp159-v = lr_comp->value.
-          INSERT temp159 INTO TABLE mt_comp_params.
+          CLEAR temp149.
+          temp149-n = shift_left( val = shift_right( val = lr_comp->path sub = `/` ) sub = `/` ).
+          temp149-v = lr_comp->value.
+          INSERT temp149 INTO TABLE mt_comp_params.
         ENDLOOP.
       CATCH cx_root ##NO_HANDLER.
     ENDTRY.
@@ -297,8 +297,8 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
     " the one the interface documents
     DATA lv_name TYPE string.
     DATA ls_get TYPE z2ui5_if_client=>ty_s_get.
-    DATA temp160 LIKE LINE OF ls_get-t_comp_params.
-    DATA lr_param LIKE REF TO temp160.
+    DATA temp150 LIKE LINE OF ls_get-t_comp_params.
+    DATA lr_param LIKE REF TO temp150.
     DATA lv_shell TYPE string.
     lv_name = z2ui5_cl_ui5_util_context=>c_trim_lower( name ).
     IF lv_name IS INITIAL.
@@ -349,22 +349,22 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
 
   METHOD z2ui5_if_client~get_event_arg.
 
-    DATA temp161 TYPE string.
-    DATA temp162 TYPE string.
-    CLEAR temp161.
+    DATA temp151 TYPE string.
+    DATA temp152 TYPE string.
+    CLEAR temp151.
 
-    READ TABLE mo_action->ms_actual-t_event_arg INTO temp162 INDEX v.
+    READ TABLE mo_action->ms_actual-t_event_arg INTO temp152 INDEX v.
     IF sy-subrc = 0.
-      temp161 = temp162.
+      temp151 = temp152.
     ENDIF.
-    result = temp161.
+    result = temp151.
 
   ENDMETHOD.
 
 
   METHOD z2ui5_if_client~get_app.
       DATA lo_app TYPE REF TO z2ui5_cl_ui5_app_cont.
-      DATA temp163 TYPE REF TO z2ui5_if_app.
+      DATA temp153 TYPE REF TO z2ui5_if_app.
 
     " get( )-s_draft-id is the id minted for THIS roundtrip - its draft is
     " written only when the roundtrip ends, so loading it raised
@@ -376,8 +376,8 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
 
       lo_app = z2ui5_cl_ui5_app_cont=>db_load( id ).
 
-      temp163 ?= lo_app->mo_app.
-      result = temp163.
+      temp153 ?= lo_app->mo_app.
+      result = temp153.
     ENDIF.
 
   ENDMETHOD.
@@ -585,53 +585,36 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
 
   METHOD z2ui5_if_client~_bind.
 
-    DATA li_filter LIKE custom_filter.
-      DATA li_omit TYPE REF TO z2ui5_if_ajson_filter.
-    DATA temp164 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
-    li_filter = custom_filter.
-
-    " omit_initial wires ajson's empty filter into the slot the serializer
-    " already evaluates (z2ui5_cl_ui5_srv_model->main_json_stringify), so an
-    " initial field stays ABSENT from the model and the control keeps its own
-    " default. A caller-supplied filter is kept: both have to pass.
-    " no TRY around the construction: the three local classes have no
-    " constructor that can raise, so the CATCH that used to sit here (falling
-    " back to the caller's filter) guarded nothing
-    IF omit_initial = abap_true OR omit_initial_paths IS NOT INITIAL.
-
-      IF omit_initial_paths IS NOT INITIAL.
-        " scoped: only the listed columns are dropped when initial, so a
-        " boolean that must send abap_false survives
-        CREATE OBJECT li_omit TYPE lcl_initial_paths_filter EXPORTING IT_PATHS = omit_initial_paths.
-      ELSE.
-        " NOT the vendored create_empty_filter: that one also drops a
-        " table ROW whose fields are all initial, which reindexes the
-        " client array against the backend table and corrupts the
-        " write-back (whole-table and __delta) - see the local class
-        CREATE OBJECT li_omit TYPE lcl_empty_filter_keep_rows.
-      ENDIF.
-      IF li_filter IS BOUND.
-        " NOT the vendored create_and_filter: its class is not
-        " serializable and the combined ref ends up in the draft -
-        " see the local class
-        CREATE OBJECT li_filter TYPE lcl_and_filter EXPORTING ii_first = li_filter ii_second = li_omit.
-      ELSE.
-        li_filter = li_omit.
-      ENDIF.
+    " omit_initial wires the framework's own ajson filter into the slot the
+    " serializer evaluates (z2ui5_cl_ui5_srv_model->main_json_stringify), so
+    " an initial field stays ABSENT from the model and the control keeps its
+    " own default. No TRY around the construction: the two local classes
+    " have no constructor that can raise
+    DATA li_filter TYPE REF TO z2ui5_if_ajson_filter.
+    DATA temp154 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
+    IF omit_initial_paths IS NOT INITIAL.
+      " scoped: only the listed columns are dropped when initial, so a
+      " boolean that must send abap_false survives
+      CREATE OBJECT li_filter TYPE lcl_initial_paths_filter EXPORTING IT_PATHS = omit_initial_paths.
+    ELSEIF omit_initial = abap_true.
+      " NOT the vendored create_empty_filter: that one also drops a table
+      " ROW whose fields are all initial, which reindexes the client array
+      " against the backend table and corrupts the write-back (whole-table
+      " and __delta) - see the local class
+      CREATE OBJECT li_filter TYPE lcl_empty_filter_keep_rows.
     ENDIF.
 
     " val and tab take the data or a data reference to it, like window_bind_tab( )
 
-    CLEAR temp164.
-    temp164-path_only = path.
-    temp164-custom_filter = li_filter.
-    temp164-custom_mapper = custom_mapper.
-    temp164-tab = val_as_data_ref( tab ).
-    temp164-tab_index = tab_index.
-    temp164-switch_default_model = switch_default_model.
-    temp164-check_json = json.
+    CLEAR temp154.
+    temp154-path_only = path.
+    temp154-custom_filter = li_filter.
+    temp154-tab = val_as_data_ref( tab ).
+    temp154-tab_index = tab_index.
+    temp154-switch_default_model = switch_default_model.
+    temp154-check_json = json.
     result = mo_srv_bind->main( val    = val_as_data_ref( val )
-                                config = temp164 ).
+                                config = temp154 ).
 
   ENDMETHOD.
 
@@ -639,14 +622,14 @@ CLASS z2ui5_cl_ui5_client IMPLEMENTATION.
   METHOD z2ui5_if_client~window_bind_tab.
 
     " the table itself, or a data reference to it - see val_as_data_ref
-    DATA temp165 LIKE REF TO total.
+    DATA temp155 LIKE REF TO total.
 DATA temp12 TYPE z2ui5_if_ui5_types=>ty_s_bind_config.
-    GET REFERENCE OF total INTO temp165.
+    GET REFERENCE OF total INTO temp155.
 
 CLEAR temp12.
 temp12-window = nmax( val1 = window val2 = 1 ).
 temp12-window_total = nmax( val1 = total val2 = 0 ).
-temp12-window_total_ref = temp165.
+temp12-window_total_ref = temp155.
 temp12-window_event = event.
 result = mo_srv_bind->main( val    = val_as_data_ref( val )
                                 config = temp12 ).
@@ -694,12 +677,12 @@ result = mo_srv_bind->main( val    = val_as_data_ref( val )
     " IS NOT INITIAL - an argument passed as empty on purpose is a filled
     " slot, and dropping it would shift every following position.
     DATA lt_arg LIKE t_arg.
-      DATA temp166 LIKE LINE OF lt_arg.
+      DATA temp156 LIKE LINE OF lt_arg.
     lt_arg = t_arg.
     IF arg IS SUPPLIED.
 
-      temp166 = arg.
-      INSERT temp166 INTO TABLE lt_arg.
+      temp156 = arg.
+      INSERT temp156 INTO TABLE lt_arg.
     ENDIF.
 
     result = mo_srv_event->get_event( val   = val
@@ -762,7 +745,7 @@ result = mo_srv_bind->main( val    = val_as_data_ref( val )
     DATA ls_front LIKE mo_action->mo_handler->ms_request-s_front.
     DATA lv_state TYPE string.
     DATA lv_shell TYPE string.
-    DATA temp167 TYPE string.
+    DATA temp157 TYPE string.
     ls_front = mo_action->mo_handler->ms_request-s_front.
 
     lv_state = |z2ui5-xapp-state={ mo_action->mo_app->ms_draft-id }|.
@@ -784,17 +767,17 @@ result = mo_srv_bind->main( val    = val_as_data_ref( val )
 
 
     IF lv_shell IS INITIAL.
-      temp167 = |{ ls_front-origin }{ ls_front-pathname }{ ls_front-search }#/{ lv_state }|.
+      temp157 = |{ ls_front-origin }{ ls_front-pathname }{ ls_front-search }#/{ lv_state }|.
     ELSE.
-      temp167 = |{ ls_front-origin }{ ls_front-pathname }{ ls_front-search }#{ lv_shell }&/{ lv_state }|.
+      temp157 = |{ ls_front-origin }{ ls_front-pathname }{ ls_front-search }#{ lv_shell }&/{ lv_state }|.
     ENDIF.
-    result = temp167.
+    result = temp157.
 
   ENDMETHOD.
 
 
   METHOD z2ui5_if_client~set_session_stateful.
-    DATA temp168 TYPE z2ui5_if_ui5_types=>ty_s_http_res-s_stateful-active.
+    DATA temp158 TYPE z2ui5_if_ui5_types=>ty_s_http_res-s_stateful-active.
     DATA temp6 TYPE xsdboolean.
 
     IF mo_action->mo_app->mv_check_sticky = val.
@@ -802,11 +785,11 @@ result = mo_srv_bind->main( val    = val_as_data_ref( val )
     ENDIF.
 
     IF val = abap_true.
-      temp168 = 1.
+      temp158 = 1.
     ELSE.
-      temp168 = 0.
+      temp158 = 0.
     ENDIF.
-    mo_action->ms_next-s_stateful-active = temp168.
+    mo_action->ms_next-s_stateful-active = temp158.
     mo_action->mo_app->mv_check_sticky = val.
 
     " switched says "the state at the END of this roundtrip differs from the
@@ -930,9 +913,9 @@ result = mo_srv_bind->main( val    = val_as_data_ref( val )
 
   METHOD get_if_app.
 
-    DATA temp169 TYPE REF TO z2ui5_if_app.
-    temp169 ?= mo_action->mo_app->mo_app.
-    result = temp169.
+    DATA temp159 TYPE REF TO z2ui5_if_app.
+    temp159 ?= mo_action->mo_app->mo_app.
+    result = temp159.
 
   ENDMETHOD.
 

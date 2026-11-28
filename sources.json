@@ -4,9 +4,9 @@
       "abap2UI5": {
         "repository": "abap2UI5/abap2UI5",
         "branch": "702",
-        "commit": "145e5a637fb7e17c0282775a9ea800c53445e415",
-        "tree": "03950fadfd31766828a70ddd2537dd468b3c3533",
-        "date": "2026-11-27T20:59:21Z"
+        "commit": "697cf11c3a8c92abc9597722f7ba466de05be656",
+        "tree": "7158568551bed3f6ce9b3bc528ebca68da1e2599",
+        "date": "2026-11-28T12:59:34Z"
       },
       "popups": {
         "repository": "abap2UI5-addons/popups",
@@ -34,9 +34,9 @@
       "abap2UI5": {
         "repository": "abap2UI5/abap2UI5",
         "branch": "cloud",
-        "commit": "db587e8e1d30d2fe1fdef122d8af3c016a82ab3a",
-        "tree": "f38418e3531e8c25c43736cac195be2aa890dc0c",
-        "date": "2026-11-27T20:57:47Z"
+        "commit": "728db668c16d2dc4f342a514cd73f6e77c246887",
+        "tree": "6a62b3fd699f946828195081b614cfa72b18c1a3",
+        "date": "2026-11-28T12:58:24Z"
       },
       "popups": {
         "repository": "abap2UI5-addons/popups",
